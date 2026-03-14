@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -39,6 +39,15 @@ class Settings(BaseSettings):
     default_symbols: str = Field(default="BTC-USD,ETH-USD,SOL-USD", alias="DEFAULT_SYMBOLS")
     default_timeframes: str = Field(default="5m,15m,1h", alias="DEFAULT_TIMEFRAMES")
     allowed_origins: list[str] = Field(default=["*"], alias="ALLOWED_ORIGINS")
+
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def normalize_database_url(cls, value: str) -> str:
+        if value.startswith("postgresql://"):
+            return value.replace("postgresql://", "postgresql+psycopg://", 1)
+        if value.startswith("postgres://"):
+            return value.replace("postgres://", "postgresql+psycopg://", 1)
+        return value
 
     @property
     def default_symbol_list(self) -> list[str]:

@@ -13,4 +13,5 @@ dist/
 coverage/
 htmlcov/
 apps/api/.venv/
+apps/api/build/
 apps/web/.vercel/

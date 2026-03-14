@@ -51,6 +51,31 @@ The system is intentionally LONG-only and SPOT-only. Live trading is not impleme
 - `redis`: Redis on `localhost:6379`
 - `worker`: background paper trading loop
 
+## Deploy on Render
+
+The repository includes a Render Blueprint config at `render.yaml`.
+
+Recommended deployment flow:
+
+1. Push this repository to GitHub.
+2. In Render, choose `New +` -> `Blueprint`.
+3. Select the GitHub repository.
+4. Render will provision:
+   - `trader-mvp-db` PostgreSQL
+   - `trader-mvp-redis` Key Value
+   - `trader-mvp-backend` FastAPI web service
+   - `trader-mvp-worker` background worker
+   - `trader-mvp-frontend` Next.js web service
+5. After the first deploy, if you rename services in Render, update:
+   - backend `ALLOWED_ORIGINS`
+   - frontend `NEXT_PUBLIC_API_URL`
+
+Notes:
+
+- The backend automatically normalizes Render Postgres URLs from `postgresql://...` to `postgresql+psycopg://...`.
+- Backend and worker run `alembic upgrade head` and `python -m app.db.seed` on startup, so schema and reference data stay initialized.
+- The worker requires a paid Render worker plan. Frontend/backend can stay on free plans for MVP testing.
+
 ## Local startup
 
 1. Copy env file:
