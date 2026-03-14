@@ -11,8 +11,10 @@ services:
     rootDir: apps/api
     plan: free
     buildCommand: pip install --upgrade pip && pip install -e .
-    preDeployCommand: alembic upgrade head && python -m app.db.seed
-    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    startCommand: >
+      bash -lc "alembic upgrade head &&
+      python -m app.db.seed &&
+      uvicorn app.main:app --host 0.0.0.0 --port $PORT"
     healthCheckPath: /api/health
     envVars:
       - key: APP_NAME
@@ -64,8 +66,10 @@ services:
     rootDir: apps/api
     plan: starter
     buildCommand: pip install --upgrade pip && pip install -e .
-    preDeployCommand: alembic upgrade head && python -m app.db.seed
-    startCommand: python -m app.workers.runner
+    startCommand: >
+      bash -lc "alembic upgrade head &&
+      python -m app.db.seed &&
+      python -m app.workers.runner"
     envVars:
       - key: APP_NAME
         value: Trader Backend

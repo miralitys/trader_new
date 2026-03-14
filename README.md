@@ -73,7 +73,7 @@ Notes:
 
 - Backend Render services are pinned to Python 3.12 via `apps/api/.python-version` to avoid `pydantic-core` source builds on newer Python runtimes.
 - The backend automatically normalizes Render Postgres URLs from `postgresql://...` to `postgresql+psycopg://...`.
-- Backend and worker run `alembic upgrade head` and `python -m app.db.seed` on startup, so schema and reference data stay initialized.
+- Backend and worker run `alembic upgrade head` and `python -m app.db.seed` in their startup commands, because Render free-tier Blueprint services do not support `preDeployCommand`.
 - Redis is optional for the current MVP deployment and is not required by the active worker/runtime path.
 - The worker requires a paid Render worker plan. Frontend/backend can stay on free plans for MVP testing.
 
