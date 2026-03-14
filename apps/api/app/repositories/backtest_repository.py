@@ -123,6 +123,7 @@ class BacktestRepository(BaseRepository):
             "initial_capital": payload["initial_capital"],
             "final_equity": payload["final_equity"],
             "params": payload["params"],
+            "metrics": payload["metrics"],
             "trades": payload["trades"],
         }
 

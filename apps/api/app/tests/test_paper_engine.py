@@ -34,6 +34,24 @@ class EnterThenExitPaperStrategy(BaseStrategy):
         return StrategySignal(action="hold", reason="hold")
 
 
+class DynamicStopPaperStrategy(BaseStrategy):
+    key = "dynamic_stop_paper_strategy"
+    name = "DynamicStopPaperStrategy"
+    description = "Opens once with a metadata-defined stop."
+    config_model = BaseStrategyConfig
+
+    def generate_signal(self, context: StrategyContext) -> StrategySignal:
+        history = context.metadata["history"]
+        has_position = context.metadata["has_position"]
+        if len(history) == 1 and not has_position:
+            return StrategySignal(
+                action="enter",
+                reason="entry",
+                metadata={"stop_price": "95", "take_profit_price": "108"},
+            )
+        return StrategySignal(action="hold", reason="hold")
+
+
 def _candle(ts: datetime, price: str) -> BacktestCandle:
     decimal_price = Decimal(price)
     return BacktestCandle(
@@ -139,3 +157,34 @@ def test_paper_engine_updates_account_balance_with_fees_and_profit() -> None:
     assert final_state.cash > Decimal("1000")
     assert results[-1].trade_event is not None
     assert results[-1].trade_event.fees > Decimal("0")
+
+
+def test_paper_engine_honors_dynamic_stop_from_signal_metadata() -> None:
+    engine = PaperEngine()
+    candles = [
+        _candle(datetime(2026, 1, 1, 0, 0, tzinfo=timezone.utc), "100"),
+        BacktestCandle(
+            open_time=datetime(2026, 1, 1, 0, 5, tzinfo=timezone.utc),
+            open=Decimal("99"),
+            high=Decimal("101"),
+            low=Decimal("94"),
+            close=Decimal("96"),
+            volume=Decimal("1"),
+        ),
+    ]
+
+    final_state, results = engine.process_candle_batch(
+        strategy=DynamicStopPaperStrategy(),
+        symbol="BTC-USD",
+        timeframe="5m",
+        candles=candles,
+        state=PaperRuntimeState(cash=Decimal("1000"), position=None),
+        fee_rate=Decimal("0"),
+        slippage_rate=Decimal("0"),
+        strategy_config_override={"position_size_pct": 1, "stop_loss_pct": 10, "take_profit_pct": 10},
+    )
+
+    assert final_state.position is None
+    assert final_state.cash == Decimal("950")
+    assert results[-1].trade_event is not None
+    assert results[-1].trade_event.exit_price == Decimal("95")

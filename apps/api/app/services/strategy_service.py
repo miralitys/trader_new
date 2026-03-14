@@ -20,6 +20,8 @@ from app.services.paper_execution_service import PaperExecutionService
 from app.strategies.base import BaseStrategy
 from app.strategies.registry import get_strategy, list_strategies
 
+INTERFACE_VISIBLE_STRATEGY_CODES = frozenset({"mean_reversion_hard_stop"})
+
 
 class StrategyService:
     def __init__(
@@ -35,6 +37,8 @@ class StrategyService:
     def list_strategies(self) -> list[StrategySummaryResponse]:
         payload: list[StrategySummaryResponse] = []
         for strategy in list_strategies():
+            if strategy.key not in INTERFACE_VISIBLE_STRATEGY_CODES:
+                continue
             strategy_row = self.strategy_run_repository.get_strategy_by_code(strategy.key)
             active_run = None
             has_saved_config = False
@@ -55,6 +59,9 @@ class StrategyService:
                 )
             )
         return payload
+
+    def visible_strategy_codes(self) -> set[str]:
+        return set(INTERFACE_VISIBLE_STRATEGY_CODES)
 
     def get_strategy(self, code: str) -> StrategyDetailResponse:
         strategy = self._resolve_strategy(code)

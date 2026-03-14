@@ -12,11 +12,12 @@ import { MetricCard } from "@/components/ui/metric-card";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { useBacktests, useStrategies } from "@/lib/query-hooks";
+import { focusStrategyCode } from "@/lib/focus-strategy";
 import { formatCurrency, formatDateTime, formatInteger, formatPercent, getErrorMessage } from "@/lib/utils";
 
 export default function BacktestsPage() {
   const strategiesQuery = useStrategies();
-  const backtestsQuery = useBacktests({ limit: 200 });
+  const backtestsQuery = useBacktests({ strategyCode: focusStrategyCode, limit: 200 });
   const [strategyFilter, setStrategyFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [search, setSearch] = useState("");
@@ -79,7 +80,7 @@ export default function BacktestsPage() {
           <label className="grid gap-2">
             <span className="text-[11px] uppercase tracking-[0.2em] text-slate-400">Strategy</span>
             <select value={strategyFilter} onChange={(event) => setStrategyFilter(event.target.value)} className={inputClassName}>
-              <option value="all">All strategies</option>
+              <option value="all">Current strategy</option>
               {strategies.map((strategy) => (
                 <option key={strategy.code} value={strategy.code}>
                   {strategy.name}

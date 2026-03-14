@@ -67,6 +67,8 @@ class RiskEngine(EngineBase):
         fee_rate: Decimal,
         slippage_rate: Decimal,
         risk_plan: RiskPlan,
+        override_stop_price: Optional[Decimal] = None,
+        override_take_profit_price: Optional[Decimal] = None,
     ) -> Optional[EntryPlan]:
         if available_cash <= ZERO or reference_price <= ZERO:
             return None
@@ -87,9 +89,17 @@ class RiskEngine(EngineBase):
         stop_price = None
         take_profit_price = None
 
-        if risk_plan.stop_loss_pct > ZERO:
+        if override_stop_price is not None:
+            if override_stop_price <= ZERO or override_stop_price >= fill_price:
+                return None
+            stop_price = override_stop_price
+        elif risk_plan.stop_loss_pct > ZERO:
             stop_price = fill_price * (Decimal("1") - risk_plan.stop_loss_pct)
-        if risk_plan.take_profit_pct > ZERO:
+        if override_take_profit_price is not None:
+            if override_take_profit_price <= fill_price:
+                return None
+            take_profit_price = override_take_profit_price
+        elif risk_plan.take_profit_pct > ZERO:
             take_profit_price = fill_price * (Decimal("1") + risk_plan.take_profit_pct)
 
         return EntryPlan(

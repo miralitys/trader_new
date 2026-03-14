@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 from app.engines.backtest_engine import BacktestEngine
@@ -13,45 +13,82 @@ from app.strategies.mean_reversion_hard_stop import (
 )
 
 
-def _candle(ts: datetime, price: str) -> BacktestCandle:
-    decimal_price = Decimal(price)
+def _candle(ts: datetime, open_price: str, high: str, low: str, close: str) -> BacktestCandle:
     return BacktestCandle(
         open_time=ts,
-        open=decimal_price,
-        high=decimal_price,
-        low=decimal_price,
-        close=decimal_price,
+        open=Decimal(open_price),
+        high=Decimal(high),
+        low=Decimal(low),
+        close=Decimal(close),
         volume=Decimal("1"),
     )
 
 
-def _history(*prices: str) -> list[BacktestCandle]:
+def _history(*candles: tuple[str, str, str, str]) -> list[BacktestCandle]:
+    start = datetime(2026, 1, 1, 0, 0, tzinfo=timezone.utc)
     return [
-        _candle(datetime(2026, 1, 1, 0, index * 5, tzinfo=timezone.utc), price)
-        for index, price in enumerate(prices)
+        _candle(start + timedelta(hours=index), open_price, high, low, close)
+        for index, (open_price, high, low, close) in enumerate(candles)
     ]
 
 
-def _config() -> MeanReversionHardStopConfig:
-    return MeanReversionHardStopConfig(
-        lookback_period=3,
-        entry_deviation_pct=0.02,
-        exit_deviation_pct=0,
-        min_bounce_pct=0.005,
-        hard_stop_pct=0.25,
-        take_profit_pct=0,
-        position_size_pct=1,
+def _config(**overrides: object) -> MeanReversionHardStopConfig:
+    payload: dict[str, object] = {
+        "lookback_period": 5,
+        "bb_stddev_mult": 1.5,
+        "oversold_lookback_bars": 1,
+        "rsi_period": 3,
+        "rsi_oversold_threshold": 20,
+        "rsi_reclaim_threshold": 30,
+        "atr_period": 3,
+        "min_band_overshoot_atr": 0,
+        "min_recovery_atr": 0.1,
+        "exit_deviation_pct": 0,
+        "min_bounce_pct": 0.01,
+        "hard_stop_pct": 0.1,
+        "stop_loss_pct": 0.1,
+        "max_stop_pct": 0.1,
+        "take_profit_pct": 0,
+        "position_size_pct": 1,
+        "cost_multiplier": 1.5,
+        "exit_ema_period": 5,
+        "stop_atr_buffer": 0,
+        "stop_lookback_bars": 3,
+        "stop_mode": "signal_low",
+        "min_hold_bars": 1,
+        "max_bars_in_trade": 4,
+        "regime_filter_enabled": True,
+        "regime_ema_period": 2,
+        "min_slope": -0.01,
+        "regime_atr_period": 2,
+        "atr_pct_max": 0.2,
+        "use_htf_rsi_filter": False,
+        "downside_volatility_filter_enabled": False,
+    }
+    payload.update(overrides)
+    return MeanReversionHardStopConfig(**payload)
+
+
+def _entry_history() -> list[BacktestCandle]:
+    return _history(
+        ("100", "101", "99", "100"),
+        ("102", "103", "101", "102"),
+        ("104", "105", "103", "104"),
+        ("103", "104", "102", "103"),
+        ("101", "102", "100", "101"),
+        ("95", "96", "94", "95"),
+        ("96", "99", "95", "98"),
     )
 
 
-def test_mean_reversion_strategy_enters_after_oversold_bounce() -> None:
+def test_mean_reversion_strategy_enters_after_deep_oversold_bounce() -> None:
     strategy = MeanReversionHardStopStrategy()
-    history = _history("100", "100", "95", "96")
+    history = _entry_history()
 
     signal = strategy.generate_signal(
         StrategyContext(
             symbol="BTC-USD",
-            timeframe="5m",
+            timeframe="1h",
             timestamp=history[-1].open_time,
             mode="backtest",
             metadata={
@@ -59,50 +96,171 @@ def test_mean_reversion_strategy_enters_after_oversold_bounce() -> None:
                 "has_position": False,
                 "position": None,
                 "config": _config(),
+                "fee_rate": Decimal("0.001"),
+                "slippage_rate": Decimal("0.0005"),
             },
         )
     )
 
     assert signal.action == "enter"
-    assert signal.reason == "oversold_bounce_entry"
-    assert signal.confidence > 0
+    assert signal.reason == "oversold_reclaim_entry"
+    assert signal.metadata["setup_type"] == "bb_and_rsi"
+    assert Decimal(signal.metadata["stop_price"]) < Decimal(signal.metadata["current_close"])
+    assert Decimal(signal.metadata["take_profit_price"]) > Decimal(signal.metadata["current_close"])
 
 
-def test_mean_reversion_strategy_exits_when_price_reverts_to_mean() -> None:
+def test_mean_reversion_strategy_skips_trades_that_do_not_clear_costs() -> None:
     strategy = MeanReversionHardStopStrategy()
-    history = _history("100", "98", "95", "99")
+    history = _entry_history()
 
     signal = strategy.generate_signal(
         StrategyContext(
             symbol="BTC-USD",
-            timeframe="5m",
+            timeframe="1h",
+            timestamp=history[-1].open_time,
+            mode="backtest",
+            metadata={
+                "history": history,
+                "has_position": False,
+                "position": None,
+                "config": _config(),
+                "fee_rate": Decimal("0.01"),
+                "slippage_rate": Decimal("0.01"),
+            },
+        )
+    )
+
+    assert signal.action == "hold"
+    assert signal.reason == "insufficient_tp_vs_cost"
+
+
+def test_mean_reversion_strategy_blocks_negative_regime() -> None:
+    strategy = MeanReversionHardStopStrategy()
+    history = _history(
+        ("120", "121", "119", "120"),
+        ("118", "119", "117", "118"),
+        ("116", "117", "115", "116"),
+        ("114", "115", "113", "114"),
+        ("112", "113", "111", "112"),
+        ("106", "107", "105", "106"),
+        ("107", "110", "106", "109"),
+    )
+
+    signal = strategy.generate_signal(
+        StrategyContext(
+            symbol="BTC-USD",
+            timeframe="1h",
+            timestamp=history[-1].open_time,
+            mode="backtest",
+            metadata={
+                "history": history,
+                "has_position": False,
+                "position": None,
+                "config": _config(use_htf_rsi_filter=True, htf_rsi_period=3, htf_rsi_min=50),
+                "fee_rate": Decimal("0"),
+                "slippage_rate": Decimal("0"),
+            },
+        )
+    )
+
+    assert signal.action == "hold"
+    assert signal.reason == "regime_blocked"
+    assert signal.metadata["skip_reason_detail"] == "htf_rsi_below_min"
+
+
+def test_mean_reversion_strategy_skips_trade_when_stop_is_too_wide() -> None:
+    strategy = MeanReversionHardStopStrategy()
+    history = _entry_history()
+
+    signal = strategy.generate_signal(
+        StrategyContext(
+            symbol="BTC-USD",
+            timeframe="1h",
+            timestamp=history[-1].open_time,
+            mode="backtest",
+            metadata={
+                "history": history,
+                "has_position": False,
+                "position": None,
+                "config": _config(max_stop_pct=0.015),
+                "fee_rate": Decimal("0"),
+                "slippage_rate": Decimal("0"),
+            },
+        )
+    )
+
+    assert signal.action == "hold"
+    assert signal.reason == "max_stop_exceeded"
+    assert signal.metadata["selected_stop_mode"] == "signal_low"
+
+
+def test_mean_reversion_strategy_exits_when_price_reverts_to_mean_target() -> None:
+    strategy = MeanReversionHardStopStrategy()
+    history = _entry_history()
+    history.append(_candle(history[-1].open_time + timedelta(hours=1), "100", "102", "99", "101"))
+    entry_time = history[-2].open_time
+
+    signal = strategy.generate_signal(
+        StrategyContext(
+            symbol="BTC-USD",
+            timeframe="1h",
             timestamp=history[-1].open_time,
             mode="paper",
             metadata={
                 "history": history,
                 "has_position": True,
-                "position": {"entry_price": Decimal("96")},
+                "position": {"entry_price": Decimal("98"), "entry_time": entry_time},
                 "config": _config(),
+                "fee_rate": Decimal("0"),
+                "slippage_rate": Decimal("0"),
             },
         )
     )
 
     assert signal.action == "exit"
-    assert signal.reason == "mean_reversion_complete"
+    assert signal.reason == "tp"
 
 
-def test_mean_reversion_strategy_backtest_generates_trade() -> None:
+def test_mean_reversion_strategy_exits_on_ema_failure_after_min_hold() -> None:
+    strategy = MeanReversionHardStopStrategy()
+    history = _entry_history()
+    history.append(_candle(history[-1].open_time + timedelta(hours=1), "99", "100", "98", "99"))
+    history.append(_candle(history[-1].open_time + timedelta(hours=1), "98", "99", "97", "98"))
+
+    signal = strategy.generate_signal(
+        StrategyContext(
+            symbol="BTC-USD",
+            timeframe="1h",
+            timestamp=history[-1].open_time,
+            mode="paper",
+            metadata={
+                "history": history,
+                "has_position": True,
+                "position": {"entry_price": Decimal("98"), "entry_time": history[6].open_time},
+                "config": _config(exit_ema_period=3, regime_filter_enabled=False),
+                "fee_rate": Decimal("0"),
+                "slippage_rate": Decimal("0"),
+            },
+        )
+    )
+
+    assert signal.action == "exit"
+    assert signal.reason == "ema_failure"
+
+
+def test_mean_reversion_strategy_backtest_hits_dynamic_take_profit() -> None:
     strategy = MeanReversionHardStopStrategy()
     engine = BacktestEngine()
-    candles = _history("100", "100", "95", "96", "99")
+    candles = _entry_history()
+    candles.append(_candle(candles[-1].open_time + timedelta(hours=1), "100", "102", "99", "101"))
 
     report = engine.run(
         request=BacktestRequest(
             strategy_code=strategy.key,
             symbol="BTC-USD",
-            timeframe="5m",
+            timeframe="1h",
             start_at=candles[0].open_time,
-            end_at=candles[-1].open_time,
+            end_at=candles[-1].open_time + timedelta(hours=1),
             initial_capital=Decimal("1000"),
             fee=Decimal("0"),
             slippage=Decimal("0"),
@@ -114,20 +272,24 @@ def test_mean_reversion_strategy_backtest_generates_trade() -> None:
     )
 
     assert report.metrics.total_trades == 1
-    assert report.trades[0].entry_price == Decimal("96")
-    assert report.trades[0].exit_price == Decimal("99")
-    assert report.final_equity == Decimal("1031.250000000000000000000000")
+    assert report.trades[0].entry_price == Decimal("98")
+    assert report.trades[0].exit_price == Decimal("100.20")
+    assert report.trades[0].exit_reason == "take_profit"
+    assert report.trades[0].metadata["entry"]["setup_type"] == "bb_and_rsi"
+    assert report.trades[0].metadata["exit_reason_label"] == "tp"
+    assert report.final_equity == Decimal("1022.448979591836734693877551")
 
 
 def test_mean_reversion_strategy_paper_engine_generates_trade_event() -> None:
     strategy = MeanReversionHardStopStrategy()
     engine = PaperEngine()
-    candles = _history("100", "100", "95", "96", "99")
+    candles = _entry_history()
+    candles.append(_candle(candles[-1].open_time + timedelta(hours=1), "100", "102", "99", "101"))
 
     final_state, results = engine.process_candle_batch(
         strategy=strategy,
         symbol="BTC-USD",
-        timeframe="5m",
+        timeframe="1h",
         candles=candles,
         state=PaperRuntimeState(cash=Decimal("1000"), position=None),
         fee_rate=Decimal("0"),
@@ -136,7 +298,10 @@ def test_mean_reversion_strategy_paper_engine_generates_trade_event() -> None:
     )
 
     assert final_state.position is None
-    assert final_state.cash == Decimal("1031.250000000000000000000000")
+    assert final_state.cash == Decimal("1022.448979591836734693877551")
     assert any(result.signal_event is not None and result.signal_event.signal_type == "enter" for result in results)
     assert results[-1].trade_event is not None
-    assert results[-1].trade_event.pnl == Decimal("31.250000000000000000000000")
+    assert results[-1].trade_event.exit_price == Decimal("100.20")
+    assert results[-1].trade_event.pnl == Decimal("22.448979591836734693877551")
+    assert results[-1].trade_event.metadata_json["entry"]["setup_type"] == "bb_and_rsi"
+    assert results[-1].trade_event.metadata_json["exit_reason_label"] == "tp"

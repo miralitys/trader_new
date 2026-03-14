@@ -284,6 +284,7 @@ class PaperExecutionService:
                             "entry_fee": str(next_position.entry_fee),
                             "entry_slippage": str(next_position.entry_slippage),
                             "capital_committed": str(next_position.capital_committed),
+                            "entry_metadata": next_position.entry_metadata,
                         },
                     )
                     logger.info(
@@ -407,4 +408,5 @@ class PaperExecutionService:
                 if position_model.take_profit_price is not None
                 else None
             ),
+            entry_metadata=dict(runtime_payload.get("entry_metadata", {})),
         )

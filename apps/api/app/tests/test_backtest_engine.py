@@ -50,6 +50,24 @@ class TwoTradeMixedStrategy(BaseStrategy):
         return StrategySignal(action="hold", reason="hold")
 
 
+class DynamicStopStrategy(BaseStrategy):
+    key = "dynamic_stop_strategy"
+    name = "DynamicStopStrategy"
+    description = "Uses signal metadata to place a structure stop."
+    config_model = BaseStrategyConfig
+
+    def generate_signal(self, context: StrategyContext) -> StrategySignal:
+        index = context.metadata["bar_index"]
+        has_position = context.metadata["has_position"]
+        if index == 0 and not has_position:
+            return StrategySignal(
+                action="enter",
+                reason="dynamic_entry",
+                metadata={"stop_price": "95", "take_profit_price": "108"},
+            )
+        return StrategySignal(action="hold", reason="hold")
+
+
 def _candle(ts: datetime, price: str) -> BacktestCandle:
     decimal_price = Decimal(price)
     return BacktestCandle(
@@ -141,3 +159,28 @@ def test_backtest_engine_calculates_metrics_for_mixed_results() -> None:
     assert report.metrics.avg_loser == Decimal("-110")
     assert report.metrics.expectancy == Decimal("-5")
     assert report.metrics.total_return_pct == Decimal("-1")
+
+
+def test_backtest_engine_honors_dynamic_stop_from_signal_metadata() -> None:
+    engine = BacktestEngine()
+    candles = [
+        _candle(datetime(2026, 1, 1, 0, 0, tzinfo=timezone.utc), "100"),
+        BacktestCandle(
+            open_time=datetime(2026, 1, 1, 0, 5, tzinfo=timezone.utc),
+            open=Decimal("99"),
+            high=Decimal("101"),
+            low=Decimal("94"),
+            close=Decimal("96"),
+            volume=Decimal("1"),
+        ),
+    ]
+
+    report = engine.run(
+        request=_request("dynamic_stop_strategy"),
+        strategy=DynamicStopStrategy(),
+        candles=candles,
+    )
+
+    assert report.metrics.total_trades == 1
+    assert report.trades[0].exit_reason == "stop_loss"
+    assert report.trades[0].exit_price == Decimal("95")

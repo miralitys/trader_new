@@ -43,6 +43,9 @@ class PerformanceEngine(EngineBase):
         expectancy = ZERO
         if total_trades:
             expectancy = sum((trade.pnl for trade in trades), ZERO) / Decimal(total_trades)
+        gross_expectancy = ZERO
+        if total_trades:
+            gross_expectancy = sum((trade.gross_pnl for trade in trades), ZERO) / Decimal(total_trades)
 
         avg_winner = ZERO
         if winning_trades:
@@ -58,6 +61,8 @@ class PerformanceEngine(EngineBase):
             win_rate_pct=win_rate_pct,
             profit_factor=profit_factor,
             expectancy=expectancy,
+            gross_expectancy=gross_expectancy,
+            net_expectancy=expectancy,
             avg_winner=avg_winner,
             avg_loser=avg_loser,
             total_trades=total_trades,

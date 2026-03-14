@@ -112,7 +112,7 @@ export default function DashboardPage() {
         <MetricCard
           label="Open positions"
           value={formatInteger(dashboard.open_positions_count)}
-          hint="Across all strategies"
+          hint="Focused strategy only"
           tone={dashboard.open_positions_count ? "positive" : "default"}
         />
         <MetricCard
@@ -129,7 +129,7 @@ export default function DashboardPage() {
       </section>
 
       <SectionCard
-        title="Strategies"
+        title="Strategy"
         eyebrow="Isolated runtime snapshots"
         actions={
           <Link href="/backtests" className="text-sm text-sky-300 transition hover:text-sky-200">

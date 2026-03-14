@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
 from typing import Any, Optional, Sequence
@@ -23,6 +23,7 @@ class PaperPositionState:
     capital_committed: Decimal
     stop_price: Optional[Decimal]
     take_profit_price: Optional[Decimal]
+    entry_metadata: dict[str, object] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -142,6 +143,8 @@ class PaperEngine(EngineBase):
                     "position": self._position_snapshot(current_state.position),
                     "cash": current_state.cash,
                     "config": strategy_config,
+                    "fee_rate": fee_rate,
+                    "slippage_rate": slippage_rate,
                     **(runtime_metadata or {}),
                 },
             )
@@ -165,18 +168,23 @@ class PaperEngine(EngineBase):
         if current_state.position is None and signal.action == "enter":
             validation = self.risk_engine.validate_order(strategy.key, symbol)
             if validation.get("approved"):
+                stop_price = self._metadata_decimal(signal.metadata, "stop_price")
+                take_profit_price = self._metadata_decimal(signal.metadata, "take_profit_price")
                 entry_plan = self.risk_engine.calculate_entry_plan(
                     available_cash=current_state.cash,
                     reference_price=Decimal(str(candle.close)),
                     fee_rate=fee_rate,
                     slippage_rate=slippage_rate,
                     risk_plan=risk_plan,
+                    override_stop_price=stop_price,
+                    override_take_profit_price=take_profit_price,
                 )
                 if entry_plan is not None:
                     current_state = self._open_position(
                         state=current_state,
                         candle_time=candle.open_time,
                         entry_plan=entry_plan,
+                        entry_metadata=signal.metadata,
                     )
                     orders.append(
                         PaperOrderEvent(
@@ -252,6 +260,7 @@ class PaperEngine(EngineBase):
         state: PaperRuntimeState,
         candle_time: datetime,
         entry_plan: EntryPlan,
+        entry_metadata: dict[str, object],
     ) -> PaperRuntimeState:
         return PaperRuntimeState(
             cash=state.cash - entry_plan.capital_committed,
@@ -264,6 +273,7 @@ class PaperEngine(EngineBase):
                 capital_committed=entry_plan.capital_committed,
                 stop_price=entry_plan.stop_price,
                 take_profit_price=entry_plan.take_profit_price,
+                entry_metadata=dict(entry_metadata),
             ),
         )
 
@@ -294,7 +304,11 @@ class PaperEngine(EngineBase):
             slippage=total_slippage,
             opened_at=position.entry_time,
             closed_at=exit_time,
-            metadata_json={"exit_reason": exit_plan.reason},
+            metadata_json={
+                "entry": position.entry_metadata,
+                "exit_reason": exit_plan.reason,
+                "exit_reason_label": self._normalized_exit_reason(exit_plan.reason),
+            },
         )
         return next_state, trade_event
 
@@ -310,4 +324,18 @@ class PaperEngine(EngineBase):
             "qty": position.qty,
             "stop_price": position.stop_price,
             "take_profit_price": position.take_profit_price,
+            "entry_metadata": position.entry_metadata,
         }
+
+    def _metadata_decimal(self, metadata: dict[str, object], key: str) -> Optional[Decimal]:
+        value = metadata.get(key)
+        if value is None:
+            return None
+        return Decimal(str(value))
+
+    def _normalized_exit_reason(self, reason: str) -> str:
+        mapping = {
+            "take_profit": "tp",
+            "stop_loss": "stop",
+        }
+        return mapping.get(reason, reason)

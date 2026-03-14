@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+from datetime import datetime
 from decimal import Decimal
-from typing import Sequence
+from typing import Literal, Sequence
 
 from pydantic import Field, model_validator
 
@@ -10,36 +12,130 @@ from app.strategies.base import BaseStrategy, BaseStrategyConfig, StrategyContex
 
 ZERO = Decimal("0")
 ONE = Decimal("1")
+TWO = Decimal("2")
+HUNDRED = Decimal("100")
+
+
+@dataclass(frozen=True)
+class BollingerBand:
+    middle: Decimal
+    upper: Decimal
+    lower: Decimal
+
+
+@dataclass(frozen=True)
+class StopCandidate:
+    stop_mode: str
+    price: Decimal
+    distance_pct: Decimal
 
 
 class MeanReversionHardStopConfig(BaseStrategyConfig):
-    lookback_period: int = Field(default=30, ge=3, le=300)
-    hard_stop_pct: float = Field(default=0.025, gt=0, lt=1)
-    stop_loss_pct: float = Field(default=0.025, gt=0, lt=1)
-    take_profit_pct: float = Field(default=0.04, ge=0, lt=2)
-    entry_deviation_pct: float = Field(default=0.006, gt=0, lt=0.2)
-    exit_deviation_pct: float = Field(default=0.0015, ge=0, lt=0.1)
-    min_bounce_pct: float = Field(default=0.001, ge=0, lt=0.1)
+    lookback_period: int = Field(default=20, ge=5, le=300)
+    bb_stddev_mult: float = Field(default=2.0, gt=0, lt=10)
+    hard_stop_pct: float = Field(default=0.018, gt=0, lt=1)
+    stop_loss_pct: float = Field(default=0.018, gt=0, lt=1)
+    take_profit_pct: float = Field(default=0, ge=0, lt=2)
+
+    bb_reentry_required: bool = True
+    oversold_detection_mode: Literal["band", "rsi", "either", "both"] = "either"
+    oversold_lookback_bars: int = Field(default=5, ge=1, le=50)
+    rsi_period: int = Field(default=14, ge=2, le=100)
+    rsi_oversold_threshold: float = Field(default=27, gt=0, lt=100)
+    rsi_reclaim_threshold: float = Field(default=30, gt=0, lt=100)
+    min_band_overshoot_atr: float = Field(default=0.2, ge=0, lt=5)
+    atr_period: int = Field(default=14, ge=2, le=100)
+    min_bounce_pct: float = Field(default=0.003, ge=0, lt=0.1)
+    min_recovery_atr: float = Field(default=0.15, ge=0, lt=5)
+
+    cost_multiplier: float = Field(default=2.5, ge=0, lt=20)
+    target_source: Literal["bb_mid", "sma", "ema"] = "bb_mid"
+    exit_deviation_pct: float = Field(default=0.001, ge=0, lt=0.1)
+
+    stop_mode: Literal["signal_low", "lookback_low", "hybrid"] = "signal_low"
+    stop_lookback_bars: int = Field(default=8, ge=2, le=50)
+    stop_atr_buffer: float = Field(default=0.1, ge=0, lt=5)
+    max_stop_pct: float = Field(default=0.018, gt=0, lt=1)
+
+    exit_ema_period: int = Field(default=20, ge=2, le=100)
+    exit_on_ema20_loss: bool = True
+    exit_on_rsi_rollover: bool = True
+    exit_rsi_threshold: float = Field(default=45, gt=0, lt=100)
+    min_hold_bars: int = Field(default=3, ge=0, le=100)
+    max_bars_in_trade: int = Field(default=24, ge=1, le=500)
+
+    regime_filter_enabled: bool = True
+    regime_ema_period: int = Field(default=200, ge=2, le=500)
+    min_slope: float = Field(default=0.0005, gt=-1, lt=1)
+    regime_atr_period: int = Field(default=14, ge=2, le=100)
+    atr_pct_min: float = Field(default=0, ge=0, lt=1)
+    atr_pct_max: float = Field(default=0.02, ge=0, lt=1)
+    use_htf_rsi_filter: bool = True
+    htf_rsi_period: int = Field(default=14, ge=2, le=100)
+    htf_rsi_min: float = Field(default=45, gt=0, lt=100)
+    downside_volatility_filter_enabled: bool = True
+    downside_volatility_lookback: int = Field(default=6, ge=2, le=100)
+    downside_volatility_expansion_ratio: float = Field(default=1.2, ge=1, lt=10)
+
+    @model_validator(mode="before")
+    @classmethod
+    def migrate_legacy_fields(cls, payload: object) -> object:
+        if not isinstance(payload, dict):
+            return payload
+
+        normalized = dict(payload)
+        field_map = {
+            "rsi_extreme_threshold": "rsi_oversold_threshold",
+            "rsi_cross_level": "rsi_reclaim_threshold",
+            "min_bb_atr_breach": "min_band_overshoot_atr",
+            "target_to_cost_ratio": "cost_multiplier",
+            "stop_reference": "stop_mode",
+            "stop_lookback_period": "stop_lookback_bars",
+            "stop_buffer_atr": "stop_atr_buffer",
+            "time_stop_bars": "max_bars_in_trade",
+            "regime_min_slope_pct": "min_slope",
+            "regime_max_atr_pct": "atr_pct_max",
+        }
+        for old_key, new_key in field_map.items():
+            if old_key in normalized and new_key not in normalized:
+                normalized[new_key] = normalized[old_key]
+
+        if normalized.get("stop_mode") == "rolling_low":
+            normalized["stop_mode"] = "lookback_low"
+
+        return normalized
 
     @model_validator(mode="after")
-    def sync_stop_fields(self) -> "MeanReversionHardStopConfig":
-        # Keep the explicit hard-stop field aligned with the generic risk config
-        # consumed by the existing risk engine.
-        self.stop_loss_pct = self.hard_stop_pct
+    def validate_thresholds(self) -> "MeanReversionHardStopConfig":
+        if self.rsi_oversold_threshold > self.rsi_reclaim_threshold:
+            raise ValueError("rsi_oversold_threshold must be less than or equal to rsi_reclaim_threshold")
+        if self.atr_pct_min > self.atr_pct_max:
+            raise ValueError("atr_pct_min must be less than or equal to atr_pct_max")
+
+        fallback_stop = min(self.hard_stop_pct, self.stop_loss_pct, self.max_stop_pct)
+        self.hard_stop_pct = fallback_stop
+        self.stop_loss_pct = fallback_stop
         return self
 
 
 class MeanReversionHardStopStrategy(BaseStrategy):
     key = "mean_reversion_hard_stop"
     name = "MeanReversionHardStop"
-    description = "Mean reversion entries after oversold bounces with one hard stop and no DCA."
+    description = "Two-stage mean reversion with oversold detection, reclaim confirmation, cost-aware targets, and capped structure stops."
     status = "implemented"
     config_model = MeanReversionHardStopConfig
 
     def generate_signal(self, context: StrategyContext) -> StrategySignal:
         history = self._history_from_context(context)
         config = self._config_from_context(context)
-        if len(history) < config.lookback_period + 1:
+        minimum_history = max(
+            config.lookback_period + config.oversold_lookback_bars + 1,
+            config.rsi_period + config.oversold_lookback_bars + 1,
+            config.atr_period + config.oversold_lookback_bars + 1,
+            config.exit_ema_period,
+            config.stop_lookback_bars,
+        )
+        if len(history) < minimum_history:
             return StrategySignal(action="hold", reason="insufficient_history")
 
         closes = [self._as_decimal(candle.close) for candle in history]
@@ -48,70 +144,311 @@ class MeanReversionHardStopStrategy(BaseStrategy):
         if previous_close <= ZERO or current_close <= ZERO:
             return StrategySignal(action="hold", reason="invalid_prices")
 
-        previous_mean = self._mean(closes[-config.lookback_period - 1 : -1])
-        current_mean = self._mean(closes[-config.lookback_period :])
-        if previous_mean <= ZERO or current_mean <= ZERO:
+        current_bb = self._bollinger_bands(
+            closes[-config.lookback_period :],
+            self._as_decimal(config.bb_stddev_mult),
+        )
+        if current_bb.middle <= ZERO:
             return StrategySignal(action="hold", reason="invalid_moving_average")
 
+        rsi_series = self._rsi_series(closes, config.rsi_period)
+        previous_rsi = rsi_series[-2]
+        current_rsi = rsi_series[-1]
+        if previous_rsi is None or current_rsi is None:
+            return StrategySignal(action="hold", reason="insufficient_rsi_history")
+
+        current_atr = self._atr(history, config.atr_period)
+        if current_atr <= ZERO:
+            return StrategySignal(action="hold", reason="invalid_atr")
+
+        fee_rate = self._as_decimal(context.metadata.get("fee_rate", ZERO))
+        slippage_rate = self._as_decimal(context.metadata.get("slippage_rate", ZERO))
+        estimated_cost_pct = fee_rate + fee_rate + slippage_rate + slippage_rate
         has_position = bool(context.metadata.get("has_position"))
         position = context.metadata.get("position") or {}
-        entry_threshold = self._as_decimal(config.entry_deviation_pct)
-        exit_threshold = self._as_decimal(config.exit_deviation_pct)
-        min_bounce = self._as_decimal(config.min_bounce_pct)
 
-        deviation_pct = (previous_mean - previous_close) / previous_mean
-        bounce_pct = (current_close - previous_close) / previous_close
+        target_price = self._target_price(
+            closes=closes,
+            current_band=current_bb,
+            config=config,
+        )
+        if target_price <= ZERO:
+            return StrategySignal(action="hold", reason="invalid_target")
 
         if not has_position:
-            entry_level = previous_mean * (ONE - entry_threshold)
-            if previous_close <= entry_level and current_close > previous_close and bounce_pct >= min_bounce:
-                confidence = self._bounded_ratio(deviation_pct, entry_threshold)
-                return StrategySignal(
-                    action="enter",
-                    side="long",
-                    reason="oversold_bounce_entry",
-                    confidence=confidence,
-                    metadata={
-                        "previous_close": str(previous_close),
-                        "current_close": str(current_close),
-                        "moving_average": str(previous_mean),
-                        "deviation_pct": str(deviation_pct),
-                        "bounce_pct": str(bounce_pct),
-                    },
-                )
+            return self._entry_signal(
+                context=context,
+                history=history,
+                closes=closes,
+                rsi_series=rsi_series,
+                current_bb=current_bb,
+                current_atr=current_atr,
+                previous_rsi=previous_rsi,
+                current_rsi=current_rsi,
+                previous_close=previous_close,
+                current_close=current_close,
+                estimated_cost_pct=estimated_cost_pct,
+                target_price=target_price,
+                config=config,
+            )
 
-            return StrategySignal(action="hold", reason="entry_conditions_not_met")
+        return self._exit_signal(
+            history=history,
+            closes=closes,
+            current_bb=current_bb,
+            previous_rsi=previous_rsi,
+            current_rsi=current_rsi,
+            previous_close=previous_close,
+            current_close=current_close,
+            target_price=target_price,
+            position=position,
+            config=config,
+        )
 
+    def _entry_signal(
+        self,
+        context: StrategyContext,
+        history: Sequence[BacktestCandle],
+        closes: Sequence[Decimal],
+        rsi_series: Sequence[Decimal | None],
+        current_bb: BollingerBand,
+        current_atr: Decimal,
+        previous_rsi: Decimal,
+        current_rsi: Decimal,
+        previous_close: Decimal,
+        current_close: Decimal,
+        estimated_cost_pct: Decimal,
+        target_price: Decimal,
+        config: MeanReversionHardStopConfig,
+    ) -> StrategySignal:
+        band_oversold, band_overshoot_atr = self._band_oversold_detected(history, closes, config)
+        rsi_min_last_n = self._recent_rsi_min(rsi_series, config.oversold_lookback_bars)
+        rsi_oversold = rsi_min_last_n is not None and rsi_min_last_n <= self._as_decimal(config.rsi_oversold_threshold)
+        setup_type = self._setup_type(band_oversold, rsi_oversold)
+        oversold_detected = self._oversold_detected(
+            band_oversold=band_oversold,
+            rsi_oversold=rsi_oversold,
+            mode=config.oversold_detection_mode,
+        )
+
+        bb_reclaimed = (not config.bb_reentry_required) or current_close > current_bb.lower
+        rsi_reclaimed = previous_rsi < self._as_decimal(config.rsi_reclaim_threshold) and current_rsi >= self._as_decimal(
+            config.rsi_reclaim_threshold
+        )
+        bounce_pct = (current_close - previous_close) / previous_close
+        recovery_amount = current_close - previous_close
+        strong_recovery = (
+            current_close > previous_close
+            and bounce_pct >= self._as_decimal(config.min_bounce_pct)
+            and recovery_amount >= current_atr * self._as_decimal(config.min_recovery_atr)
+        )
+
+        planned_tp_pct = (target_price - current_close) / current_close
+        regime_ok, regime_reason, regime_metadata = self._passes_regime_filter(
+            context=context,
+            history=history,
+            config=config,
+        )
+        stop_candidate, stop_reason, stop_metadata = self._select_stop_candidate(
+            history=history,
+            entry_price=current_close,
+            atr=current_atr,
+            config=config,
+        )
+
+        entry_metadata = {
+            "stage": "entry_check",
+            "oversold_detected": oversold_detected,
+            "reclaim_confirmed": bb_reclaimed and rsi_reclaimed,
+            "setup_type": setup_type,
+            "oversold_detection_mode": config.oversold_detection_mode,
+            "bb_reentry_required": config.bb_reentry_required,
+            "bb_reclaimed": bb_reclaimed,
+            "rsi_reclaimed": rsi_reclaimed,
+            "band_oversold": band_oversold,
+            "rsi_oversold": rsi_oversold,
+            "rsi_min_last_n": str(rsi_min_last_n) if rsi_min_last_n is not None else None,
+            "band_overshoot_atr": str(band_overshoot_atr),
+            "previous_rsi": str(previous_rsi),
+            "current_rsi": str(current_rsi),
+            "current_close": str(current_close),
+            "bb_lower": str(current_bb.lower),
+            "bb_middle": str(current_bb.middle),
+            "bounce_pct": str(bounce_pct),
+            "planned_tp_pct": str(planned_tp_pct),
+            "estimated_cost_pct": str(estimated_cost_pct),
+            "cost_multiplier": str(config.cost_multiplier),
+            "target_price": str(target_price),
+            "min_recovery_atr": str(config.min_recovery_atr),
+            "min_bounce_pct": str(config.min_bounce_pct),
+            **regime_metadata,
+            **stop_metadata,
+        }
+
+        if not regime_ok:
+            return self._hold_signal(
+                reason="regime_blocked",
+                detail=regime_reason,
+                metadata=entry_metadata,
+            )
+        if not oversold_detected:
+            return self._hold_signal(
+                reason="safety_guard_failed",
+                detail="oversold_not_detected",
+                metadata=entry_metadata,
+            )
+        if not bb_reclaimed:
+            return self._hold_signal(
+                reason="safety_guard_failed",
+                detail="bb_reentry_not_confirmed",
+                metadata=entry_metadata,
+            )
+        if not rsi_reclaimed:
+            return self._hold_signal(
+                reason="safety_guard_failed",
+                detail="rsi_reclaim_not_confirmed",
+                metadata=entry_metadata,
+            )
+        if not strong_recovery:
+            return self._hold_signal(
+                reason="safety_guard_failed",
+                detail="recovery_not_strong_enough",
+                metadata=entry_metadata,
+            )
+        minimum_planned_tp_pct = estimated_cost_pct * self._as_decimal(config.cost_multiplier)
+        if planned_tp_pct <= ZERO or planned_tp_pct < minimum_planned_tp_pct:
+            return self._hold_signal(
+                reason="insufficient_tp_vs_cost",
+                detail="planned_tp_too_small",
+                metadata={
+                    **entry_metadata,
+                    "minimum_planned_tp_pct": str(minimum_planned_tp_pct),
+                },
+            )
+        if stop_candidate is None:
+            return self._hold_signal(
+                reason=stop_reason or "safety_guard_failed",
+                detail="stop_not_usable",
+                metadata=entry_metadata,
+            )
+
+        confidence = (
+            self._bounded_ratio(planned_tp_pct, minimum_planned_tp_pct if minimum_planned_tp_pct > ZERO else ONE)
+            + self._bounded_ratio(recovery_amount, current_atr)
+            + self._bounded_ratio(
+                self._as_decimal(config.rsi_reclaim_threshold) - self._as_decimal(config.rsi_oversold_threshold),
+                self._as_decimal(config.rsi_reclaim_threshold),
+            )
+        ) / 3
+
+        return StrategySignal(
+            action="enter",
+            side="long",
+            reason="oversold_reclaim_entry",
+            confidence=confidence,
+            metadata={
+                **entry_metadata,
+                "stage": "entry_confirmed",
+                "previous_close": str(previous_close),
+                "atr": str(current_atr),
+                "stop_price": str(stop_candidate.price),
+                "take_profit_price": str(target_price),
+                "distance_to_stop_pct": str(stop_candidate.distance_pct),
+                "distance_to_tp_pct": str(planned_tp_pct),
+                "stop_mode_used": stop_candidate.stop_mode,
+                "reason_skipped": None,
+            },
+        )
+
+    def _exit_signal(
+        self,
+        history: Sequence[BacktestCandle],
+        closes: Sequence[Decimal],
+        current_bb: BollingerBand,
+        previous_rsi: Decimal,
+        current_rsi: Decimal,
+        previous_close: Decimal,
+        current_close: Decimal,
+        target_price: Decimal,
+        position: dict[str, object],
+        config: MeanReversionHardStopConfig,
+    ) -> StrategySignal:
         entry_price = self._as_decimal(position.get("entry_price", current_close))
-        exit_level = current_mean * (ONE - exit_threshold)
-        if current_close >= exit_level and current_close >= entry_price:
-            confidence = self._bounded_ratio(current_close - exit_level, current_mean)
+        entry_time = position.get("entry_time")
+        bars_held = self._bars_held(history, entry_time)
+        current_profit_pct = ZERO
+        if entry_price > ZERO:
+            current_profit_pct = (current_close - entry_price) / entry_price
+
+        if current_close >= target_price and current_close >= entry_price:
             return StrategySignal(
                 action="exit",
                 side="long",
-                reason="mean_reversion_complete",
-                confidence=confidence,
+                reason="tp",
+                confidence=self._bounded_ratio(current_close - target_price, target_price),
                 metadata={
                     "entry_price": str(entry_price),
                     "current_close": str(current_close),
-                    "moving_average": str(current_mean),
-                    "exit_level": str(exit_level),
+                    "target_price": str(target_price),
+                    "bars_held": bars_held,
+                    "exit_reason_label": "tp",
                 },
             )
 
-        # If price bounces into profit but immediately starts rolling over, exit early
-        # instead of waiting for a perfect touch of the mean.
-        if current_close > entry_price and current_close < previous_close:
-            confidence = self._bounded_ratio(current_close - entry_price, entry_price)
+        if bars_held >= config.max_bars_in_trade:
             return StrategySignal(
                 action="exit",
                 side="long",
-                reason="rebound_stalling",
-                confidence=confidence,
+                reason="time_stop",
+                confidence=self._bounded_ratio(Decimal(bars_held), Decimal(config.max_bars_in_trade)),
                 metadata={
                     "entry_price": str(entry_price),
                     "current_close": str(current_close),
+                    "bars_held": bars_held,
+                    "max_bars_in_trade": config.max_bars_in_trade,
+                    "exit_reason_label": "time_stop",
+                },
+            )
+
+        exit_ema = self._ema(closes, config.exit_ema_period)
+        if config.exit_on_ema20_loss and bars_held >= config.min_hold_bars and current_close < exit_ema:
+            return StrategySignal(
+                action="exit",
+                side="long",
+                reason="ema_failure",
+                confidence=self._bounded_ratio(exit_ema - current_close, exit_ema if exit_ema > ZERO else ONE),
+                metadata={
+                    "entry_price": str(entry_price),
+                    "current_close": str(current_close),
+                    "exit_ema": str(exit_ema),
                     "previous_close": str(previous_close),
+                    "bars_held": bars_held,
+                    "exit_reason_label": "ema_failure",
+                },
+            )
+
+        if (
+            config.exit_on_rsi_rollover
+            and bars_held >= config.min_hold_bars
+            and previous_rsi >= self._as_decimal(config.exit_rsi_threshold)
+            and current_rsi < self._as_decimal(config.exit_rsi_threshold)
+            and current_profit_pct > ZERO
+        ):
+            return StrategySignal(
+                action="exit",
+                side="long",
+                reason="rebound_failure",
+                confidence=self._bounded_ratio(
+                    self._as_decimal(config.exit_rsi_threshold) - current_rsi,
+                    self._as_decimal(config.exit_rsi_threshold),
+                ),
+                metadata={
+                    "entry_price": str(entry_price),
+                    "current_close": str(current_close),
+                    "previous_rsi": str(previous_rsi),
+                    "current_rsi": str(current_rsi),
+                    "bars_held": bars_held,
+                    "exit_reason_label": "rebound_failure",
                 },
             )
 
@@ -131,10 +468,402 @@ class MeanReversionHardStopStrategy(BaseStrategy):
         raw_history = context.metadata.get("history") or []
         return list(raw_history)
 
+    def _hold_signal(
+        self,
+        reason: str,
+        detail: str,
+        metadata: dict[str, object],
+    ) -> StrategySignal:
+        return StrategySignal(
+            action="hold",
+            reason=reason,
+            metadata={
+                **metadata,
+                "reason_skipped": reason,
+                "skip_reason_detail": detail,
+            },
+        )
+
+    def _oversold_detected(
+        self,
+        band_oversold: bool,
+        rsi_oversold: bool,
+        mode: str,
+    ) -> bool:
+        if mode == "band":
+            return band_oversold
+        if mode == "rsi":
+            return rsi_oversold
+        if mode == "both":
+            return band_oversold and rsi_oversold
+        return band_oversold or rsi_oversold
+
+    def _setup_type(self, band_oversold: bool, rsi_oversold: bool) -> str:
+        if band_oversold and rsi_oversold:
+            return "bb_and_rsi"
+        if band_oversold:
+            return "bb_only"
+        if rsi_oversold:
+            return "rsi_only"
+        return "none"
+
+    def _target_price(
+        self,
+        closes: Sequence[Decimal],
+        current_band: BollingerBand,
+        config: MeanReversionHardStopConfig,
+    ) -> Decimal:
+        if config.target_source == "ema":
+            base_target = self._ema(closes, config.exit_ema_period)
+        elif config.target_source == "sma":
+            base_target = self._mean(closes[-config.lookback_period :])
+        else:
+            base_target = current_band.middle
+
+        if base_target <= ZERO:
+            return ZERO
+        return base_target * (ONE - self._as_decimal(config.exit_deviation_pct))
+
+    def _select_stop_candidate(
+        self,
+        history: Sequence[BacktestCandle],
+        entry_price: Decimal,
+        atr: Decimal,
+        config: MeanReversionHardStopConfig,
+    ) -> tuple[StopCandidate | None, str | None, dict[str, object]]:
+        signal_candidate = self._build_stop_candidate(
+            label="signal_low",
+            reference_low=self._as_decimal(history[-1].low),
+            entry_price=entry_price,
+            atr=atr,
+            buffer_atr=self._as_decimal(config.stop_atr_buffer),
+        )
+        lookback_candidate = self._build_stop_candidate(
+            label="lookback_low",
+            reference_low=min(self._as_decimal(candle.low) for candle in history[-config.stop_lookback_bars :]),
+            entry_price=entry_price,
+            atr=atr,
+            buffer_atr=self._as_decimal(config.stop_atr_buffer),
+        )
+
+        diagnostics: dict[str, object] = {
+            "stop_mode": config.stop_mode,
+            "signal_low_stop_price": str(signal_candidate.price) if signal_candidate is not None else None,
+            "signal_low_stop_pct": str(signal_candidate.distance_pct) if signal_candidate is not None else None,
+            "lookback_low_stop_price": str(lookback_candidate.price) if lookback_candidate is not None else None,
+            "lookback_low_stop_pct": str(lookback_candidate.distance_pct) if lookback_candidate is not None else None,
+            "max_stop_pct": str(config.max_stop_pct),
+        }
+
+        chosen: StopCandidate | None = None
+        if config.stop_mode == "signal_low":
+            chosen = signal_candidate
+        elif config.stop_mode == "lookback_low":
+            chosen = lookback_candidate
+        else:
+            valid_candidates = [candidate for candidate in (signal_candidate, lookback_candidate) if candidate is not None]
+            if valid_candidates:
+                chosen = max(valid_candidates, key=lambda candidate: candidate.price)
+
+        if chosen is None:
+            return None, "safety_guard_failed", diagnostics
+
+        if chosen.distance_pct > self._as_decimal(config.max_stop_pct):
+            return None, "max_stop_exceeded", {**diagnostics, "selected_stop_mode": chosen.stop_mode}
+
+        return chosen, None, {
+            **diagnostics,
+            "selected_stop_mode": chosen.stop_mode,
+        }
+
+    def _build_stop_candidate(
+        self,
+        label: str,
+        reference_low: Decimal,
+        entry_price: Decimal,
+        atr: Decimal,
+        buffer_atr: Decimal,
+    ) -> StopCandidate | None:
+        if reference_low <= ZERO or entry_price <= ZERO:
+            return None
+
+        stop_price = reference_low - (atr * buffer_atr)
+        if stop_price <= ZERO or stop_price >= entry_price:
+            return None
+
+        distance_pct = (entry_price - stop_price) / entry_price
+        return StopCandidate(
+            stop_mode=label,
+            price=stop_price,
+            distance_pct=distance_pct,
+        )
+
+    def _band_oversold_detected(
+        self,
+        history: Sequence[BacktestCandle],
+        closes: Sequence[Decimal],
+        config: MeanReversionHardStopConfig,
+    ) -> tuple[bool, Decimal]:
+        best_overshoot_atr = ZERO
+        start_index = max(config.lookback_period - 1, len(history) - 1 - config.oversold_lookback_bars)
+        end_index = len(history) - 1
+
+        for index in range(start_index, end_index):
+            band = self._bollinger_bands(
+                closes[index - config.lookback_period + 1 : index + 1],
+                self._as_decimal(config.bb_stddev_mult),
+            )
+            atr = self._atr(history[: index + 1], config.atr_period)
+            if atr <= ZERO:
+                continue
+
+            close_value = closes[index]
+            if close_value >= band.lower:
+                continue
+
+            overshoot_atr = (band.lower - close_value) / atr
+            if overshoot_atr > best_overshoot_atr:
+                best_overshoot_atr = overshoot_atr
+
+        return best_overshoot_atr >= self._as_decimal(config.min_band_overshoot_atr), best_overshoot_atr
+
+    def _recent_rsi_min(
+        self,
+        rsi_series: Sequence[Decimal | None],
+        lookback_bars: int,
+    ) -> Decimal | None:
+        recent_values = [value for value in rsi_series[-1 - lookback_bars : -1] if value is not None]
+        if not recent_values:
+            return None
+        return min(recent_values)
+
+    def _passes_regime_filter(
+        self,
+        context: StrategyContext,
+        history: Sequence[BacktestCandle],
+        config: MeanReversionHardStopConfig,
+    ) -> tuple[bool, str, dict[str, object]]:
+        if not config.regime_filter_enabled:
+            return True, "regime_filter_disabled", {}
+
+        one_hour_history = self._resample_to_one_hour(history, context.timeframe)
+        minimum_one_hour_history = max(
+            config.regime_ema_period + 1,
+            config.regime_atr_period + 1,
+            config.htf_rsi_period + 1 if config.use_htf_rsi_filter else 0,
+            ((config.downside_volatility_lookback * 2) + 1)
+            if config.downside_volatility_filter_enabled
+            else 0,
+        )
+        if len(one_hour_history) < minimum_one_hour_history:
+            return False, "regime_history_insufficient", {"one_hour_bars": len(one_hour_history)}
+
+        closes = [self._as_decimal(candle.close) for candle in one_hour_history]
+        ema_series = self._ema_series(closes, config.regime_ema_period)
+        current_ema = ema_series[-1]
+        previous_ema = ema_series[-2]
+        if current_ema <= ZERO or previous_ema <= ZERO:
+            return False, "regime_filter_invalid_ema", {}
+
+        current_close = closes[-1]
+        slope_pct = (current_ema - previous_ema) / previous_ema
+        regime_atr = self._atr(one_hour_history, config.regime_atr_period)
+        atr_pct = regime_atr / current_close if current_close > ZERO else ZERO
+        htf_rsi = None
+        if config.use_htf_rsi_filter:
+            htf_rsi_series = self._rsi_series(closes, config.htf_rsi_period)
+            htf_rsi = htf_rsi_series[-1]
+
+        metadata: dict[str, object] = {
+            "regime_close_1h": str(current_close),
+            "regime_ema_1h": str(current_ema),
+            "regime_slope_1h": str(slope_pct),
+            "regime_atr_pct_1h": str(atr_pct),
+            "regime_rsi_1h": str(htf_rsi) if htf_rsi is not None else None,
+            "one_hour_bars": len(one_hour_history),
+        }
+        if current_close <= current_ema:
+            return False, "close_below_ema200_1h", metadata
+        if slope_pct <= self._as_decimal(config.min_slope):
+            return False, "ema200_slope_below_threshold", metadata
+        if atr_pct < self._as_decimal(config.atr_pct_min):
+            return False, "atr_pct_below_min", metadata
+        if atr_pct > self._as_decimal(config.atr_pct_max):
+            return False, "atr_pct_above_max", metadata
+        if config.use_htf_rsi_filter and (htf_rsi is None or htf_rsi < self._as_decimal(config.htf_rsi_min)):
+            return False, "htf_rsi_below_min", metadata
+        if config.downside_volatility_filter_enabled and self._is_expanding_downside_volatility(
+            closes=closes,
+            lookback=config.downside_volatility_lookback,
+            expansion_ratio=self._as_decimal(config.downside_volatility_expansion_ratio),
+        ):
+            return False, "expanding_downside_volatility", metadata
+        return True, "regime_passed", metadata
+
+    def _is_expanding_downside_volatility(
+        self,
+        closes: Sequence[Decimal],
+        lookback: int,
+        expansion_ratio: Decimal,
+    ) -> bool:
+        if len(closes) < (lookback * 2) + 1:
+            return False
+
+        returns = []
+        for previous_close, current_close in zip(closes[:-1], closes[1:]):
+            if previous_close <= ZERO:
+                return False
+            returns.append((current_close - previous_close) / previous_close)
+
+        short_window = returns[-lookback:]
+        long_window = returns[-(lookback * 2) : -lookback]
+        short_downside = self._mean([abs(value) if value < ZERO else ZERO for value in short_window])
+        long_downside = self._mean([abs(value) if value < ZERO else ZERO for value in long_window])
+        recent_return = (closes[-1] - closes[-1 - lookback]) / closes[-1 - lookback]
+
+        if short_downside <= ZERO or recent_return >= ZERO:
+            return False
+        if long_downside <= ZERO:
+            return True
+        return short_downside >= long_downside * expansion_ratio
+
+    def _resample_to_one_hour(
+        self,
+        history: Sequence[BacktestCandle],
+        timeframe: str,
+    ) -> list[BacktestCandle]:
+        if timeframe == "1h":
+            return list(history)
+
+        aggregated: list[BacktestCandle] = []
+        current_bucket: BacktestCandle | None = None
+        current_bucket_time: datetime | None = None
+
+        for candle in history:
+            bucket_time = candle.open_time.replace(minute=0, second=0, microsecond=0)
+            if current_bucket is None or current_bucket_time != bucket_time:
+                if current_bucket is not None:
+                    aggregated.append(current_bucket)
+                current_bucket = BacktestCandle(
+                    open_time=bucket_time,
+                    open=self._as_decimal(candle.open),
+                    high=self._as_decimal(candle.high),
+                    low=self._as_decimal(candle.low),
+                    close=self._as_decimal(candle.close),
+                    volume=self._as_decimal(candle.volume),
+                )
+                current_bucket_time = bucket_time
+                continue
+
+            current_bucket = BacktestCandle(
+                open_time=current_bucket.open_time,
+                open=current_bucket.open,
+                high=max(current_bucket.high, self._as_decimal(candle.high)),
+                low=min(current_bucket.low, self._as_decimal(candle.low)),
+                close=self._as_decimal(candle.close),
+                volume=current_bucket.volume + self._as_decimal(candle.volume),
+            )
+
+        if current_bucket is not None:
+            aggregated.append(current_bucket)
+        return aggregated
+
+    def _bars_held(self, history: Sequence[BacktestCandle], entry_time: object) -> int:
+        if not isinstance(entry_time, datetime):
+            return 0
+        return sum(1 for candle in history if candle.open_time > entry_time)
+
+    def _bollinger_bands(self, values: Sequence[Decimal], stddev_mult: Decimal) -> BollingerBand:
+        middle = self._mean(values)
+        stddev = self._stddev(values)
+        offset = stddev * stddev_mult
+        return BollingerBand(
+            middle=middle,
+            upper=middle + offset,
+            lower=middle - offset,
+        )
+
     def _mean(self, values: Sequence[Decimal]) -> Decimal:
         if not values:
             return ZERO
         return sum(values, ZERO) / Decimal(len(values))
+
+    def _stddev(self, values: Sequence[Decimal]) -> Decimal:
+        if len(values) < 2:
+            return ZERO
+        mean = self._mean(values)
+        variance = sum(((value - mean) ** 2 for value in values), ZERO) / Decimal(len(values))
+        return variance.sqrt()
+
+    def _ema(self, values: Sequence[Decimal], period: int) -> Decimal:
+        series = self._ema_series(values, period)
+        if not series:
+            return ZERO
+        return series[-1]
+
+    def _ema_series(self, values: Sequence[Decimal], period: int) -> list[Decimal]:
+        if not values:
+            return []
+
+        alpha = TWO / (Decimal(period) + ONE)
+        ema = values[0]
+        series = [ema]
+        for value in values[1:]:
+            ema = ema + (value - ema) * alpha
+            series.append(ema)
+        return series
+
+    def _rsi_series(self, values: Sequence[Decimal], period: int) -> list[Decimal | None]:
+        series: list[Decimal | None] = [None] * len(values)
+        if len(values) <= period:
+            return series
+
+        gains: list[Decimal] = []
+        losses: list[Decimal] = []
+        for index in range(1, period + 1):
+            delta = values[index] - values[index - 1]
+            gains.append(max(delta, ZERO))
+            losses.append(abs(min(delta, ZERO)))
+
+        avg_gain = self._mean(gains)
+        avg_loss = self._mean(losses)
+        series[period] = self._rsi_from_average_moves(avg_gain, avg_loss)
+
+        for index in range(period + 1, len(values)):
+            delta = values[index] - values[index - 1]
+            gain = max(delta, ZERO)
+            loss = abs(min(delta, ZERO))
+            avg_gain = ((avg_gain * Decimal(period - 1)) + gain) / Decimal(period)
+            avg_loss = ((avg_loss * Decimal(period - 1)) + loss) / Decimal(period)
+            series[index] = self._rsi_from_average_moves(avg_gain, avg_loss)
+
+        return series
+
+    def _rsi_from_average_moves(self, avg_gain: Decimal, avg_loss: Decimal) -> Decimal:
+        if avg_gain <= ZERO and avg_loss <= ZERO:
+            return Decimal("50")
+        if avg_loss <= ZERO:
+            return HUNDRED
+        relative_strength = avg_gain / avg_loss
+        return HUNDRED - (HUNDRED / (ONE + relative_strength))
+
+    def _atr(self, candles: Sequence[BacktestCandle], period: int) -> Decimal:
+        if len(candles) < period + 1:
+            return ZERO
+
+        true_ranges: list[Decimal] = []
+        for previous_candle, current_candle in zip(candles[:-1], candles[1:]):
+            previous_close = self._as_decimal(previous_candle.close)
+            high = self._as_decimal(current_candle.high)
+            low = self._as_decimal(current_candle.low)
+            true_ranges.append(
+                max(
+                    high - low,
+                    abs(high - previous_close),
+                    abs(low - previous_close),
+                )
+            )
+        return self._mean(true_ranges[-period:])
 
     def _as_decimal(self, value: object) -> Decimal:
         return Decimal(str(value))

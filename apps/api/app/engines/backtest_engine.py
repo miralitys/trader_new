@@ -31,6 +31,7 @@ class OpenPosition:
     capital_committed: Decimal
     stop_price: Optional[Decimal]
     take_profit_price: Optional[Decimal]
+    entry_metadata: dict[str, object]
 
 
 class BacktestEngine(EngineBase):
@@ -118,6 +119,8 @@ class BacktestEngine(EngineBase):
                         "position": self._position_snapshot(position),
                         "config": strategy_config,
                         "cash": cash,
+                        "fee_rate": fee_rate,
+                        "slippage_rate": slippage_rate,
                     },
                 )
             )
@@ -139,18 +142,23 @@ class BacktestEngine(EngineBase):
                 closed_trades.append(trade)
                 position = None
             elif position is None and signal.action == "enter":
+                stop_price = self._metadata_decimal(signal.metadata, "stop_price")
+                take_profit_price = self._metadata_decimal(signal.metadata, "take_profit_price")
                 entry_plan = self.risk_engine.calculate_entry_plan(
                     available_cash=cash,
                     reference_price=candle.close,
                     fee_rate=fee_rate,
                     slippage_rate=slippage_rate,
                     risk_plan=risk_plan,
+                    override_stop_price=stop_price,
+                    override_take_profit_price=take_profit_price,
                 )
                 if entry_plan is not None:
                     position, cash = self._open_position(
                         candle_time=candle.open_time,
                         entry_plan=entry_plan,
                         cash=cash,
+                        entry_metadata=signal.metadata,
                     )
 
             equity_curve.append(
@@ -223,6 +231,7 @@ class BacktestEngine(EngineBase):
         candle_time: datetime,
         entry_plan: EntryPlan,
         cash: Decimal,
+        entry_metadata: dict[str, object],
     ) -> tuple[OpenPosition, Decimal]:
         position = OpenPosition(
             entry_time=candle_time,
@@ -233,6 +242,7 @@ class BacktestEngine(EngineBase):
             capital_committed=entry_plan.capital_committed,
             stop_price=entry_plan.stop_price,
             take_profit_price=entry_plan.take_profit_price,
+            entry_metadata=dict(entry_metadata),
         )
         return position, cash - entry_plan.capital_committed
 
@@ -265,6 +275,10 @@ class BacktestEngine(EngineBase):
             fees=total_fees,
             slippage=total_slippage,
             exit_reason=exit_plan.reason,
+            metadata={
+                "entry": position.entry_metadata,
+                "exit_reason_label": self._normalized_exit_reason(exit_plan.reason),
+            },
         )
         return updated_cash, trade
 
@@ -287,4 +301,18 @@ class BacktestEngine(EngineBase):
             "qty": position.qty,
             "stop_price": position.stop_price,
             "take_profit_price": position.take_profit_price,
+            "entry_metadata": position.entry_metadata,
         }
+
+    def _metadata_decimal(self, metadata: dict[str, object], key: str) -> Optional[Decimal]:
+        value = metadata.get(key)
+        if value is None:
+            return None
+        return Decimal(str(value))
+
+    def _normalized_exit_reason(self, reason: str) -> str:
+        mapping = {
+            "take_profit": "tp",
+            "stop_loss": "stop",
+        }
+        return mapping.get(reason, reason)

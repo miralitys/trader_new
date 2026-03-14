@@ -100,6 +100,7 @@ class QueryService:
 
         params = dict(run.params_json or {})
         summary = dict(result.summary_json or {}) if result is not None else {}
+        summary_metrics = dict(summary.get("metrics", {}))
         metrics = (
             BacktestMetrics(
                 total_return_pct=result.total_return_pct,
@@ -107,6 +108,8 @@ class QueryService:
                 win_rate_pct=result.win_rate_pct,
                 profit_factor=result.profit_factor,
                 expectancy=result.expectancy,
+                gross_expectancy=Decimal(str(summary_metrics.get("gross_expectancy", "0"))),
+                net_expectancy=Decimal(str(summary_metrics.get("net_expectancy", result.expectancy))),
                 avg_winner=result.avg_winner,
                 avg_loser=result.avg_loser,
                 total_trades=result.total_trades,
@@ -323,9 +326,27 @@ class QueryService:
 
     def get_dashboard_summary(self) -> DashboardSummaryResponse:
         strategies = self.strategy_service.list_strategies()
-        paper_runs = self.strategy_run_repository.list_runs(mode=StrategyRunMode.PAPER, limit=500)
-        recent_backtests = self.list_backtests(limit=5)
-        recent_trades = self.list_trades(limit=5)
+        visible_strategy_codes = self.strategy_service.visible_strategy_codes()
+        paper_runs = [
+            row
+            for row in self.strategy_run_repository.list_runs(mode=StrategyRunMode.PAPER, limit=500)
+            if row[1].code in visible_strategy_codes
+        ]
+        recent_backtests = [
+            backtest
+            for backtest in self.list_backtests(limit=100)
+            if backtest.strategy_code in visible_strategy_codes
+        ][:5]
+        recent_trades = [
+            trade
+            for trade in self.list_trades(limit=100)
+            if trade.strategy_code in visible_strategy_codes
+        ][:5]
+        open_positions_count = sum(
+            1
+            for position in self.list_positions(status=PositionStatus.OPEN.value, limit=500)
+            if position.strategy_code in visible_strategy_codes
+        )
         recent_jobs = self.list_sync_jobs(limit=5)
         completed_backtests = [
             backtest for backtest in recent_backtests if backtest.status == BacktestStatus.COMPLETED.value
@@ -358,7 +379,7 @@ class QueryService:
                 recent_backtests=len(recent_backtests),
             ),
             key_performance_metrics=key_metrics,
-            open_positions_count=self.position_repository.count_all_open_positions(),
+            open_positions_count=open_positions_count,
             recent_trades=recent_trades,
             recent_backtests=recent_backtests,
             data_sync_status=DashboardDataSyncStatus(

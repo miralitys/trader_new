@@ -65,6 +65,7 @@ class BacktestTrade(BaseModel):
     fees: Decimal
     slippage: Decimal
     exit_reason: str
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class EquityPoint(BaseModel):
@@ -81,6 +82,8 @@ class BacktestMetrics(BaseModel):
     win_rate_pct: Decimal = Decimal("0")
     profit_factor: Decimal = Decimal("0")
     expectancy: Decimal = Decimal("0")
+    gross_expectancy: Decimal = Decimal("0")
+    net_expectancy: Decimal = Decimal("0")
     avg_winner: Decimal = Decimal("0")
     avg_loser: Decimal = Decimal("0")
     total_trades: int = 0
