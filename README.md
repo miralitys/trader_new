@@ -71,6 +71,7 @@ Recommended deployment flow:
 
 Notes:
 
+- Backend Render services are pinned to Python 3.12 via `apps/api/.python-version` to avoid `pydantic-core` source builds on newer Python runtimes.
 - The backend automatically normalizes Render Postgres URLs from `postgresql://...` to `postgresql+psycopg://...`.
 - Backend and worker run `alembic upgrade head` and `python -m app.db.seed` on startup, so schema and reference data stay initialized.
 - Redis is optional for the current MVP deployment and is not required by the active worker/runtime path.
