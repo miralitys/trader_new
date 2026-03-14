@@ -57,6 +57,25 @@ class FakeBacktestRunnerService:
             trades=[],
         )
 
+    def stop_backtest(self, run_id: int, reason: str = "manual_stop") -> BacktestResponse:
+        return BacktestResponse(
+            run_id=run_id,
+            strategy_code="breakout_retest",
+            symbol="BTC-USD",
+            timeframe="5m",
+            exchange_code="coinbase",
+            status="failed",
+            initial_capital=Decimal("10000"),
+            final_equity=Decimal("10000"),
+            started_at=datetime(2026, 3, 14, 12, 0, tzinfo=timezone.utc),
+            completed_at=datetime(2026, 3, 14, 12, 1, tzinfo=timezone.utc),
+            params={"reason": reason},
+            metrics=BacktestMetrics(),
+            equity_curve=[],
+            trades=[],
+            error_text=f"manual_stop:{reason}",
+        )
+
 
 class FakeQueryService:
     def get_dashboard_summary(self) -> DashboardSummaryResponse:
@@ -129,6 +148,18 @@ def test_backtest_run_endpoint_returns_report(client: TestClient) -> None:
     assert payload["run_id"] == 42
     assert payload["metrics"]["total_trades"] == 2
     assert payload["final_equity"] == "10500"
+
+
+def test_backtest_stop_endpoint_returns_failed_report(client: TestClient) -> None:
+    app.dependency_overrides[get_backtest_runner_service] = lambda: FakeBacktestRunnerService()
+
+    response = client.post("/api/backtests/9/stop", json={"reason": "manual_stop"})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["run_id"] == 9
+    assert payload["status"] == "failed"
+    assert payload["error_text"] == "manual_stop:manual_stop"
 
 
 def test_dashboard_summary_endpoint_returns_aggregate_payload(client: TestClient) -> None:

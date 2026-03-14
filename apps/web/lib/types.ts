@@ -177,6 +177,10 @@ export type BacktestRunRequest = {
   strategy_config_override: Record<string, unknown>;
 };
 
+export type BacktestStopRequest = {
+  reason: string;
+};
+
 export type DataSyncRequest = {
   mode: "initial" | "incremental" | "manual";
   symbol: string;

@@ -21,12 +21,14 @@ import {
   runBacktest,
   runDataSync,
   startStrategyPaper,
+  stopBacktest,
   stopStrategyPaper,
   updateStrategyConfig,
 } from "@/lib/api";
 import type {
   BacktestFilters,
   BacktestRunRequest,
+  BacktestStopRequest,
   CandleFilters,
   DataSyncRequest,
   LogFilters,
@@ -235,6 +237,24 @@ export function useRunBacktest() {
         queryClient.invalidateQueries({ queryKey: ["backtests"] }),
         queryClient.invalidateQueries({ queryKey: queryKeys.dashboard }),
       ]);
+    },
+  });
+}
+
+export function useStopBacktest() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ id, payload }: { id: number; payload: BacktestStopRequest }) => stopBacktest(id, payload),
+    onSuccess: async (backtest) => {
+      const invalidations = [
+        queryClient.invalidateQueries({ queryKey: ["backtests"] }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.dashboard }),
+      ];
+      if (backtest.run_id !== null) {
+        invalidations.push(queryClient.invalidateQueries({ queryKey: queryKeys.backtest(backtest.run_id) }));
+      }
+      await Promise.all(invalidations);
     },
   });
 }

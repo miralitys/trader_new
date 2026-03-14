@@ -3,7 +3,9 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from decimal import Decimal
 
-from app.engines.backtest_engine import BacktestEngine
+import pytest
+
+from app.engines.backtest_engine import BacktestEngine, BacktestStopRequestedError
 from app.schemas.backtest import BacktestCandle, BacktestRequest
 from app.strategies.base import BaseStrategy, BaseStrategyConfig, StrategyContext, StrategySignal
 
@@ -243,3 +245,20 @@ def test_backtest_engine_emits_progress_markers() -> None:
     )
 
     assert progress == [(2, 5), (4, 5), (5, 5)]
+
+
+def test_backtest_engine_stops_when_abort_callback_requests_it() -> None:
+    engine = BacktestEngine()
+    candles = [
+        _candle(datetime(2026, 1, 1, 0, index * 5, tzinfo=timezone.utc), str(100 + index))
+        for index in range(5)
+    ]
+
+    with pytest.raises(BacktestStopRequestedError, match="manual_stop_requested"):
+        engine.run(
+            request=_request("hold_strategy"),
+            strategy=HoldStrategy(),
+            candles=candles,
+            stop_check_interval_bars=2,
+            should_abort=lambda processed, _total, _candle_time: processed >= 2,
+        )

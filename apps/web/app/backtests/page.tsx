@@ -11,7 +11,7 @@ import { LoadingState } from "@/components/ui/loading-state";
 import { MetricCard } from "@/components/ui/metric-card";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { useBacktests, useStrategies } from "@/lib/query-hooks";
+import { useBacktests, useStopBacktest, useStrategies } from "@/lib/query-hooks";
 import { focusStrategyCode } from "@/lib/focus-strategy";
 import { formatCurrency, formatDateTime, formatInteger, formatPercent, getErrorMessage } from "@/lib/utils";
 
@@ -21,7 +21,9 @@ export default function BacktestsPage() {
   const [strategyFilter, setStrategyFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [search, setSearch] = useState("");
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
   const deferredSearch = useDeferredValue(search);
+  const stopBacktest = useStopBacktest();
 
   const strategies = strategiesQuery.data ?? [];
   const backtests = backtestsQuery.data ?? [];
@@ -54,6 +56,23 @@ export default function BacktestsPage() {
   const error = strategiesQuery.error ?? backtestsQuery.error;
   if (error) {
     return <ErrorState message={getErrorMessage(error, "Unable to load backtest data.")} />;
+  }
+
+  async function handleStop(runId: number) {
+    setActionMessage(null);
+    if (!window.confirm(`Stop backtest #${runId}?`)) {
+      return;
+    }
+
+    try {
+      const result = await stopBacktest.mutateAsync({
+        id: runId,
+        payload: { reason: "manual_stop" },
+      });
+      setActionMessage(`Backtest #${runId} marked ${result.status}.`);
+    } catch (mutationError) {
+      setActionMessage(getErrorMessage(mutationError, `Unable to stop backtest #${runId}.`));
+    }
   }
 
   return (
@@ -110,6 +129,7 @@ export default function BacktestsPage() {
             />
           </label>
         </div>
+        {actionMessage ? <p className="mb-4 text-sm text-slate-300">{actionMessage}</p> : null}
 
         <DataTable
           rows={filteredBacktests}
@@ -163,6 +183,23 @@ export default function BacktestsPage() {
               key: "status",
               title: "Status",
               render: (row) => <StatusBadge status={row.status} />,
+            },
+            {
+              key: "actions",
+              title: "Actions",
+              render: (row) =>
+                row.status === "running" || row.status === "queued" ? (
+                  <button
+                    type="button"
+                    onClick={() => handleStop(row.id)}
+                    disabled={stopBacktest.isPending}
+                    className="rounded-xl border border-rose-400/30 bg-rose-500/10 px-3 py-2 text-xs font-semibold text-rose-100 transition hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-slate-900 disabled:text-slate-500"
+                  >
+                    {stopBacktest.isPending ? "Stopping..." : "Stop"}
+                  </button>
+                ) : (
+                  <span className="text-xs text-slate-500">No action</span>
+                ),
             },
           ]}
         />

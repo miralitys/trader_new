@@ -28,6 +28,7 @@ from app.schemas.backtest import (
     BacktestMetrics,
     BacktestRequest,
     BacktestResponse,
+    BacktestStopRequest,
     BacktestTrade,
     EquityPoint,
 )
@@ -42,6 +43,7 @@ __all__ = [
     "BacktestMetrics",
     "BacktestRequest",
     "BacktestResponse",
+    "BacktestStopRequest",
     "BacktestTrade",
     "CandleResponse",
     "DashboardDataSyncStatus",

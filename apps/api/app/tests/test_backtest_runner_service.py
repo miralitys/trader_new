@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 from app.models.enums import BacktestStatus
+from app.engines.backtest_engine import BacktestStopRequestedError
 from app.schemas.backtest import BacktestCandle, BacktestMetrics, BacktestRequest, BacktestResponse
 from app.services.backtest_runner_service import BacktestRunnerService
 from app.services.query_service import QueryService
@@ -84,6 +85,15 @@ class FakeBacktestRepository:
             return None
         return FakeBacktestRepository.current_run
 
+    def get_run_with_result(
+        self,
+        run_id: int,
+    ) -> tuple[SimpleNamespace, SimpleNamespace, None] | None:
+        run = self.get_run(run_id)
+        if run is None:
+            return None
+        return run, SimpleNamespace(code="fake_strategy", name="FakeStrategy"), None
+
     def mark_running(self, run: SimpleNamespace, started_at: datetime) -> SimpleNamespace:
         run.status = BacktestStatus.RUNNING
         run.started_at = started_at
@@ -160,6 +170,11 @@ class StaticReportEngine:
             equity_curve=[],
             trades=[],
         )
+
+
+class StopRequestedEngine:
+    def run(self, *args: object, **kwargs: object) -> BacktestResponse:
+        raise BacktestStopRequestedError("manual_stop_requested")
 
 
 def _request() -> BacktestRequest:
@@ -269,3 +284,90 @@ def test_backtest_runner_recovers_stale_runs_before_starting_new_one(monkeypatch
     assert report.status == "completed"
     assert FakeBacktestRepository.recover_calls >= 1
     assert session_factory.sessions[0].commits == 1
+
+
+def test_backtest_runner_returns_failed_response_when_stop_is_requested(monkeypatch: pytest.MonkeyPatch) -> None:
+    session_factory = SessionFactory()
+    FakeBacktestRepository.reset()
+
+    monkeypatch.setattr("app.services.backtest_runner_service.SessionLocal", session_factory)
+    monkeypatch.setattr("app.services.backtest_runner_service.BacktestRepository", FakeBacktestRepository)
+    monkeypatch.setattr("app.services.backtest_runner_service.CandleRepository", FakeCandleRepository)
+    monkeypatch.setattr("app.services.backtest_runner_service.get_strategy", lambda _code: FakeStrategy())
+
+    service = BacktestRunnerService(engine=StopRequestedEngine())
+    monkeypatch.setattr(
+        service,
+        "_load_backtest_response",
+        lambda run_id: BacktestResponse(
+            run_id=run_id,
+            strategy_code="fake_strategy",
+            symbol="BTC-USD",
+            timeframe="5m",
+            exchange_code="coinbase",
+            status="failed",
+            initial_capital=Decimal("1000"),
+            final_equity=Decimal("1000"),
+            started_at=datetime(2026, 3, 1, 0, 0, tzinfo=timezone.utc),
+            completed_at=datetime(2026, 3, 1, 0, 1, tzinfo=timezone.utc),
+            params={},
+            metrics=BacktestMetrics(),
+            equity_curve=[],
+            trades=[],
+            error_text="manual_stop_requested",
+        ),
+    )
+
+    report = service.run_backtest(_request())
+
+    assert report.status == "failed"
+    assert report.error_text == "manual_stop_requested"
+    assert FakeBacktestRepository.current_run is not None
+    assert FakeBacktestRepository.current_run.status == BacktestStatus.FAILED
+
+
+def test_backtest_runner_stop_backtest_marks_running_run_failed(monkeypatch: pytest.MonkeyPatch) -> None:
+    session_factory = SessionFactory()
+    FakeBacktestRepository.reset()
+    FakeBacktestRepository.current_run = SimpleNamespace(
+        id=9,
+        strategy_id=1,
+        params_json={"symbol": "BTC-USD", "timeframe": "5m"},
+        status=BacktestStatus.RUNNING,
+        started_at=datetime(2026, 3, 14, 15, 0, tzinfo=timezone.utc),
+        completed_at=None,
+        error_text=None,
+        created_at=datetime(2026, 3, 14, 15, 0, tzinfo=timezone.utc),
+    )
+
+    monkeypatch.setattr("app.services.backtest_runner_service.SessionLocal", session_factory)
+    monkeypatch.setattr("app.services.backtest_runner_service.BacktestRepository", FakeBacktestRepository)
+
+    service = BacktestRunnerService(engine=StaticReportEngine())
+    monkeypatch.setattr(
+        service,
+        "_load_backtest_response",
+        lambda run_id: BacktestResponse(
+            run_id=run_id,
+            strategy_code="fake_strategy",
+            symbol="BTC-USD",
+            timeframe="5m",
+            exchange_code="coinbase",
+            status="failed",
+            initial_capital=Decimal("1000"),
+            final_equity=Decimal("1000"),
+            started_at=datetime(2026, 3, 14, 15, 0, tzinfo=timezone.utc),
+            completed_at=datetime(2026, 3, 14, 15, 1, tzinfo=timezone.utc),
+            params={},
+            metrics=BacktestMetrics(),
+            equity_curve=[],
+            trades=[],
+            error_text="manual_stop:manual_stop",
+        ),
+    )
+
+    report = service.stop_backtest(9, "manual_stop")
+
+    assert report.status == "failed"
+    assert FakeBacktestRepository.current_run.status == BacktestStatus.FAILED
+    assert FakeBacktestRepository.current_run.error_text == "manual_stop:manual_stop"

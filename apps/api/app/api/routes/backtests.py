@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, Query, status
 from app.api.dependencies import get_backtest_runner_service, get_query_service
 from app.api.errors import BadRequestError, NotFoundError
 from app.schemas.api import BacktestListItemResponse
-from app.schemas.backtest import BacktestRequest, BacktestResponse
+from app.schemas.backtest import BacktestRequest, BacktestResponse, BacktestStopRequest
 from app.services.backtest_runner_service import BacktestRunnerService
 from app.services.query_service import QueryService
 
@@ -47,3 +47,17 @@ def get_backtest(
     service: QueryService = Depends(get_query_service),
 ) -> BacktestResponse:
     return service.get_backtest(run_id)
+
+
+@router.post("/{run_id}/stop", response_model=BacktestResponse, summary="Stop backtest run")
+def stop_backtest(
+    run_id: int,
+    request: BacktestStopRequest | None = None,
+    service: BacktestRunnerService = Depends(get_backtest_runner_service),
+) -> BacktestResponse:
+    try:
+        return service.stop_backtest(run_id, request.reason if request is not None else "manual_stop")
+    except KeyError as exc:
+        raise NotFoundError(str(exc)) from exc
+    except ValueError as exc:
+        raise BadRequestError(str(exc)) from exc

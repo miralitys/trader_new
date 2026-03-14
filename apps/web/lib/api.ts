@@ -5,6 +5,7 @@ import type {
   BacktestListItem,
   BacktestResponse,
   BacktestRunRequest,
+  BacktestStopRequest,
   Candle,
   CandleFilters,
   DashboardSummary,
@@ -150,6 +151,13 @@ export function getBacktest(id: number) {
 
 export function runBacktest(payload: BacktestRunRequest) {
   return apiRequest<BacktestResponse>("/api/backtests/run", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function stopBacktest(id: number, payload: BacktestStopRequest) {
+  return apiRequest<BacktestResponse>(`/api/backtests/${id}/stop`, {
     method: "POST",
     body: JSON.stringify(payload),
   });

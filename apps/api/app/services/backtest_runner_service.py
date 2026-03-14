@@ -6,11 +6,12 @@ from typing import Optional
 from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.db.session import SessionLocal
-from app.engines.backtest_engine import BacktestEngine
+from app.engines.backtest_engine import BacktestEngine, BacktestStopRequestedError
 from app.models.enums import BacktestStatus
 from app.repositories.backtest_repository import BacktestRepository
 from app.repositories.candle_repository import CandleRepository
 from app.schemas.backtest import BacktestCandle, BacktestRequest, BacktestResponse
+from app.services.query_service import QueryService
 from app.strategies.registry import get_strategy
 from app.utils.time import ensure_utc, utc_now
 
@@ -23,6 +24,7 @@ class BacktestRunnerService:
         settings = get_settings()
         self.backtest_stale_after_seconds = settings.backtest_stale_after_seconds
         self.progress_interval_bars = settings.backtest_progress_interval_bars
+        self.stop_check_interval_bars = settings.backtest_stop_check_interval_bars
 
     def run_backtest(self, request: BacktestRequest) -> BacktestResponse:
         self._recover_stale_runs()
@@ -109,6 +111,13 @@ class BacktestRunnerService:
                     total_bars=total,
                     candle_time=candle_time,
                 ),
+                stop_check_interval_bars=self.stop_check_interval_bars,
+                should_abort=lambda processed, total, candle_time: self._should_abort_run(
+                    run_id=run.id,
+                    processed_bars=processed,
+                    total_bars=total,
+                    candle_time=candle_time,
+                ),
             )
             report = report.model_copy(update={"run_id": run.id})
 
@@ -147,6 +156,21 @@ class BacktestRunnerService:
                 },
             )
             return report
+        except BacktestStopRequestedError as exc:
+            session.rollback()
+            logger.info(
+                "Backtest stop requested",
+                extra={
+                    "run_id": run_id,
+                    "strategy_code": request.strategy_code,
+                    "symbol": request.symbol,
+                    "timeframe": request.timeframe,
+                },
+            )
+            if run_id is not None and not status_finalized:
+                self._mark_run_failed(run_id=run_id, error_text=str(exc))
+                return self._load_backtest_response(run_id)
+            raise
         except BaseException as exc:
             session.rollback()
             if isinstance(exc, Exception):
@@ -175,6 +199,43 @@ class BacktestRunnerService:
             raise
         finally:
             session.close()
+
+    def stop_backtest(self, run_id: int, reason: str = "manual_stop") -> BacktestResponse:
+        session = SessionLocal()
+        try:
+            backtest_repository = BacktestRepository(session)
+            row = backtest_repository.get_run_with_result(run_id)
+            if row is None:
+                raise KeyError(f"Backtest {run_id} was not found")
+
+            run, _strategy, result = row
+            if run.status == BacktestStatus.COMPLETED:
+                return self._load_backtest_response(run_id)
+            if run.status == BacktestStatus.FAILED:
+                return self._load_backtest_response(run_id)
+
+            if result is not None:
+                completed_at = run.completed_at or result.created_at or utc_now()
+                backtest_repository.mark_completed(run, completed_at=completed_at)
+            else:
+                backtest_repository.mark_failed(
+                    run,
+                    completed_at=utc_now(),
+                    error_text=f"manual_stop:{reason}",
+                )
+            session.commit()
+            logger.info(
+                "Backtest stop requested via API",
+                extra={
+                    "run_id": run_id,
+                    "reason": reason,
+                    "status_after_stop": run.status.value,
+                },
+            )
+        finally:
+            session.close()
+
+        return self._load_backtest_response(run_id)
 
     def _recover_stale_runs(self) -> None:
         session = SessionLocal()
@@ -207,7 +268,7 @@ class BacktestRunnerService:
             if run is None:
                 logger.error("Unable to mark failed backtest run because it no longer exists", extra={"run_id": run_id})
                 return
-            if run.status == BacktestStatus.COMPLETED:
+            if run.status not in {BacktestStatus.QUEUED, BacktestStatus.RUNNING}:
                 return
 
             completed_at = utc_now()
@@ -244,3 +305,37 @@ class BacktestRunnerService:
                 "last_candle_at": candle_time.isoformat(),
             },
         )
+
+    def _should_abort_run(
+        self,
+        run_id: int,
+        processed_bars: int,
+        total_bars: int,
+        candle_time: datetime,
+    ) -> bool:
+        session = SessionLocal()
+        try:
+            backtest_repository = BacktestRepository(session)
+            run = backtest_repository.get_run(run_id)
+            if run is None:
+                logger.warning(
+                    "Stopping backtest because run record is missing",
+                    extra={
+                        "run_id": run_id,
+                        "processed_bars": processed_bars,
+                        "total_bars": total_bars,
+                        "last_candle_at": candle_time.isoformat(),
+                    },
+                )
+                return True
+            return run.status != BacktestStatus.RUNNING
+        finally:
+            session.close()
+
+    def _load_backtest_response(self, run_id: int) -> BacktestResponse:
+        session = SessionLocal()
+        try:
+            query_service = QueryService(session)
+            return query_service.get_backtest(run_id)
+        finally:
+            session.close()

@@ -43,6 +43,10 @@ class BacktestRequest(BaseModel):
         return self
 
 
+class BacktestStopRequest(BaseModel):
+    reason: str = "manual_stop"
+
+
 class BacktestCandle(BaseModel):
     open_time: datetime
     open: Decimal

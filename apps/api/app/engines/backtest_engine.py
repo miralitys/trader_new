@@ -25,6 +25,10 @@ TWO = Decimal("2")
 HUNDRED = Decimal("100")
 
 
+class BacktestStopRequestedError(RuntimeError):
+    pass
+
+
 @dataclass
 class OpenPosition:
     entry_time: datetime
@@ -97,6 +101,8 @@ class BacktestEngine(EngineBase):
         completed_at: Optional[Callable[[], datetime] | datetime] = None,
         progress_interval_bars: int = 0,
         progress_callback: Optional[Callable[[int, int, datetime], None]] = None,
+        stop_check_interval_bars: int = 0,
+        should_abort: Optional[Callable[[int, int, datetime], bool]] = None,
     ) -> BacktestResponse:
         if not strategy.long_only or not strategy.spot_only:
             raise ValueError("BacktestEngine currently supports LONG-only SPOT-only strategies only")
@@ -150,6 +156,14 @@ class BacktestEngine(EngineBase):
         completed_one_hour_true_ranges = deque(maxlen=max(1, regime_atr_period))
 
         for bar_index, candle in enumerate(ordered_candles):
+            processed_bars = bar_index + 1
+            if (
+                should_abort is not None
+                and stop_check_interval_bars > 0
+                and (processed_bars == 1 or processed_bars % stop_check_interval_bars == 0)
+                and should_abort(processed_bars, total_bars, candle.open_time)
+            ):
+                raise BacktestStopRequestedError("manual_stop_requested")
             previous_one_hour_bucket = one_hour_history[-1] if one_hour_history else None
             self._append_one_hour_candle(
                 one_hour_history=one_hour_history,
@@ -331,7 +345,6 @@ class BacktestEngine(EngineBase):
                 )
             )
             if progress_callback is not None and progress_interval_bars > 0:
-                processed_bars = bar_index + 1
                 if processed_bars % progress_interval_bars == 0 or processed_bars == total_bars:
                     progress_callback(processed_bars, total_bars, candle.open_time)
 
