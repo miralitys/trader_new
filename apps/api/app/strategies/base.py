@@ -39,6 +39,7 @@ class BaseStrategy:
     description = "Base strategy interface placeholder."
     spot_only = True
     long_only = True
+    status = "scaffold"
     config_model: Type[BaseStrategyConfig] = BaseStrategyConfig
 
     def descriptor(self) -> StrategyDescriptor:
@@ -48,6 +49,7 @@ class BaseStrategy:
             description=self.description,
             spot_only=self.spot_only,
             long_only=self.long_only,
+            status=self.status,
         )
 
     def default_config(self) -> dict[str, Any]:

@@ -21,9 +21,12 @@ def test_strategy_registry_contains_four_scaffolded_strategies() -> None:
 
 
 def test_strategy_descriptors_are_serializable() -> None:
-    descriptors = strategy_descriptors()
+    descriptors = {item["key"]: item for item in strategy_descriptors()}
     assert len(descriptors) == 4
-    assert all(item["status"] == "scaffold" for item in descriptors)
+    assert descriptors["mean_reversion_hard_stop"]["status"] == "implemented"
+    assert descriptors["breakout_retest"]["status"] == "scaffold"
+    assert descriptors["pullback_to_trend"]["status"] == "scaffold"
+    assert descriptors["trend_retrace_70"]["status"] == "scaffold"
 
 
 class TestStrategy(BaseStrategy):
