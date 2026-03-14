@@ -164,10 +164,11 @@ class MeanReversionHardStopStrategy(BaseStrategy):
         history = self._history_from_context(context)
         config = self._config_from_context(context)
         minimum_history = self.required_history_bars(context.timeframe, config)
-        if len(history) < minimum_history:
+        bars_seen = int(context.metadata.get("bars_seen", len(history)))
+        if bars_seen < minimum_history:
             return StrategySignal(action="hold", reason="insufficient_history")
 
-        closes = [self._as_decimal(candle.close) for candle in history]
+        closes = self._closes_from_context(context, history)
         previous_close = closes[-2]
         current_close = closes[-1]
         if previous_close <= ZERO or current_close <= ZERO:
@@ -180,7 +181,7 @@ class MeanReversionHardStopStrategy(BaseStrategy):
         if current_bb.middle <= ZERO:
             return StrategySignal(action="hold", reason="invalid_moving_average")
 
-        rsi_series = self._rsi_series(closes, config.rsi_period)
+        rsi_series = self._rsi_series_from_context(context, closes, config.rsi_period)
         previous_rsi = rsi_series[-2]
         current_rsi = rsi_series[-1]
         if previous_rsi is None or current_rsi is None:
@@ -196,9 +197,11 @@ class MeanReversionHardStopStrategy(BaseStrategy):
         has_position = bool(context.metadata.get("has_position"))
         position = context.metadata.get("position") or {}
 
+        exit_ema_value = self._exit_ema_from_context(context, closes, config.exit_ema_period)
         target_price = self._target_price(
             closes=closes,
             current_band=current_bb,
+            exit_ema_value=exit_ema_value,
             config=config,
         )
         if target_price <= ZERO:
@@ -230,7 +233,9 @@ class MeanReversionHardStopStrategy(BaseStrategy):
             previous_close=previous_close,
             current_close=current_close,
             target_price=target_price,
+            exit_ema_value=exit_ema_value,
             position=position,
+            current_bar_index=int(context.metadata.get("bar_index", len(history) - 1)),
             config=config,
         )
 
@@ -399,12 +404,20 @@ class MeanReversionHardStopStrategy(BaseStrategy):
         previous_close: Decimal,
         current_close: Decimal,
         target_price: Decimal,
+        exit_ema_value: Decimal,
         position: dict[str, object],
+        current_bar_index: int,
         config: MeanReversionHardStopConfig,
     ) -> StrategySignal:
         entry_price = self._as_decimal(position.get("entry_price", current_close))
         entry_time = position.get("entry_time")
-        bars_held = self._bars_held(history, entry_time)
+        entry_bar_index = position.get("entry_bar_index")
+        bars_held = self._bars_held(
+            history=history,
+            entry_time=entry_time,
+            current_bar_index=current_bar_index,
+            entry_bar_index=entry_bar_index,
+        )
         current_profit_pct = ZERO
         if entry_price > ZERO:
             current_profit_pct = (current_close - entry_price) / entry_price
@@ -439,7 +452,7 @@ class MeanReversionHardStopStrategy(BaseStrategy):
                 },
             )
 
-        exit_ema = self._ema(closes, config.exit_ema_period)
+        exit_ema = exit_ema_value
         if config.exit_on_ema20_loss and bars_held >= config.min_hold_bars and current_close < exit_ema:
             return StrategySignal(
                 action="exit",
@@ -493,9 +506,43 @@ class MeanReversionHardStopStrategy(BaseStrategy):
             return self.parse_config(payload)
         return self.parse_config()
 
-    def _history_from_context(self, context: StrategyContext) -> list[BacktestCandle]:
+    def _history_from_context(self, context: StrategyContext) -> Sequence[BacktestCandle]:
         raw_history = context.metadata.get("history") or []
-        return list(raw_history)
+        if isinstance(raw_history, Sequence):
+            return raw_history
+        return tuple(raw_history)
+
+    def _closes_from_context(
+        self,
+        context: StrategyContext,
+        history: Sequence[BacktestCandle],
+    ) -> Sequence[Decimal]:
+        raw_closes = context.metadata.get("closes")
+        if isinstance(raw_closes, Sequence) and len(raw_closes) == len(history):
+            return raw_closes
+        return [self._as_decimal(candle.close) for candle in history]
+
+    def _rsi_series_from_context(
+        self,
+        context: StrategyContext,
+        closes: Sequence[Decimal],
+        period: int,
+    ) -> Sequence[Decimal | None]:
+        payload = context.metadata.get("rsi_series_tail")
+        if isinstance(payload, Sequence) and len(payload) >= 2:
+            return payload
+        return self._rsi_series(closes, period)
+
+    def _exit_ema_from_context(
+        self,
+        context: StrategyContext,
+        closes: Sequence[Decimal],
+        period: int,
+    ) -> Decimal:
+        payload = context.metadata.get("exit_ema_value")
+        if payload is not None:
+            return self._as_decimal(payload)
+        return self._ema(closes, period)
 
     def _hold_signal(
         self,
@@ -540,10 +587,11 @@ class MeanReversionHardStopStrategy(BaseStrategy):
         self,
         closes: Sequence[Decimal],
         current_band: BollingerBand,
+        exit_ema_value: Decimal,
         config: MeanReversionHardStopConfig,
     ) -> Decimal:
         if config.target_source == "ema":
-            base_target = self._ema(closes, config.exit_ema_period)
+            base_target = exit_ema_value
         elif config.target_source == "sma":
             base_target = self._mean(closes[-config.lookback_period :])
         else:
@@ -675,7 +723,13 @@ class MeanReversionHardStopStrategy(BaseStrategy):
         if not config.regime_filter_enabled:
             return True, "regime_filter_disabled", {}
 
-        one_hour_history = self._resample_to_one_hour(history, context.timeframe)
+        snapshot = self._regime_snapshot_from_context(context)
+        if snapshot is not None:
+            return self._passes_regime_filter_from_snapshot(snapshot, config)
+
+        one_hour_history = self._one_hour_history_from_context(context)
+        if one_hour_history is None:
+            one_hour_history = self._resample_to_one_hour(history, context.timeframe)
         minimum_one_hour_history = max(
             config.regime_ema_period + 1,
             config.regime_atr_period + 1,
@@ -687,7 +741,7 @@ class MeanReversionHardStopStrategy(BaseStrategy):
         if len(one_hour_history) < minimum_one_hour_history:
             return False, "regime_history_insufficient", {"one_hour_bars": len(one_hour_history)}
 
-        closes = [self._as_decimal(candle.close) for candle in one_hour_history]
+        closes = self._one_hour_closes_from_context(context, one_hour_history)
         ema_series = self._ema_series(closes, config.regime_ema_period)
         current_ema = ema_series[-1]
         previous_ema = ema_series[-2]
@@ -723,6 +777,68 @@ class MeanReversionHardStopStrategy(BaseStrategy):
             return False, "htf_rsi_below_min", metadata
         if config.downside_volatility_filter_enabled and self._is_expanding_downside_volatility(
             closes=closes,
+            lookback=config.downside_volatility_lookback,
+            expansion_ratio=self._as_decimal(config.downside_volatility_expansion_ratio),
+        ):
+            return False, "expanding_downside_volatility", metadata
+        return True, "regime_passed", metadata
+
+    def _regime_snapshot_from_context(self, context: StrategyContext) -> dict[str, object] | None:
+        payload = context.metadata.get("regime_snapshot")
+        if isinstance(payload, dict):
+            return payload
+        return None
+
+    def _passes_regime_filter_from_snapshot(
+        self,
+        snapshot: dict[str, object],
+        config: MeanReversionHardStopConfig,
+    ) -> tuple[bool, str, dict[str, object]]:
+        one_hour_bars = int(snapshot.get("one_hour_bars", 0) or 0)
+        minimum_one_hour_history = max(
+            config.regime_ema_period + 1,
+            config.regime_atr_period + 1,
+            config.htf_rsi_period + 1 if config.use_htf_rsi_filter else 0,
+            ((config.downside_volatility_lookback * 2) + 1)
+            if config.downside_volatility_filter_enabled
+            else 0,
+        )
+        if one_hour_bars < minimum_one_hour_history:
+            return False, "regime_history_insufficient", {"one_hour_bars": one_hour_bars}
+
+        current_close = self._as_decimal(snapshot.get("regime_close_1h", ZERO))
+        current_ema = self._as_decimal(snapshot.get("regime_ema_1h", ZERO))
+        previous_ema_payload = snapshot.get("regime_previous_ema_1h")
+        previous_ema = self._as_decimal(previous_ema_payload) if previous_ema_payload is not None else ZERO
+        atr_pct_payload = snapshot.get("regime_atr_pct_1h")
+        atr_pct = self._as_decimal(atr_pct_payload) if atr_pct_payload is not None else ZERO
+        htf_rsi_payload = snapshot.get("regime_rsi_1h")
+        htf_rsi = self._as_decimal(htf_rsi_payload) if htf_rsi_payload is not None else None
+        slope_pct = (current_ema - previous_ema) / previous_ema if previous_ema > ZERO else ZERO
+        closes_tail = [self._as_decimal(value) for value in snapshot.get("regime_closes_tail", [])]
+
+        metadata: dict[str, object] = {
+            "regime_close_1h": str(current_close),
+            "regime_ema_1h": str(current_ema),
+            "regime_slope_1h": str(slope_pct),
+            "regime_atr_pct_1h": str(atr_pct),
+            "regime_rsi_1h": str(htf_rsi) if htf_rsi is not None else None,
+            "one_hour_bars": one_hour_bars,
+        }
+        if current_ema <= ZERO or previous_ema <= ZERO:
+            return False, "regime_filter_invalid_ema", metadata
+        if current_close <= current_ema:
+            return False, "close_below_ema200_1h", metadata
+        if slope_pct <= self._as_decimal(config.min_slope):
+            return False, "ema200_slope_below_threshold", metadata
+        if atr_pct < self._as_decimal(config.atr_pct_min):
+            return False, "atr_pct_below_min", metadata
+        if atr_pct > self._as_decimal(config.atr_pct_max):
+            return False, "atr_pct_above_max", metadata
+        if config.use_htf_rsi_filter and (htf_rsi is None or htf_rsi < self._as_decimal(config.htf_rsi_min)):
+            return False, "htf_rsi_below_min", metadata
+        if config.downside_volatility_filter_enabled and self._is_expanding_downside_volatility(
+            closes=closes_tail,
             lookback=config.downside_volatility_lookback,
             expansion_ratio=self._as_decimal(config.downside_volatility_expansion_ratio),
         ):
@@ -797,7 +913,31 @@ class MeanReversionHardStopStrategy(BaseStrategy):
             aggregated.append(current_bucket)
         return aggregated
 
-    def _bars_held(self, history: Sequence[BacktestCandle], entry_time: object) -> int:
+    def _one_hour_history_from_context(self, context: StrategyContext) -> Sequence[BacktestCandle] | None:
+        payload = context.metadata.get("one_hour_history")
+        if isinstance(payload, Sequence):
+            return payload
+        return None
+
+    def _one_hour_closes_from_context(
+        self,
+        context: StrategyContext,
+        one_hour_history: Sequence[BacktestCandle],
+    ) -> Sequence[Decimal]:
+        payload = context.metadata.get("one_hour_closes")
+        if isinstance(payload, Sequence) and len(payload) == len(one_hour_history):
+            return payload
+        return [self._as_decimal(candle.close) for candle in one_hour_history]
+
+    def _bars_held(
+        self,
+        history: Sequence[BacktestCandle],
+        entry_time: object,
+        current_bar_index: int,
+        entry_bar_index: object,
+    ) -> int:
+        if isinstance(entry_bar_index, int):
+            return max(0, current_bar_index - entry_bar_index)
         if not isinstance(entry_time, datetime):
             return 0
         return sum(1 for candle in history if candle.open_time > entry_time)
@@ -856,7 +996,13 @@ class MeanReversionHardStopStrategy(BaseStrategy):
 
         avg_gain = self._mean(gains)
         avg_loss = self._mean(losses)
-        series[period] = self._rsi_from_average_moves(avg_gain, avg_loss)
+        if avg_gain <= ZERO and avg_loss <= ZERO:
+            series[period] = Decimal("50")
+        elif avg_loss <= ZERO:
+            series[period] = HUNDRED
+        else:
+            relative_strength = avg_gain / avg_loss
+            series[period] = HUNDRED - (HUNDRED / (ONE + relative_strength))
 
         for index in range(period + 1, len(values)):
             delta = values[index] - values[index - 1]
@@ -864,7 +1010,13 @@ class MeanReversionHardStopStrategy(BaseStrategy):
             loss = abs(min(delta, ZERO))
             avg_gain = ((avg_gain * Decimal(period - 1)) + gain) / Decimal(period)
             avg_loss = ((avg_loss * Decimal(period - 1)) + loss) / Decimal(period)
-            series[index] = self._rsi_from_average_moves(avg_gain, avg_loss)
+            if avg_gain <= ZERO and avg_loss <= ZERO:
+                series[index] = Decimal("50")
+            elif avg_loss <= ZERO:
+                series[index] = HUNDRED
+            else:
+                relative_strength = avg_gain / avg_loss
+                series[index] = HUNDRED - (HUNDRED / (ONE + relative_strength))
 
         return series
 
@@ -880,8 +1032,9 @@ class MeanReversionHardStopStrategy(BaseStrategy):
         if len(candles) < period + 1:
             return ZERO
 
+        relevant_candles = candles[-(period + 1) :]
         true_ranges: list[Decimal] = []
-        for previous_candle, current_candle in zip(candles[:-1], candles[1:]):
+        for previous_candle, current_candle in zip(relevant_candles[:-1], relevant_candles[1:]):
             previous_close = self._as_decimal(previous_candle.close)
             high = self._as_decimal(current_candle.high)
             low = self._as_decimal(current_candle.low)
@@ -895,6 +1048,8 @@ class MeanReversionHardStopStrategy(BaseStrategy):
         return self._mean(true_ranges[-period:])
 
     def _as_decimal(self, value: object) -> Decimal:
+        if isinstance(value, Decimal):
+            return value
         return Decimal(str(value))
 
     def _bounded_ratio(self, numerator: Decimal, denominator: Decimal) -> float:

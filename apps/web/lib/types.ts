@@ -155,7 +155,7 @@ export type BacktestResponse = {
   initial_capital: NumericValue;
   final_equity: NumericValue;
   started_at: string;
-  completed_at: string;
+  completed_at: string | null;
   params: Record<string, unknown>;
   metrics: BacktestMetrics;
   equity_curve: EquityPoint[];

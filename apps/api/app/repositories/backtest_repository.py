@@ -86,6 +86,43 @@ class BacktestRepository(BaseRepository):
         )
         return self.session.execute(stmt).first()
 
+    def recover_stale_runs(self, stale_before: datetime) -> list[dict[str, object]]:
+        stmt = (
+            select(BacktestRun, BacktestResult)
+            .outerjoin(BacktestResult, BacktestResult.backtest_run_id == BacktestRun.id)
+            .where(BacktestRun.status == BacktestStatus.RUNNING)
+            .where(BacktestRun.started_at.is_not(None))
+            .where(BacktestRun.started_at <= stale_before)
+            .order_by(BacktestRun.started_at.asc(), BacktestRun.id.asc())
+        )
+        recovered: list[dict[str, object]] = []
+        for run, result in self.session.execute(stmt).all():
+            if result is not None:
+                completed_at = run.completed_at or result.created_at or stale_before
+                self.mark_completed(run, completed_at=completed_at)
+                recovered.append(
+                    {
+                        "run_id": run.id,
+                        "status": BacktestStatus.COMPLETED.value,
+                        "reason": "stale_run_had_result",
+                    }
+                )
+                continue
+
+            self.mark_failed(
+                run,
+                completed_at=stale_before,
+                error_text="Recovered stale running backtest without persisted result",
+            )
+            recovered.append(
+                {
+                    "run_id": run.id,
+                    "status": BacktestStatus.FAILED.value,
+                    "reason": "stale_run_missing_result",
+                }
+            )
+        return recovered
+
     def mark_running(self, run: BacktestRun, started_at: datetime) -> BacktestRun:
         run.status = BacktestStatus.RUNNING
         run.started_at = started_at

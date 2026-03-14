@@ -63,7 +63,7 @@ export default function BacktestDetailPage() {
         <SectionCard title="Run metadata" eyebrow="Execution context">
           <div className="grid gap-4">
             <MetricCard label="Started" value={formatDateTime(backtest.started_at)} />
-            <MetricCard label="Completed" value={formatDateTime(backtest.completed_at)} />
+            <MetricCard label="Completed" value={backtest.completed_at ? formatDateTime(backtest.completed_at) : "Still running"} />
             <MetricCard label="Exchange" value={backtest.exchange_code} />
           </div>
           <div className="mt-5 rounded-2xl border border-white/8 bg-slate-950/50 p-4">

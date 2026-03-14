@@ -1,11 +1,13 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 
+from app.core.config import get_settings
 from app.core.logging import get_logger
 from app.db.session import SessionLocal
 from app.engines.backtest_engine import BacktestEngine
+from app.models.enums import BacktestStatus
 from app.repositories.backtest_repository import BacktestRepository
 from app.repositories.candle_repository import CandleRepository
 from app.schemas.backtest import BacktestCandle, BacktestRequest, BacktestResponse
@@ -18,10 +20,16 @@ logger = get_logger(__name__)
 class BacktestRunnerService:
     def __init__(self, engine: Optional[BacktestEngine] = None) -> None:
         self.engine = engine or BacktestEngine()
+        settings = get_settings()
+        self.backtest_stale_after_seconds = settings.backtest_stale_after_seconds
+        self.progress_interval_bars = settings.backtest_progress_interval_bars
 
     def run_backtest(self, request: BacktestRequest) -> BacktestResponse:
+        self._recover_stale_runs()
         session = SessionLocal()
         run = None
+        run_id: int | None = None
+        status_finalized = False
         try:
             candle_repository = CandleRepository(session)
             backtest_repository = BacktestRepository(session)
@@ -37,11 +45,23 @@ class BacktestRunnerService:
                 strategy_id=strategy_row.id,
                 params_json=request.model_dump(mode="json"),
             )
+            run_id = run.id
             session.commit()
 
             started_at = utc_now()
             backtest_repository.mark_running(run, started_at=started_at)
             session.commit()
+            logger.info(
+                "Backtest run started",
+                extra={
+                    "run_id": run.id,
+                    "strategy_code": request.strategy_code,
+                    "symbol": request.symbol,
+                    "timeframe": request.timeframe,
+                    "start_at": request.start_at.isoformat(),
+                    "end_at": request.end_at.isoformat(),
+                },
+            )
 
             candles = candle_repository.list_candles(
                 exchange_code=request.exchange_code,
@@ -55,6 +75,15 @@ class BacktestRunnerService:
                     f"No candles found for {request.symbol} {request.timeframe} "
                     f"between {request.start_at.isoformat()} and {request.end_at.isoformat()}"
                 )
+            logger.info(
+                "Backtest candles loaded",
+                extra={
+                    "run_id": run.id,
+                    "candles_count": len(candles),
+                    "first_candle_at": candles[0].open_time.isoformat(),
+                    "last_candle_at": candles[-1].open_time.isoformat(),
+                },
+            )
 
             candle_payload = [
                 BacktestCandle(
@@ -73,12 +102,35 @@ class BacktestRunnerService:
                 candles=candle_payload,
                 started_at=started_at,
                 completed_at=utc_now,
+                progress_interval_bars=self.progress_interval_bars,
+                progress_callback=lambda processed, total, candle_time: self._log_progress(
+                    run_id=run.id,
+                    processed_bars=processed,
+                    total_bars=total,
+                    candle_time=candle_time,
+                ),
             )
             report = report.model_copy(update={"run_id": run.id})
 
             backtest_repository.save_result(run.id, report)
+            logger.info(
+                "Backtest result persisted",
+                extra={
+                    "run_id": run.id,
+                    "total_trades": report.metrics.total_trades,
+                    "equity_points": len(report.equity_curve),
+                },
+            )
             backtest_repository.mark_completed(run, completed_at=report.completed_at)
             session.commit()
+            status_finalized = True
+            logger.info(
+                "Backtest status marked completed",
+                extra={
+                    "run_id": run.id,
+                    "completed_at": report.completed_at.isoformat() if report.completed_at is not None else None,
+                },
+            )
 
             logger.info(
                 "Backtest completed",
@@ -89,27 +141,106 @@ class BacktestRunnerService:
                     "timeframe": request.timeframe,
                     "total_trades": report.metrics.total_trades,
                     "total_return_pct": str(report.metrics.total_return_pct),
+                    "duration_ms": int((report.completed_at - started_at).total_seconds() * 1000)
+                    if report.completed_at is not None
+                    else None,
                 },
             )
             return report
-        except Exception as exc:
+        except BaseException as exc:
             session.rollback()
-            logger.exception(
-                "Backtest failed",
-                extra={
-                    "strategy_code": request.strategy_code,
-                    "symbol": request.symbol,
-                    "timeframe": request.timeframe,
-                },
-            )
-            if run is not None:
-                try:
-                    backtest_repository = BacktestRepository(session)
-                    backtest_repository.mark_failed(run, completed_at=utc_now(), error_text=str(exc))
-                    session.commit()
-                except Exception:
-                    session.rollback()
-                    logger.exception("Failed to persist backtest failure state", extra={"run_id": run.id})
+            if isinstance(exc, Exception):
+                logger.exception(
+                    "Backtest failed",
+                    extra={
+                        "run_id": run_id,
+                        "strategy_code": request.strategy_code,
+                        "symbol": request.symbol,
+                        "timeframe": request.timeframe,
+                    },
+                )
+            else:
+                logger.error(
+                    "Backtest aborted by base exception",
+                    extra={
+                        "run_id": run_id,
+                        "strategy_code": request.strategy_code,
+                        "symbol": request.symbol,
+                        "timeframe": request.timeframe,
+                        "exception_type": exc.__class__.__name__,
+                    },
+                )
+            if run_id is not None and not status_finalized:
+                self._mark_run_failed(run_id=run_id, error_text=str(exc))
             raise
         finally:
             session.close()
+
+    def _recover_stale_runs(self) -> None:
+        session = SessionLocal()
+        try:
+            backtest_repository = BacktestRepository(session)
+            stale_before = utc_now() - timedelta(seconds=self.backtest_stale_after_seconds)
+            recovered = backtest_repository.recover_stale_runs(stale_before=stale_before)
+            if not recovered:
+                return
+
+            session.commit()
+            logger.warning(
+                "Recovered stale backtest runs",
+                extra={
+                    "stale_before": stale_before.isoformat(),
+                    "recovered_runs": recovered,
+                },
+            )
+        except Exception:
+            session.rollback()
+            logger.exception("Failed to recover stale backtest runs")
+        finally:
+            session.close()
+
+    def _mark_run_failed(self, run_id: int, error_text: str) -> None:
+        session = SessionLocal()
+        try:
+            backtest_repository = BacktestRepository(session)
+            run = backtest_repository.get_run(run_id)
+            if run is None:
+                logger.error("Unable to mark failed backtest run because it no longer exists", extra={"run_id": run_id})
+                return
+            if run.status == BacktestStatus.COMPLETED:
+                return
+
+            completed_at = utc_now()
+            backtest_repository.mark_failed(run, completed_at=completed_at, error_text=error_text)
+            session.commit()
+            logger.info(
+                "Backtest status marked failed",
+                extra={
+                    "run_id": run_id,
+                    "completed_at": completed_at.isoformat(),
+                    "error_text": error_text,
+                },
+            )
+        except Exception:
+            session.rollback()
+            logger.exception("Failed to persist backtest failure state", extra={"run_id": run_id})
+        finally:
+            session.close()
+
+    def _log_progress(
+        self,
+        run_id: int,
+        processed_bars: int,
+        total_bars: int,
+        candle_time: datetime,
+    ) -> None:
+        logger.info(
+            "Backtest loop progress",
+            extra={
+                "run_id": run_id,
+                "processed_bars": processed_bars,
+                "total_bars": total_bars,
+                "progress_pct": round((processed_bars / total_bars) * 100, 2) if total_bars else 0,
+                "last_candle_at": candle_time.isoformat(),
+            },
+        )

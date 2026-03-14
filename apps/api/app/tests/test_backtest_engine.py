@@ -68,6 +68,27 @@ class DynamicStopStrategy(BaseStrategy):
         return StrategySignal(action="hold", reason="hold")
 
 
+class WindowTrackingStrategy(BaseStrategy):
+    key = "window_tracking_strategy"
+    name = "WindowTrackingStrategy"
+    description = "Captures runtime history window sizes."
+    config_model = BaseStrategyConfig
+
+    def __init__(self) -> None:
+        self.max_history_seen = 0
+        self.max_one_hour_history_seen = 0
+
+    def required_history_bars(self, timeframe: str, config: BaseStrategyConfig | None = None) -> int:
+        return 5
+
+    def generate_signal(self, context: StrategyContext) -> StrategySignal:
+        history = context.metadata["history"]
+        one_hour_history = context.metadata["one_hour_history"]
+        self.max_history_seen = max(self.max_history_seen, len(history))
+        self.max_one_hour_history_seen = max(self.max_one_hour_history_seen, len(one_hour_history))
+        return StrategySignal(action="hold", reason="hold")
+
+
 def _candle(ts: datetime, price: str) -> BacktestCandle:
     decimal_price = Decimal(price)
     return BacktestCandle(
@@ -184,3 +205,41 @@ def test_backtest_engine_honors_dynamic_stop_from_signal_metadata() -> None:
     assert report.metrics.total_trades == 1
     assert report.trades[0].exit_reason == "stop_loss"
     assert report.trades[0].exit_price == Decimal("95")
+
+
+def test_backtest_engine_limits_history_window_for_strategies_with_declared_requirements() -> None:
+    engine = BacktestEngine()
+    strategy = WindowTrackingStrategy()
+    candles = [
+        _candle(datetime(2026, 1, 1, 0, index * 5, tzinfo=timezone.utc), str(100 + index))
+        for index in range(12)
+    ]
+
+    report = engine.run(
+        request=_request(strategy.key),
+        strategy=strategy,
+        candles=candles,
+    )
+
+    assert report.metrics.total_trades == 0
+    assert strategy.max_history_seen <= 5
+    assert strategy.max_one_hour_history_seen <= 1
+
+
+def test_backtest_engine_emits_progress_markers() -> None:
+    engine = BacktestEngine()
+    candles = [
+        _candle(datetime(2026, 1, 1, 0, index * 5, tzinfo=timezone.utc), str(100 + index))
+        for index in range(5)
+    ]
+    progress: list[tuple[int, int]] = []
+
+    engine.run(
+        request=_request("hold_strategy"),
+        strategy=HoldStrategy(),
+        candles=candles,
+        progress_interval_bars=2,
+        progress_callback=lambda processed, total, _candle_time: progress.append((processed, total)),
+    )
+
+    assert progress == [(2, 5), (4, 5), (5, 5)]

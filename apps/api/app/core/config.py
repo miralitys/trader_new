@@ -36,6 +36,8 @@ class Settings(BaseSettings):
     )
     worker_poll_seconds: int = Field(default=15, alias="WORKER_POLL_SECONDS")
     worker_max_candles_per_stream: int = Field(default=100, alias="WORKER_MAX_CANDLES_PER_STREAM")
+    backtest_stale_after_seconds: int = Field(default=1800, alias="BACKTEST_STALE_AFTER_SECONDS")
+    backtest_progress_interval_bars: int = Field(default=500, alias="BACKTEST_PROGRESS_INTERVAL_BARS")
     default_symbols: str = Field(default="BTC-USD,ETH-USD,SOL-USD", alias="DEFAULT_SYMBOLS")
     default_timeframes: str = Field(default="5m,15m,1h", alias="DEFAULT_TIMEFRAMES")
     allowed_origins: list[str] = Field(default=["*"], alias="ALLOWED_ORIGINS")

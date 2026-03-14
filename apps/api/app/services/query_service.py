@@ -1,9 +1,11 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Optional
 
+from app.core.config import get_settings
+from app.core.logging import get_logger
 from sqlalchemy.orm import Session
 
 from app.api.errors import BadRequestError, NotFoundError
@@ -34,7 +36,9 @@ from app.schemas.api import (
 )
 from app.schemas.backtest import BacktestMetrics, BacktestResponse, BacktestTrade, EquityPoint
 from app.services.strategy_service import StrategyService
-from app.utils.time import ensure_utc
+from app.utils.time import ensure_utc, utc_now
+
+logger = get_logger(__name__)
 
 
 class QueryService:
@@ -84,6 +88,7 @@ class QueryService:
         status: Optional[str] = None,
         limit: int = 100,
     ) -> list[BacktestListItemResponse]:
+        self._recover_stale_backtests()
         parsed_status = self._parse_enum(BacktestStatus, status, "backtest status")
         rows = self.backtest_repository.list_runs(
             limit=limit,
@@ -93,6 +98,7 @@ class QueryService:
         return [self._build_backtest_list_item(run, strategy, result) for run, strategy, result in rows]
 
     def get_backtest(self, run_id: int) -> BacktestResponse:
+        self._recover_stale_backtests()
         row = self.backtest_repository.get_run_with_result(run_id)
         if row is None:
             raise NotFoundError(f"Backtest {run_id} was not found")
@@ -132,7 +138,7 @@ class QueryService:
             initial_capital=initial_capital,
             final_equity=final_equity,
             started_at=run.started_at or run.created_at,
-            completed_at=run.completed_at or run.started_at or run.created_at,
+            completed_at=run.completed_at,
             params=params,
             metrics=metrics,
             equity_curve=equity_curve,
@@ -266,6 +272,26 @@ class QueryService:
             )
             for trade in trades
         ]
+
+    def _recover_stale_backtests(self) -> None:
+        settings = get_settings()
+        stale_before = utc_now() - timedelta(seconds=settings.backtest_stale_after_seconds)
+        try:
+            recovered = self.backtest_repository.recover_stale_runs(stale_before=stale_before)
+            if not recovered:
+                return
+
+            self.session.commit()
+            logger.warning(
+                "Recovered stale backtests during query",
+                extra={
+                    "stale_before": stale_before.isoformat(),
+                    "recovered_runs": recovered,
+                },
+            )
+        except Exception:
+            self.session.rollback()
+            logger.exception("Failed to recover stale backtests during query")
 
     def list_positions(
         self,

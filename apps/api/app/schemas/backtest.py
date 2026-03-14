@@ -99,7 +99,7 @@ class BacktestResponse(BaseModel):
     initial_capital: Decimal
     final_equity: Decimal
     started_at: datetime
-    completed_at: datetime
+    completed_at: Optional[datetime] = None
     params: dict[str, Any] = Field(default_factory=dict)
     metrics: BacktestMetrics
     equity_curve: list[EquityPoint] = Field(default_factory=list)
