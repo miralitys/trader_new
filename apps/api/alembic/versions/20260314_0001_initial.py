@@ -22,7 +22,13 @@ def upgrade() -> None:
     bind = op.get_bind()
 
     enum_types = [
-        postgresql.ENUM("paper", "backtest", "live_prep", name="strategy_run_mode_enum"),
+        postgresql.ENUM(
+            "paper",
+            "backtest",
+            "live_prep",
+            name="strategy_run_mode_enum",
+            create_type=False,
+        ),
         postgresql.ENUM(
             "created",
             "running",
@@ -30,15 +36,45 @@ def upgrade() -> None:
             "failed",
             "completed",
             name="strategy_run_status_enum",
+            create_type=False,
         ),
-        postgresql.ENUM("enter", "exit", "hold", name="signal_type_enum"),
-        postgresql.ENUM("long", name="side_enum"),
-        postgresql.ENUM("market", "limit", "simulated", name="order_type_enum"),
-        postgresql.ENUM("new", "open", "filled", "cancelled", "rejected", name="order_status_enum"),
-        postgresql.ENUM("open", "closed", name="position_status_enum"),
-        postgresql.ENUM("queued", "running", "completed", "failed", name="backtest_status_enum"),
-        postgresql.ENUM("queued", "running", "completed", "failed", name="sync_job_status_enum"),
-        postgresql.ENUM("debug", "info", "warning", "error", name="app_log_level_enum"),
+        postgresql.ENUM("enter", "exit", "hold", name="signal_type_enum", create_type=False),
+        postgresql.ENUM("long", name="side_enum", create_type=False),
+        postgresql.ENUM("market", "limit", "simulated", name="order_type_enum", create_type=False),
+        postgresql.ENUM(
+            "new",
+            "open",
+            "filled",
+            "cancelled",
+            "rejected",
+            name="order_status_enum",
+            create_type=False,
+        ),
+        postgresql.ENUM("open", "closed", name="position_status_enum", create_type=False),
+        postgresql.ENUM(
+            "queued",
+            "running",
+            "completed",
+            "failed",
+            name="backtest_status_enum",
+            create_type=False,
+        ),
+        postgresql.ENUM(
+            "queued",
+            "running",
+            "completed",
+            "failed",
+            name="sync_job_status_enum",
+            create_type=False,
+        ),
+        postgresql.ENUM(
+            "debug",
+            "info",
+            "warning",
+            "error",
+            name="app_log_level_enum",
+            create_type=False,
+        ),
     ]
 
     for enum_type in enum_types:
@@ -366,7 +402,13 @@ def downgrade() -> None:
 
     for enum_type in reversed(
         [
-            postgresql.ENUM("paper", "backtest", "live_prep", name="strategy_run_mode_enum"),
+            postgresql.ENUM(
+                "paper",
+                "backtest",
+                "live_prep",
+                name="strategy_run_mode_enum",
+                create_type=False,
+            ),
             postgresql.ENUM(
                 "created",
                 "running",
@@ -374,15 +416,45 @@ def downgrade() -> None:
                 "failed",
                 "completed",
                 name="strategy_run_status_enum",
+                create_type=False,
             ),
-            postgresql.ENUM("enter", "exit", "hold", name="signal_type_enum"),
-            postgresql.ENUM("long", name="side_enum"),
-            postgresql.ENUM("market", "limit", "simulated", name="order_type_enum"),
-            postgresql.ENUM("new", "open", "filled", "cancelled", "rejected", name="order_status_enum"),
-            postgresql.ENUM("open", "closed", name="position_status_enum"),
-            postgresql.ENUM("queued", "running", "completed", "failed", name="backtest_status_enum"),
-            postgresql.ENUM("queued", "running", "completed", "failed", name="sync_job_status_enum"),
-            postgresql.ENUM("debug", "info", "warning", "error", name="app_log_level_enum"),
+            postgresql.ENUM("enter", "exit", "hold", name="signal_type_enum", create_type=False),
+            postgresql.ENUM("long", name="side_enum", create_type=False),
+            postgresql.ENUM("market", "limit", "simulated", name="order_type_enum", create_type=False),
+            postgresql.ENUM(
+                "new",
+                "open",
+                "filled",
+                "cancelled",
+                "rejected",
+                name="order_status_enum",
+                create_type=False,
+            ),
+            postgresql.ENUM("open", "closed", name="position_status_enum", create_type=False),
+            postgresql.ENUM(
+                "queued",
+                "running",
+                "completed",
+                "failed",
+                name="backtest_status_enum",
+                create_type=False,
+            ),
+            postgresql.ENUM(
+                "queued",
+                "running",
+                "completed",
+                "failed",
+                name="sync_job_status_enum",
+                create_type=False,
+            ),
+            postgresql.ENUM(
+                "debug",
+                "info",
+                "warning",
+                "error",
+                name="app_log_level_enum",
+                create_type=False,
+            ),
         ]
     ):
         enum_type.drop(bind, checkfirst=True)
