@@ -138,6 +138,30 @@ def test_mean_reversion_strategy_enforces_runtime_guardrails_on_config() -> None
     assert config.cost_multiplier == 2.5
 
 
+def test_mean_reversion_strategy_allows_signal_relaxation_in_research_mode() -> None:
+    config = _config(
+        research_overrides_enabled=True,
+        bb_reentry_required=False,
+        oversold_detection_mode="either",
+    )
+
+    assert config.bb_reentry_required is False
+    assert config.oversold_detection_mode == "either"
+
+
+def test_mean_reversion_strategy_regime_flags_preserve_current_defaults() -> None:
+    strategy = MeanReversionHardStopStrategy()
+    config = strategy.parse_config()
+
+    assert config.require_close_above_ema200_1h is True
+    assert config.require_positive_slope_1h is True
+    assert config.require_atr_band_1h is True
+    assert config.require_htf_rsi is True
+    assert config.require_downside_volatility_filter is True
+    assert config.use_htf_rsi_filter is True
+    assert config.downside_volatility_filter_enabled is True
+
+
 def test_mean_reversion_strategy_reports_required_history_for_runtime_warmup() -> None:
     strategy = MeanReversionHardStopStrategy()
     config = strategy.parse_config()
@@ -145,6 +169,54 @@ def test_mean_reversion_strategy_reports_required_history_for_runtime_warmup() -
     assert strategy.required_history_bars("5m", config) == 2424
     assert strategy.required_history_bars("15m", config) == 808
     assert strategy.required_history_bars("1h", config) == 202
+
+
+def test_mean_reversion_strategy_can_disable_close_above_ema_subrule() -> None:
+    strategy = MeanReversionHardStopStrategy()
+    snapshot = {
+        "one_hour_bars": 4,
+        "regime_close_1h": "99",
+        "regime_ema_1h": "100",
+        "regime_previous_ema_1h": "99.5",
+        "regime_atr_pct_1h": "0.01",
+        "regime_rsi_1h": "55",
+        "regime_closes_tail": ("100", "101", "101", "101"),
+    }
+
+    blocked, reason, _ = strategy._passes_regime_filter_from_snapshot(snapshot, _config(min_slope=0))
+    relaxed, relaxed_reason, _ = strategy._passes_regime_filter_from_snapshot(
+        snapshot,
+        _config(min_slope=0, require_close_above_ema200_1h=False),
+    )
+
+    assert blocked is False
+    assert reason == "close_below_ema200_1h"
+    assert relaxed is True
+    assert relaxed_reason == "regime_passed"
+
+
+def test_mean_reversion_strategy_can_disable_positive_slope_subrule() -> None:
+    strategy = MeanReversionHardStopStrategy()
+    snapshot = {
+        "one_hour_bars": 4,
+        "regime_close_1h": "101",
+        "regime_ema_1h": "100",
+        "regime_previous_ema_1h": "100.2",
+        "regime_atr_pct_1h": "0.01",
+        "regime_rsi_1h": "55",
+        "regime_closes_tail": ("100", "100.5", "100.8", "101"),
+    }
+
+    blocked, reason, _ = strategy._passes_regime_filter_from_snapshot(snapshot, _config(min_slope=0))
+    relaxed, relaxed_reason, _ = strategy._passes_regime_filter_from_snapshot(
+        snapshot,
+        _config(min_slope=0, require_positive_slope_1h=False),
+    )
+
+    assert blocked is False
+    assert reason == "ema200_slope_below_threshold"
+    assert relaxed is True
+    assert relaxed_reason == "regime_passed"
 
 
 def test_mean_reversion_strategy_skips_trades_that_do_not_clear_costs() -> None:
@@ -230,6 +302,41 @@ def test_mean_reversion_strategy_skips_trade_when_stop_is_too_wide() -> None:
     assert signal.action == "hold"
     assert signal.reason == "max_stop_exceeded"
     assert signal.metadata["selected_stop_mode"] == "signal_low"
+
+
+def test_mean_reversion_strategy_can_target_stop_multiple_in_research_mode() -> None:
+    strategy = MeanReversionHardStopStrategy()
+    history = _entry_history()
+
+    signal = strategy.generate_signal(
+        StrategyContext(
+            symbol="BTC-USD",
+            timeframe="1h",
+            timestamp=history[-1].open_time,
+            mode="backtest",
+            metadata={
+                "history": history,
+                "has_position": False,
+                "position": None,
+                "config": _config(
+                    research_overrides_enabled=True,
+                    regime_filter_enabled=False,
+                    target_source="stop_multiple",
+                    target_r_multiple=0.5,
+                ),
+                "fee_rate": Decimal("0"),
+                "slippage_rate": Decimal("0"),
+            },
+        )
+    )
+
+    assert signal.action == "enter"
+    entry_price = Decimal(signal.metadata["current_close"])
+    stop_price = Decimal(signal.metadata["stop_price"])
+    take_profit_price = Decimal(signal.metadata["take_profit_price"])
+    expected_take_profit = entry_price + ((entry_price - stop_price) * Decimal("0.5"))
+
+    assert take_profit_price == expected_take_profit
 
 
 def test_mean_reversion_strategy_exits_when_price_reverts_to_mean_target() -> None:

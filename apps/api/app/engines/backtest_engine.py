@@ -4,7 +4,7 @@ from collections import deque
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
-from typing import Callable, Iterator, Optional, Sequence
+from typing import Any, Callable, Iterator, Optional, Sequence
 
 from app.engines.base import EngineBase
 from app.engines.performance_engine import PerformanceEngine
@@ -130,6 +130,22 @@ class BacktestEngine(EngineBase):
         position: Optional[OpenPosition] = None
         equity_curve: list[EquityPoint] = []
         closed_trades: list[BacktestTrade] = []
+        diagnostics: dict[str, Any] = {
+            "entry_hold_reasons": {
+                "insufficient_history": 0,
+                "regime_blocked": 0,
+                "oversold_not_detected": 0,
+                "bb_reclaim_not_confirmed": 0,
+                "rsi_reclaim_not_confirmed": 0,
+                "weak_recovery": 0,
+                "insufficient_tp_vs_cost": 0,
+                "max_stop_exceeded": 0,
+                "any_other_hold_reason": 0,
+            },
+            "entry_hold_other_reasons": {},
+            "entry_hold_reason_details": {},
+            "entry_hold_total": 0,
+        }
         one_hour_history: list[BacktestCandle] = []
         one_hour_closes: list[Decimal] = []
         total_bars = len(ordered_candles)
@@ -297,6 +313,8 @@ class BacktestEngine(EngineBase):
                     metadata=metadata,
                 )
             )
+            if position is None and signal.action == "hold":
+                self._record_entry_hold_diagnostic(diagnostics, signal.reason, signal.metadata)
 
             if position is not None and signal.action == "exit":
                 exit_plan = self.risk_engine.build_market_exit(
@@ -333,6 +351,12 @@ class BacktestEngine(EngineBase):
                         entry_plan=entry_plan,
                         cash=cash,
                         entry_metadata=signal.metadata,
+                    )
+                else:
+                    self._record_entry_hold_diagnostic(
+                        diagnostics,
+                        "entry_plan_rejected",
+                        {"skip_reason_detail": "risk_engine_rejected_entry_plan"},
                     )
 
             equity_curve.append(
@@ -401,6 +425,7 @@ class BacktestEngine(EngineBase):
             metrics=metrics,
             equity_curve=equity_curve,
             trades=closed_trades,
+            diagnostics=diagnostics,
         )
 
     def _open_position(
@@ -530,6 +555,50 @@ class BacktestEngine(EngineBase):
         max_bars_in_trade = int(getattr(strategy_config, "max_bars_in_trade", 0) or 0)
         buffered_window = max(required_history, max_bars_in_trade + 2, 2)
         return min(total_bars, buffered_window)
+
+    def _record_entry_hold_diagnostic(
+        self,
+        diagnostics: dict[str, Any],
+        reason: Optional[str],
+        metadata: dict[str, object],
+    ) -> None:
+        entry_hold_reasons = diagnostics["entry_hold_reasons"]
+        other_reasons = diagnostics["entry_hold_other_reasons"]
+        detail_reasons = diagnostics["entry_hold_reason_details"]
+        category, other_label = self._entry_hold_reason_bucket(reason=reason, metadata=metadata)
+        entry_hold_reasons[category] = int(entry_hold_reasons.get(category, 0)) + 1
+        diagnostics["entry_hold_total"] = int(diagnostics.get("entry_hold_total", 0)) + 1
+        detail = str(metadata.get("skip_reason_detail") or "").strip()
+        if detail:
+            detail_reasons[detail] = int(detail_reasons.get(detail, 0)) + 1
+        if other_label is not None:
+            other_reasons[other_label] = int(other_reasons.get(other_label, 0)) + 1
+
+    def _entry_hold_reason_bucket(
+        self,
+        reason: Optional[str],
+        metadata: dict[str, object],
+    ) -> tuple[str, Optional[str]]:
+        detail = str(metadata.get("skip_reason_detail") or "").strip()
+        if reason == "insufficient_history":
+            return "insufficient_history", None
+        if reason == "regime_blocked":
+            return "regime_blocked", None
+        if reason == "insufficient_tp_vs_cost":
+            return "insufficient_tp_vs_cost", None
+        if reason == "max_stop_exceeded":
+            return "max_stop_exceeded", None
+        if detail == "oversold_not_detected":
+            return "oversold_not_detected", None
+        if detail == "bb_reentry_not_confirmed":
+            return "bb_reclaim_not_confirmed", None
+        if detail == "rsi_reclaim_not_confirmed":
+            return "rsi_reclaim_not_confirmed", None
+        if detail == "recovery_not_strong_enough":
+            return "weak_recovery", None
+
+        label = detail or str(reason or "unknown_hold_reason")
+        return "any_other_hold_reason", label
 
     def _append_one_hour_candle(
         self,

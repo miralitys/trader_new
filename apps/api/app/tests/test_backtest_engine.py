@@ -91,6 +91,49 @@ class WindowTrackingStrategy(BaseStrategy):
         return StrategySignal(action="hold", reason="hold")
 
 
+class DiagnosticHoldStrategy(BaseStrategy):
+    key = "diagnostic_hold_strategy"
+    name = "DiagnosticHoldStrategy"
+    description = "Emits hold reasons for diagnostics aggregation tests."
+    config_model = BaseStrategyConfig
+
+    def generate_signal(self, context: StrategyContext) -> StrategySignal:
+        index = context.metadata["bar_index"]
+        if index == 0:
+            return StrategySignal(action="hold", reason="insufficient_history")
+        if index == 1:
+            return StrategySignal(action="hold", reason="regime_blocked")
+        if index == 2:
+            return StrategySignal(
+                action="hold",
+                reason="safety_guard_failed",
+                metadata={"skip_reason_detail": "oversold_not_detected"},
+            )
+        if index == 3:
+            return StrategySignal(
+                action="hold",
+                reason="safety_guard_failed",
+                metadata={"skip_reason_detail": "bb_reentry_not_confirmed"},
+            )
+        if index == 4:
+            return StrategySignal(
+                action="hold",
+                reason="safety_guard_failed",
+                metadata={"skip_reason_detail": "rsi_reclaim_not_confirmed"},
+            )
+        if index == 5:
+            return StrategySignal(
+                action="hold",
+                reason="safety_guard_failed",
+                metadata={"skip_reason_detail": "recovery_not_strong_enough"},
+            )
+        if index == 6:
+            return StrategySignal(action="hold", reason="insufficient_tp_vs_cost")
+        if index == 7:
+            return StrategySignal(action="hold", reason="max_stop_exceeded")
+        return StrategySignal(action="hold", reason="invalid_target")
+
+
 def _candle(ts: datetime, price: str) -> BacktestCandle:
     decimal_price = Decimal(price)
     return BacktestCandle(
@@ -262,3 +305,37 @@ def test_backtest_engine_stops_when_abort_callback_requests_it() -> None:
             stop_check_interval_bars=2,
             should_abort=lambda processed, _total, _candle_time: processed >= 2,
         )
+
+
+def test_backtest_engine_aggregates_entry_hold_reason_diagnostics() -> None:
+    engine = BacktestEngine()
+    candles = [
+        _candle(datetime(2026, 1, 1, 0, index * 5, tzinfo=timezone.utc), str(100 + index))
+        for index in range(9)
+    ]
+
+    report = engine.run(
+        request=_request("diagnostic_hold_strategy"),
+        strategy=DiagnosticHoldStrategy(),
+        candles=candles,
+    )
+
+    assert report.diagnostics["entry_hold_total"] == 9
+    assert report.diagnostics["entry_hold_reasons"] == {
+        "insufficient_history": 1,
+        "regime_blocked": 1,
+        "oversold_not_detected": 1,
+        "bb_reclaim_not_confirmed": 1,
+        "rsi_reclaim_not_confirmed": 1,
+        "weak_recovery": 1,
+        "insufficient_tp_vs_cost": 1,
+        "max_stop_exceeded": 1,
+        "any_other_hold_reason": 1,
+    }
+    assert report.diagnostics["entry_hold_reason_details"] == {
+        "oversold_not_detected": 1,
+        "bb_reentry_not_confirmed": 1,
+        "rsi_reclaim_not_confirmed": 1,
+        "recovery_not_strong_enough": 1,
+    }
+    assert report.diagnostics["entry_hold_other_reasons"] == {"invalid_target": 1}

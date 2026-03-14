@@ -125,6 +125,7 @@ class QueryService:
         )
         equity_curve = [EquityPoint.model_validate(point) for point in (result.equity_curve_json if result else [])]
         trades = [BacktestTrade.model_validate(trade) for trade in summary.get("trades", [])]
+        diagnostics = dict(summary.get("diagnostics", {}))
         initial_capital = Decimal(str(summary.get("initial_capital", params.get("initial_capital", "0"))))
         final_equity = Decimal(str(summary.get("final_equity", initial_capital)))
 
@@ -143,6 +144,7 @@ class QueryService:
             metrics=metrics,
             equity_curve=equity_curve,
             trades=trades,
+            diagnostics=diagnostics,
             error_text=run.error_text,
         )
 

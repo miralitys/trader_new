@@ -108,4 +108,5 @@ class BacktestResponse(BaseModel):
     metrics: BacktestMetrics
     equity_curve: list[EquityPoint] = Field(default_factory=list)
     trades: list[BacktestTrade] = Field(default_factory=list)
+    diagnostics: dict[str, Any] = Field(default_factory=dict)
     error_text: Optional[str] = None

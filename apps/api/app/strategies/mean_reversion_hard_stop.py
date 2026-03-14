@@ -32,6 +32,7 @@ class StopCandidate:
 
 
 class MeanReversionHardStopConfig(BaseStrategyConfig):
+    research_overrides_enabled: bool = False
     lookback_period: int = Field(default=20, ge=5, le=300)
     bb_stddev_mult: float = Field(default=2.0, gt=0, lt=10)
     hard_stop_pct: float = Field(default=0.018, gt=0, lt=1)
@@ -50,7 +51,8 @@ class MeanReversionHardStopConfig(BaseStrategyConfig):
     min_recovery_atr: float = Field(default=0.15, ge=0, lt=5)
 
     cost_multiplier: float = Field(default=2.5, ge=0, lt=20)
-    target_source: Literal["bb_mid", "sma", "ema"] = "bb_mid"
+    target_source: Literal["bb_mid", "sma", "ema", "stop_multiple"] = "bb_mid"
+    target_r_multiple: float = Field(default=1.0, gt=0, lt=10)
     exit_deviation_pct: float = Field(default=0.001, ge=0, lt=0.1)
 
     stop_mode: Literal["signal_low", "lookback_low", "hybrid"] = "signal_low"
@@ -67,6 +69,11 @@ class MeanReversionHardStopConfig(BaseStrategyConfig):
 
     regime_filter_enabled: bool = True
     regime_ema_period: int = Field(default=200, ge=2, le=500)
+    require_close_above_ema200_1h: bool = True
+    require_positive_slope_1h: bool = True
+    require_atr_band_1h: bool = True
+    require_htf_rsi: bool = True
+    require_downside_volatility_filter: bool = True
     min_slope: float = Field(default=0.0005, gt=-1, lt=1)
     regime_atr_period: int = Field(default=14, ge=2, le=100)
     atr_pct_min: float = Field(default=0, ge=0, lt=1)
@@ -96,6 +103,8 @@ class MeanReversionHardStopConfig(BaseStrategyConfig):
             "time_stop_bars": "max_bars_in_trade",
             "regime_min_slope_pct": "min_slope",
             "regime_max_atr_pct": "atr_pct_max",
+            "use_htf_rsi_filter": "require_htf_rsi",
+            "downside_volatility_filter_enabled": "require_downside_volatility_filter",
         }
         for old_key, new_key in field_map.items():
             if old_key in normalized and new_key not in normalized:
@@ -108,11 +117,14 @@ class MeanReversionHardStopConfig(BaseStrategyConfig):
 
     @model_validator(mode="after")
     def validate_thresholds(self) -> "MeanReversionHardStopConfig":
-        self.bb_reentry_required = True
-        self.stop_mode = "signal_low"
-        self.oversold_detection_mode = "rsi"
-        self.max_stop_pct = 0.015
-        self.cost_multiplier = 2.5
+        if not self.research_overrides_enabled:
+            self.bb_reentry_required = True
+            self.stop_mode = "signal_low"
+            self.oversold_detection_mode = "rsi"
+            self.max_stop_pct = 0.015
+            self.cost_multiplier = 2.5
+        self.use_htf_rsi_filter = self.require_htf_rsi
+        self.downside_volatility_filter_enabled = self.require_downside_volatility_filter
 
         if self.rsi_oversold_threshold > self.rsi_reclaim_threshold:
             raise ValueError("rsi_oversold_threshold must be less than or equal to rsi_reclaim_threshold")
@@ -149,13 +161,17 @@ class MeanReversionHardStopStrategy(BaseStrategy):
             return minimum_history
 
         one_hour_history = max(
-            active_config.regime_ema_period + 1,
-            active_config.regime_atr_period + 1,
-            active_config.htf_rsi_period + 1 if active_config.use_htf_rsi_filter else 0,
+            active_config.regime_ema_period + 1
+            if active_config.require_close_above_ema200_1h or active_config.require_positive_slope_1h
+            else 0,
+            active_config.regime_atr_period + 1 if active_config.require_atr_band_1h else 0,
+            active_config.htf_rsi_period + 1 if active_config.require_htf_rsi else 0,
             ((active_config.downside_volatility_lookback * 2) + 1)
-            if active_config.downside_volatility_filter_enabled
+            if active_config.require_downside_volatility_filter
             else 0,
         )
+        if one_hour_history <= 0:
+            return minimum_history
         timeframe_seconds = CoinbaseTimeframe.from_code(timeframe).granularity_seconds
         bars_per_hour = max(1, 3600 // timeframe_seconds)
         return max(minimum_history, (one_hour_history * bars_per_hour) + bars_per_hour)
@@ -277,7 +293,6 @@ class MeanReversionHardStopStrategy(BaseStrategy):
             and recovery_amount >= current_atr * self._as_decimal(config.min_recovery_atr)
         )
 
-        planned_tp_pct = (target_price - current_close) / current_close
         regime_ok, regime_reason, regime_metadata = self._passes_regime_filter(
             context=context,
             history=history,
@@ -289,6 +304,12 @@ class MeanReversionHardStopStrategy(BaseStrategy):
             atr=current_atr,
             config=config,
         )
+        resolved_target_price = target_price
+        if config.target_source == "stop_multiple" and stop_candidate is not None:
+            resolved_target_price = current_close + (
+                (current_close - stop_candidate.price) * self._as_decimal(config.target_r_multiple)
+            )
+        planned_tp_pct = (resolved_target_price - current_close) / current_close
 
         entry_metadata = {
             "stage": "entry_check",
@@ -312,7 +333,9 @@ class MeanReversionHardStopStrategy(BaseStrategy):
             "planned_tp_pct": str(planned_tp_pct),
             "estimated_cost_pct": str(estimated_cost_pct),
             "cost_multiplier": str(config.cost_multiplier),
-            "target_price": str(target_price),
+            "target_price": str(resolved_target_price),
+            "target_source": config.target_source,
+            "target_r_multiple": str(config.target_r_multiple),
             "min_recovery_atr": str(config.min_recovery_atr),
             "min_bounce_pct": str(config.min_bounce_pct),
             **regime_metadata,
@@ -386,7 +409,7 @@ class MeanReversionHardStopStrategy(BaseStrategy):
                 "previous_close": str(previous_close),
                 "atr": str(current_atr),
                 "stop_price": str(stop_candidate.price),
-                "take_profit_price": str(target_price),
+                "take_profit_price": str(resolved_target_price),
                 "distance_to_stop_pct": str(stop_candidate.distance_pct),
                 "distance_to_tp_pct": str(planned_tp_pct),
                 "stop_mode_used": stop_candidate.stop_mode,
@@ -410,6 +433,10 @@ class MeanReversionHardStopStrategy(BaseStrategy):
         config: MeanReversionHardStopConfig,
     ) -> StrategySignal:
         entry_price = self._as_decimal(position.get("entry_price", current_close))
+        position_take_profit_price = position.get("take_profit_price")
+        effective_target_price = (
+            self._as_decimal(position_take_profit_price) if position_take_profit_price is not None else target_price
+        )
         entry_time = position.get("entry_time")
         entry_bar_index = position.get("entry_bar_index")
         bars_held = self._bars_held(
@@ -422,16 +449,16 @@ class MeanReversionHardStopStrategy(BaseStrategy):
         if entry_price > ZERO:
             current_profit_pct = (current_close - entry_price) / entry_price
 
-        if current_close >= target_price and current_close >= entry_price:
+        if current_close >= effective_target_price and current_close >= entry_price:
             return StrategySignal(
                 action="exit",
                 side="long",
                 reason="tp",
-                confidence=self._bounded_ratio(current_close - target_price, target_price),
+                confidence=self._bounded_ratio(current_close - effective_target_price, effective_target_price),
                 metadata={
                     "entry_price": str(entry_price),
                     "current_close": str(current_close),
-                    "target_price": str(target_price),
+                    "target_price": str(effective_target_price),
                     "bars_held": bars_held,
                     "exit_reason_label": "tp",
                 },
@@ -590,6 +617,9 @@ class MeanReversionHardStopStrategy(BaseStrategy):
         exit_ema_value: Decimal,
         config: MeanReversionHardStopConfig,
     ) -> Decimal:
+        if config.target_source == "stop_multiple":
+            # Research mode resolves the exact target from the selected stop candidate in _entry_signal.
+            return current_band.middle
         if config.target_source == "ema":
             base_target = exit_ema_value
         elif config.target_source == "sma":
@@ -731,13 +761,17 @@ class MeanReversionHardStopStrategy(BaseStrategy):
         if one_hour_history is None:
             one_hour_history = self._resample_to_one_hour(history, context.timeframe)
         minimum_one_hour_history = max(
-            config.regime_ema_period + 1,
-            config.regime_atr_period + 1,
-            config.htf_rsi_period + 1 if config.use_htf_rsi_filter else 0,
+            config.regime_ema_period + 1
+            if config.require_close_above_ema200_1h or config.require_positive_slope_1h
+            else 0,
+            config.regime_atr_period + 1 if config.require_atr_band_1h else 0,
+            config.htf_rsi_period + 1 if config.require_htf_rsi else 0,
             ((config.downside_volatility_lookback * 2) + 1)
-            if config.downside_volatility_filter_enabled
+            if config.require_downside_volatility_filter
             else 0,
         )
+        if minimum_one_hour_history <= 0:
+            return True, "regime_passed", {"one_hour_bars": len(one_hour_history)}
         if len(one_hour_history) < minimum_one_hour_history:
             return False, "regime_history_insufficient", {"one_hour_bars": len(one_hour_history)}
 
@@ -753,7 +787,7 @@ class MeanReversionHardStopStrategy(BaseStrategy):
         regime_atr = self._atr(one_hour_history, config.regime_atr_period)
         atr_pct = regime_atr / current_close if current_close > ZERO else ZERO
         htf_rsi = None
-        if config.use_htf_rsi_filter:
+        if config.require_htf_rsi:
             htf_rsi_series = self._rsi_series(closes, config.htf_rsi_period)
             htf_rsi = htf_rsi_series[-1]
 
@@ -765,17 +799,17 @@ class MeanReversionHardStopStrategy(BaseStrategy):
             "regime_rsi_1h": str(htf_rsi) if htf_rsi is not None else None,
             "one_hour_bars": len(one_hour_history),
         }
-        if current_close <= current_ema:
+        if config.require_close_above_ema200_1h and current_close <= current_ema:
             return False, "close_below_ema200_1h", metadata
-        if slope_pct <= self._as_decimal(config.min_slope):
+        if config.require_positive_slope_1h and slope_pct <= self._as_decimal(config.min_slope):
             return False, "ema200_slope_below_threshold", metadata
-        if atr_pct < self._as_decimal(config.atr_pct_min):
+        if config.require_atr_band_1h and atr_pct < self._as_decimal(config.atr_pct_min):
             return False, "atr_pct_below_min", metadata
-        if atr_pct > self._as_decimal(config.atr_pct_max):
+        if config.require_atr_band_1h and atr_pct > self._as_decimal(config.atr_pct_max):
             return False, "atr_pct_above_max", metadata
-        if config.use_htf_rsi_filter and (htf_rsi is None or htf_rsi < self._as_decimal(config.htf_rsi_min)):
+        if config.require_htf_rsi and (htf_rsi is None or htf_rsi < self._as_decimal(config.htf_rsi_min)):
             return False, "htf_rsi_below_min", metadata
-        if config.downside_volatility_filter_enabled and self._is_expanding_downside_volatility(
+        if config.require_downside_volatility_filter and self._is_expanding_downside_volatility(
             closes=closes,
             lookback=config.downside_volatility_lookback,
             expansion_ratio=self._as_decimal(config.downside_volatility_expansion_ratio),
@@ -796,13 +830,17 @@ class MeanReversionHardStopStrategy(BaseStrategy):
     ) -> tuple[bool, str, dict[str, object]]:
         one_hour_bars = int(snapshot.get("one_hour_bars", 0) or 0)
         minimum_one_hour_history = max(
-            config.regime_ema_period + 1,
-            config.regime_atr_period + 1,
-            config.htf_rsi_period + 1 if config.use_htf_rsi_filter else 0,
+            config.regime_ema_period + 1
+            if config.require_close_above_ema200_1h or config.require_positive_slope_1h
+            else 0,
+            config.regime_atr_period + 1 if config.require_atr_band_1h else 0,
+            config.htf_rsi_period + 1 if config.require_htf_rsi else 0,
             ((config.downside_volatility_lookback * 2) + 1)
-            if config.downside_volatility_filter_enabled
+            if config.require_downside_volatility_filter
             else 0,
         )
+        if minimum_one_hour_history <= 0:
+            return True, "regime_passed", {"one_hour_bars": one_hour_bars}
         if one_hour_bars < minimum_one_hour_history:
             return False, "regime_history_insufficient", {"one_hour_bars": one_hour_bars}
 
@@ -827,17 +865,17 @@ class MeanReversionHardStopStrategy(BaseStrategy):
         }
         if current_ema <= ZERO or previous_ema <= ZERO:
             return False, "regime_filter_invalid_ema", metadata
-        if current_close <= current_ema:
+        if config.require_close_above_ema200_1h and current_close <= current_ema:
             return False, "close_below_ema200_1h", metadata
-        if slope_pct <= self._as_decimal(config.min_slope):
+        if config.require_positive_slope_1h and slope_pct <= self._as_decimal(config.min_slope):
             return False, "ema200_slope_below_threshold", metadata
-        if atr_pct < self._as_decimal(config.atr_pct_min):
+        if config.require_atr_band_1h and atr_pct < self._as_decimal(config.atr_pct_min):
             return False, "atr_pct_below_min", metadata
-        if atr_pct > self._as_decimal(config.atr_pct_max):
+        if config.require_atr_band_1h and atr_pct > self._as_decimal(config.atr_pct_max):
             return False, "atr_pct_above_max", metadata
-        if config.use_htf_rsi_filter and (htf_rsi is None or htf_rsi < self._as_decimal(config.htf_rsi_min)):
+        if config.require_htf_rsi and (htf_rsi is None or htf_rsi < self._as_decimal(config.htf_rsi_min)):
             return False, "htf_rsi_below_min", metadata
-        if config.downside_volatility_filter_enabled and self._is_expanding_downside_volatility(
+        if config.require_downside_volatility_filter and self._is_expanding_downside_volatility(
             closes=closes_tail,
             lookback=config.downside_volatility_lookback,
             expansion_ratio=self._as_decimal(config.downside_volatility_expansion_ratio),

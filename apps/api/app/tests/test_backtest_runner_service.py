@@ -268,6 +268,73 @@ def test_query_service_returns_null_completed_at_for_running_backtest() -> None:
     assert response.completed_at is None
 
 
+def test_query_service_returns_backtest_diagnostics_from_summary() -> None:
+    session = FakeSession()
+    query_service = QueryService(session)  # type: ignore[arg-type]
+
+    completed_run = SimpleNamespace(
+        id=10,
+        status=BacktestStatus.COMPLETED,
+        started_at=datetime(2026, 3, 14, 12, 0, tzinfo=timezone.utc),
+        completed_at=datetime(2026, 3, 14, 12, 5, tzinfo=timezone.utc),
+        error_text=None,
+        params_json={
+            "symbol": "BTC-USD",
+            "timeframe": "5m",
+            "exchange_code": "coinbase",
+            "initial_capital": "1000",
+        },
+        created_at=datetime(2026, 3, 14, 11, 59, tzinfo=timezone.utc),
+    )
+    strategy = SimpleNamespace(code="mean_reversion_hard_stop", name="MeanReversionHardStop")
+    result = SimpleNamespace(
+        total_return_pct=Decimal("0"),
+        max_drawdown_pct=Decimal("0"),
+        win_rate_pct=Decimal("0"),
+        profit_factor=Decimal("0"),
+        expectancy=Decimal("0"),
+        total_trades=0,
+        avg_winner=Decimal("0"),
+        avg_loser=Decimal("0"),
+        equity_curve_json=[],
+        summary_json={
+            "symbol": "BTC-USD",
+            "timeframe": "5m",
+            "exchange_code": "coinbase",
+            "initial_capital": "1000",
+            "final_equity": "1000",
+            "metrics": {"gross_expectancy": "0", "net_expectancy": "0"},
+            "trades": [],
+            "diagnostics": {
+                "entry_hold_reasons": {"regime_blocked": 7},
+                "entry_hold_reason_details": {"ema200_slope_below_threshold": 7},
+                "entry_hold_total": 7,
+            },
+        },
+    )
+
+    class FakeQueryBacktestRepository:
+        def recover_stale_runs(self, stale_before: datetime) -> list[dict[str, object]]:
+            return []
+
+        def get_run_with_result(
+            self, run_id: int
+        ) -> tuple[SimpleNamespace, SimpleNamespace, SimpleNamespace]:
+            assert run_id == 10
+            return completed_run, strategy, result
+
+    query_service.backtest_repository = FakeQueryBacktestRepository()  # type: ignore[assignment]
+
+    response = query_service.get_backtest(10)
+
+    assert response.status == "completed"
+    assert response.diagnostics == {
+        "entry_hold_reasons": {"regime_blocked": 7},
+        "entry_hold_reason_details": {"ema200_slope_below_threshold": 7},
+        "entry_hold_total": 7,
+    }
+
+
 def test_backtest_runner_recovers_stale_runs_before_starting_new_one(monkeypatch: pytest.MonkeyPatch) -> None:
     session_factory = SessionFactory()
     FakeBacktestRepository.reset()

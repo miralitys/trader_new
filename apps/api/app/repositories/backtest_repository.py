@@ -162,6 +162,7 @@ class BacktestRepository(BaseRepository):
             "params": payload["params"],
             "metrics": payload["metrics"],
             "trades": payload["trades"],
+            "diagnostics": payload.get("diagnostics", {}),
         }
 
         if existing is None:
