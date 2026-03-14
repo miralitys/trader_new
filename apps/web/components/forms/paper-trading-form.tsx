@@ -1,0 +1,164 @@
+"use client";
+
+import { FormEvent, useEffect, useState } from "react";
+
+import { useStartStrategyPaper, useStopStrategyPaper } from "@/lib/query-hooks";
+import type { StrategySummary } from "@/lib/types";
+import { compactList, parseJsonInput, prettyJson } from "@/lib/utils";
+
+type PaperTradingFormProps = {
+  strategy: StrategySummary;
+  initialConfig: Record<string, unknown>;
+};
+
+export function PaperTradingForm({ strategy, initialConfig }: PaperTradingFormProps) {
+  const startPaper = useStartStrategyPaper(strategy.code);
+  const stopPaper = useStopStrategyPaper(strategy.code);
+  const [symbols, setSymbols] = useState<string[]>([]);
+  const [timeframes, setTimeframes] = useState<string[]>([]);
+  const [initialBalance, setInitialBalance] = useState("10000");
+  const [currency, setCurrency] = useState("USD");
+  const [fee, setFee] = useState("0.001");
+  const [slippage, setSlippage] = useState("0.0005");
+  const [overrideText, setOverrideText] = useState("{}");
+  const [stopReason, setStopReason] = useState("manual_stop");
+  const [message, setMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    const nextSymbols = compactList(initialConfig.symbols);
+    const nextTimeframes = compactList(initialConfig.timeframes);
+    setSymbols(nextSymbols.length ? nextSymbols : ["BTC-USD"]);
+    setTimeframes(nextTimeframes.length ? nextTimeframes : ["5m"]);
+    setOverrideText(prettyJson(initialConfig));
+  }, [initialConfig]);
+
+  const running = strategy.active_paper_status === "running";
+
+  async function handleStart(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setMessage(null);
+
+    try {
+      const result = await startPaper.mutateAsync({
+        symbols,
+        timeframes,
+        exchange_code: "coinbase",
+        initial_balance: initialBalance,
+        currency,
+        fee,
+        slippage,
+        strategy_config_override: parseJsonInput(overrideText, {}),
+        metadata: {},
+      });
+
+      setMessage(`Paper run #${result.run_id} is ${result.status}.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to start paper trading.");
+    }
+  }
+
+  async function handleStop() {
+    setMessage(null);
+
+    try {
+      const result = await stopPaper.mutateAsync({
+        reason: stopReason,
+      });
+      setMessage(`Paper run stopped with status ${result.status}.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to stop paper trading.");
+    }
+  }
+
+  return (
+    <div className="space-y-5">
+      <form onSubmit={handleStart} className="space-y-5">
+        <div className="grid gap-4 md:grid-cols-2">
+          <Field label="Symbols">
+            <input
+              value={symbols.join(", ")}
+              onChange={(event) => setSymbols(compactList(event.target.value.split(",")))}
+              className={inputClassName}
+              placeholder="BTC-USD, ETH-USD"
+            />
+          </Field>
+
+          <Field label="Timeframes">
+            <input
+              value={timeframes.join(", ")}
+              onChange={(event) => setTimeframes(compactList(event.target.value.split(",")))}
+              className={inputClassName}
+              placeholder="5m, 15m"
+            />
+          </Field>
+
+          <Field label="Initial balance">
+            <input value={initialBalance} onChange={(event) => setInitialBalance(event.target.value)} className={inputClassName} />
+          </Field>
+
+          <Field label="Currency">
+            <input value={currency} onChange={(event) => setCurrency(event.target.value)} className={inputClassName} />
+          </Field>
+
+          <Field label="Fee">
+            <input value={fee} onChange={(event) => setFee(event.target.value)} className={inputClassName} />
+          </Field>
+
+          <Field label="Slippage">
+            <input value={slippage} onChange={(event) => setSlippage(event.target.value)} className={inputClassName} />
+          </Field>
+        </div>
+
+        <label className="grid gap-2">
+          <span className="text-[11px] uppercase tracking-[0.2em] text-slate-400">Paper runtime config override JSON</span>
+          <textarea
+            rows={10}
+            value={overrideText}
+            onChange={(event) => setOverrideText(event.target.value)}
+            className="rounded-2xl border border-white/10 bg-slate-950/70 px-3 py-3 font-mono text-sm text-white outline-none transition focus:border-sky-400/40"
+          />
+        </label>
+
+        <div className="flex flex-wrap items-center gap-3 border-t border-white/6 pt-4">
+          <button
+            type="submit"
+            disabled={startPaper.isPending || running}
+            className="rounded-xl bg-emerald-400 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+          >
+            {startPaper.isPending ? "Starting..." : "Start paper trading"}
+          </button>
+
+          <input
+            value={stopReason}
+            onChange={(event) => setStopReason(event.target.value)}
+            className={inputClassName}
+            placeholder="manual_stop"
+          />
+
+          <button
+            type="button"
+            onClick={handleStop}
+            disabled={stopPaper.isPending || !running}
+            className="rounded-xl border border-rose-400/30 bg-rose-500/10 px-4 py-2 text-sm font-semibold text-rose-100 transition hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-slate-900 disabled:text-slate-500"
+          >
+            {stopPaper.isPending ? "Stopping..." : "Stop paper trading"}
+          </button>
+
+          {message ? <span className="text-sm text-slate-300">{message}</span> : null}
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="grid gap-2">
+      <span className="text-[11px] uppercase tracking-[0.2em] text-slate-400">{label}</span>
+      {children}
+    </label>
+  );
+}
+
+const inputClassName =
+  "h-11 rounded-xl border border-white/10 bg-slate-950/60 px-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-sky-400/40";

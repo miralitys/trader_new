@@ -1,0 +1,11 @@
+.pytest_cache
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+build
+dist
+trader_api.egg-info
+.venv
+venv
+app/tests

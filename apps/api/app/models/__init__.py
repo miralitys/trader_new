@@ -1,0 +1,27 @@
+"""Centralized model registry for SQLAlchemy metadata and Alembic imports."""
+
+from app.models.backtest import BacktestResult, BacktestRun
+from app.models.market_data import Candle
+from app.models.paper import PaperAccount
+from app.models.reference import Exchange, Strategy, Symbol, Timeframe
+from app.models.strategy import Order, Position, Signal, StrategyConfig, StrategyRun, Trade
+from app.models.system import AppLog, SyncJob
+
+__all__ = [
+    "AppLog",
+    "BacktestResult",
+    "BacktestRun",
+    "Candle",
+    "Exchange",
+    "Order",
+    "PaperAccount",
+    "Position",
+    "Signal",
+    "Strategy",
+    "StrategyConfig",
+    "StrategyRun",
+    "Symbol",
+    "SyncJob",
+    "Timeframe",
+    "Trade",
+]

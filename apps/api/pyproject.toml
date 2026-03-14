@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=70", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "trader-api"
+version = "0.1.0"
+description = "Algorithmic trading MVP backend"
+requires-python = ">=3.9"
+dependencies = [
+  "alembic==1.14.1",
+  "celery[redis]==5.4.0",
+  "fastapi==0.115.8",
+  "httpx==0.28.1",
+  "psycopg[binary]==3.2.5",
+  "pydantic==2.10.6",
+  "pydantic-settings==2.7.1",
+  "python-dateutil==2.9.0.post0",
+  "python-multipart==0.0.20",
+  "sqlalchemy==2.0.38",
+  "tenacity==9.0.0",
+  "uvicorn[standard]==0.34.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest==8.3.4",
+]
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["app/tests"]
+asyncio_default_fixture_loop_scope = "function"
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
