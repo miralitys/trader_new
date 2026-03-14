@@ -47,14 +47,11 @@ def _config(**overrides: object) -> MeanReversionHardStopConfig:
         "min_bounce_pct": 0.01,
         "hard_stop_pct": 0.1,
         "stop_loss_pct": 0.1,
-        "max_stop_pct": 0.1,
         "take_profit_pct": 0,
         "position_size_pct": 1,
-        "cost_multiplier": 1.5,
         "exit_ema_period": 5,
         "stop_atr_buffer": 0,
         "stop_lookback_bars": 3,
-        "stop_mode": "signal_low",
         "min_hold_bars": 1,
         "max_bars_in_trade": 4,
         "regime_filter_enabled": True,
@@ -70,6 +67,18 @@ def _config(**overrides: object) -> MeanReversionHardStopConfig:
 
 
 def _entry_history() -> list[BacktestCandle]:
+    return _history(
+        ("100", "101", "99", "100"),
+        ("102", "103", "101", "102"),
+        ("104", "105", "103", "104"),
+        ("103", "104", "102", "103"),
+        ("101", "102", "100", "101"),
+        ("95", "96", "94", "95"),
+        ("97", "98", "96.6", "97.8"),
+    )
+
+
+def _wide_stop_history() -> list[BacktestCandle]:
     return _history(
         ("100", "101", "99", "100"),
         ("102", "103", "101", "102"),
@@ -107,6 +116,35 @@ def test_mean_reversion_strategy_enters_after_deep_oversold_bounce() -> None:
     assert signal.metadata["setup_type"] == "bb_and_rsi"
     assert Decimal(signal.metadata["stop_price"]) < Decimal(signal.metadata["current_close"])
     assert Decimal(signal.metadata["take_profit_price"]) > Decimal(signal.metadata["current_close"])
+    assert signal.metadata["oversold_detection_mode"] == "rsi"
+    assert signal.metadata["stop_mode_used"] == "signal_low"
+    assert Decimal(signal.metadata["cost_multiplier"]) == Decimal("2.5")
+    assert Decimal(signal.metadata["max_stop_pct"]) == Decimal("0.015")
+
+
+def test_mean_reversion_strategy_enforces_runtime_guardrails_on_config() -> None:
+    config = _config(
+        bb_reentry_required=False,
+        stop_mode="lookback_low",
+        oversold_detection_mode="both",
+        max_stop_pct=0.3,
+        cost_multiplier=9,
+    )
+
+    assert config.bb_reentry_required is True
+    assert config.stop_mode == "signal_low"
+    assert config.oversold_detection_mode == "rsi"
+    assert config.max_stop_pct == 0.015
+    assert config.cost_multiplier == 2.5
+
+
+def test_mean_reversion_strategy_reports_required_history_for_runtime_warmup() -> None:
+    strategy = MeanReversionHardStopStrategy()
+    config = strategy.parse_config()
+
+    assert strategy.required_history_bars("5m", config) == 2424
+    assert strategy.required_history_bars("15m", config) == 808
+    assert strategy.required_history_bars("1h", config) == 202
 
 
 def test_mean_reversion_strategy_skips_trades_that_do_not_clear_costs() -> None:
@@ -170,7 +208,7 @@ def test_mean_reversion_strategy_blocks_negative_regime() -> None:
 
 def test_mean_reversion_strategy_skips_trade_when_stop_is_too_wide() -> None:
     strategy = MeanReversionHardStopStrategy()
-    history = _entry_history()
+    history = _wide_stop_history()
 
     signal = strategy.generate_signal(
         StrategyContext(
@@ -182,7 +220,7 @@ def test_mean_reversion_strategy_skips_trade_when_stop_is_too_wide() -> None:
                 "history": history,
                 "has_position": False,
                 "position": None,
-                "config": _config(max_stop_pct=0.015),
+                "config": _config(),
                 "fee_rate": Decimal("0"),
                 "slippage_rate": Decimal("0"),
             },
@@ -272,12 +310,13 @@ def test_mean_reversion_strategy_backtest_hits_dynamic_take_profit() -> None:
     )
 
     assert report.metrics.total_trades == 1
-    assert report.trades[0].entry_price == Decimal("98")
-    assert report.trades[0].exit_price == Decimal("100.20")
+    assert report.trades[0].entry_price == Decimal("97.8")
+    assert report.trades[0].exit_price == Decimal("100.160")
     assert report.trades[0].exit_reason == "take_profit"
     assert report.trades[0].metadata["entry"]["setup_type"] == "bb_and_rsi"
+    assert report.trades[0].metadata["entry"]["oversold_detection_mode"] == "rsi"
     assert report.trades[0].metadata["exit_reason_label"] == "tp"
-    assert report.final_equity == Decimal("1022.448979591836734693877551")
+    assert report.final_equity == Decimal("1024.130879345603271983640081")
 
 
 def test_mean_reversion_strategy_paper_engine_generates_trade_event() -> None:
@@ -298,10 +337,11 @@ def test_mean_reversion_strategy_paper_engine_generates_trade_event() -> None:
     )
 
     assert final_state.position is None
-    assert final_state.cash == Decimal("1022.448979591836734693877551")
+    assert final_state.cash == Decimal("1024.130879345603271983640081")
     assert any(result.signal_event is not None and result.signal_event.signal_type == "enter" for result in results)
     assert results[-1].trade_event is not None
-    assert results[-1].trade_event.exit_price == Decimal("100.20")
-    assert results[-1].trade_event.pnl == Decimal("22.448979591836734693877551")
+    assert results[-1].trade_event.exit_price == Decimal("100.160")
+    assert results[-1].trade_event.pnl == Decimal("24.1308793456032719836400813")
     assert results[-1].trade_event.metadata_json["entry"]["setup_type"] == "bb_and_rsi"
+    assert results[-1].trade_event.metadata_json["entry"]["oversold_detection_mode"] == "rsi"
     assert results[-1].trade_event.metadata_json["exit_reason_label"] == "tp"

@@ -18,6 +18,23 @@ class HoldPaperStrategy(BaseStrategy):
         return StrategySignal(action="hold", reason="hold")
 
 
+class SkippedEntryPaperStrategy(BaseStrategy):
+    key = "skipped_entry_paper_strategy"
+    name = "SkippedEntryPaperStrategy"
+    description = "Emits a skipped-entry hold signal for runtime observability."
+    config_model = BaseStrategyConfig
+
+    def generate_signal(self, context: StrategyContext) -> StrategySignal:
+        return StrategySignal(
+            action="hold",
+            reason="regime_blocked",
+            metadata={
+                "reason_skipped": "regime_blocked",
+                "skip_reason_detail": "ema200_slope_below_threshold",
+            },
+        )
+
+
 class EnterThenExitPaperStrategy(BaseStrategy):
     key = "enter_then_exit_paper_strategy"
     name = "EnterThenExitPaperStrategy"
@@ -133,6 +150,28 @@ def test_paper_engine_handles_no_signal_case() -> None:
     assert result.orders == []
     assert result.trade_event is None
     assert result.signal_event is None
+
+
+def test_paper_engine_emits_hold_signal_event_for_skipped_entry() -> None:
+    engine = PaperEngine()
+    candle = _candle(datetime(2026, 1, 1, 0, 0, tzinfo=timezone.utc), "100")
+
+    result = engine.process_candle(
+        strategy=SkippedEntryPaperStrategy(),
+        symbol="BTC-USD",
+        timeframe="5m",
+        candle=candle,
+        history=[candle],
+        state=PaperRuntimeState(cash=Decimal("1000"), position=None),
+        fee_rate=Decimal("0"),
+        slippage_rate=Decimal("0"),
+        strategy_config_override={},
+    )
+
+    assert result.signal_event is not None
+    assert result.signal_event.signal_type == "hold"
+    assert result.signal_event.payload_json["metadata"]["reason_skipped"] == "regime_blocked"
+    assert result.signal_event.payload_json["metadata"]["skip_reason_detail"] == "ema200_slope_below_threshold"
 
 
 def test_paper_engine_updates_account_balance_with_fees_and_profit() -> None:

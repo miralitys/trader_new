@@ -151,8 +151,11 @@ class PaperEngine(EngineBase):
         )
 
         signal_event: Optional[PaperSignalEvent] = None
-        if signal.action != "hold":
-            signal_type = "enter" if signal.action == "enter" else "exit"
+        should_emit_hold_event = signal.action == "hold" and (
+            signal.metadata.get("reason_skipped") is not None or signal.metadata.get("skip_reason_detail") is not None
+        )
+        if signal.action != "hold" or should_emit_hold_event:
+            signal_type = signal.action if signal.action == "hold" else "enter" if signal.action == "enter" else "exit"
             signal_event = PaperSignalEvent(
                 signal_type=signal_type,
                 signal_strength=signal.confidence,

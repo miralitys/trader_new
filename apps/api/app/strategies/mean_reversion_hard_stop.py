@@ -7,6 +7,7 @@ from typing import Literal, Sequence
 
 from pydantic import Field, model_validator
 
+from app.integrations.coinbase.schemas import CoinbaseTimeframe
 from app.schemas.backtest import BacktestCandle
 from app.strategies.base import BaseStrategy, BaseStrategyConfig, StrategyContext, StrategySignal
 
@@ -38,7 +39,7 @@ class MeanReversionHardStopConfig(BaseStrategyConfig):
     take_profit_pct: float = Field(default=0, ge=0, lt=2)
 
     bb_reentry_required: bool = True
-    oversold_detection_mode: Literal["band", "rsi", "either", "both"] = "either"
+    oversold_detection_mode: Literal["band", "rsi", "either", "both"] = "rsi"
     oversold_lookback_bars: int = Field(default=5, ge=1, le=50)
     rsi_period: int = Field(default=14, ge=2, le=100)
     rsi_oversold_threshold: float = Field(default=27, gt=0, lt=100)
@@ -55,7 +56,7 @@ class MeanReversionHardStopConfig(BaseStrategyConfig):
     stop_mode: Literal["signal_low", "lookback_low", "hybrid"] = "signal_low"
     stop_lookback_bars: int = Field(default=8, ge=2, le=50)
     stop_atr_buffer: float = Field(default=0.1, ge=0, lt=5)
-    max_stop_pct: float = Field(default=0.018, gt=0, lt=1)
+    max_stop_pct: float = Field(default=0.015, gt=0, lt=1)
 
     exit_ema_period: int = Field(default=20, ge=2, le=100)
     exit_on_ema20_loss: bool = True
@@ -107,6 +108,12 @@ class MeanReversionHardStopConfig(BaseStrategyConfig):
 
     @model_validator(mode="after")
     def validate_thresholds(self) -> "MeanReversionHardStopConfig":
+        self.bb_reentry_required = True
+        self.stop_mode = "signal_low"
+        self.oversold_detection_mode = "rsi"
+        self.max_stop_pct = 0.015
+        self.cost_multiplier = 2.5
+
         if self.rsi_oversold_threshold > self.rsi_reclaim_threshold:
             raise ValueError("rsi_oversold_threshold must be less than or equal to rsi_reclaim_threshold")
         if self.atr_pct_min > self.atr_pct_max:
@@ -125,16 +132,38 @@ class MeanReversionHardStopStrategy(BaseStrategy):
     status = "implemented"
     config_model = MeanReversionHardStopConfig
 
+    def required_history_bars(
+        self,
+        timeframe: str,
+        config: MeanReversionHardStopConfig | None = None,
+    ) -> int:
+        active_config = config or self.parse_config()
+        minimum_history = max(
+            active_config.lookback_period + active_config.oversold_lookback_bars + 1,
+            active_config.rsi_period + active_config.oversold_lookback_bars + 1,
+            active_config.atr_period + active_config.oversold_lookback_bars + 1,
+            active_config.exit_ema_period,
+            active_config.stop_lookback_bars,
+        )
+        if not active_config.regime_filter_enabled:
+            return minimum_history
+
+        one_hour_history = max(
+            active_config.regime_ema_period + 1,
+            active_config.regime_atr_period + 1,
+            active_config.htf_rsi_period + 1 if active_config.use_htf_rsi_filter else 0,
+            ((active_config.downside_volatility_lookback * 2) + 1)
+            if active_config.downside_volatility_filter_enabled
+            else 0,
+        )
+        timeframe_seconds = CoinbaseTimeframe.from_code(timeframe).granularity_seconds
+        bars_per_hour = max(1, 3600 // timeframe_seconds)
+        return max(minimum_history, (one_hour_history * bars_per_hour) + bars_per_hour)
+
     def generate_signal(self, context: StrategyContext) -> StrategySignal:
         history = self._history_from_context(context)
         config = self._config_from_context(context)
-        minimum_history = max(
-            config.lookback_period + config.oversold_lookback_bars + 1,
-            config.rsi_period + config.oversold_lookback_bars + 1,
-            config.atr_period + config.oversold_lookback_bars + 1,
-            config.exit_ema_period,
-            config.stop_lookback_bars,
-        )
+        minimum_history = self.required_history_bars(context.timeframe, config)
         if len(history) < minimum_history:
             return StrategySignal(action="hold", reason="insufficient_history")
 

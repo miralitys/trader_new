@@ -40,6 +40,12 @@ class PaperExecutionService:
         session = SessionLocal()
         try:
             strategy = get_strategy(request.strategy_code)
+            effective_config = strategy.parse_config(
+                {
+                    **strategy.default_config(),
+                    **request.strategy_config_override,
+                }
+            )
             strategy_run_repository = StrategyRunRepository(session)
             paper_account_repository = PaperAccountRepository(session)
 
@@ -62,7 +68,7 @@ class PaperExecutionService:
                 "exchange_code": request.exchange_code,
                 "fee": str(request.fee),
                 "slippage": str(request.slippage),
-                "strategy_config_override": request.strategy_config_override,
+                "strategy_config_override": effective_config.model_dump(),
                 "last_processed_by_stream": {},
                 "open_positions_runtime": {},
                 **request.metadata,
@@ -173,6 +179,12 @@ class PaperExecutionService:
             fee_rate = Decimal(str(metadata.get("fee", "0.001")))
             slippage_rate = Decimal(str(metadata.get("slippage", "0.0005")))
             strategy_override = dict(metadata.get("strategy_config_override", {}))
+            strategy_config = strategy.parse_config(
+                {
+                    **strategy.default_config(),
+                    **strategy_override,
+                }
+            )
 
             account = paper_account_repository.ensure_account(
                 strategy_id=run.strategy_id,
@@ -191,6 +203,13 @@ class PaperExecutionService:
                 for timeframe in run.timeframes_json:
                     stream_key = f"{symbol}|{timeframe}"
                     after_time = self._parse_watermark(watermarks.get(stream_key))
+                    warmup_candles = candle_repository.list_recent_candles(
+                        exchange_code=exchange_code,
+                        symbol_code=symbol,
+                        timeframe=timeframe,
+                        end_at=after_time,
+                        limit=self._required_history_bars(strategy, timeframe, strategy_config),
+                    )
                     candles = candle_repository.list_candles_after(
                         exchange_code=exchange_code,
                         symbol_code=symbol,
@@ -198,16 +217,11 @@ class PaperExecutionService:
                         after_time=after_time,
                         limit=max_candles_per_stream,
                     )
-                    history_bucket = stream_histories.setdefault(stream_key, [])
-                    for candle in candles:
-                        payload = BacktestCandle(
-                            open_time=candle.open_time,
-                            open=candle.open,
-                            high=candle.high,
-                            low=candle.low,
-                            close=candle.close,
-                            volume=candle.volume,
-                        )
+                    history_bucket = stream_histories.setdefault(
+                        stream_key,
+                        self._to_backtest_candles(warmup_candles),
+                    )
+                    for payload in self._to_backtest_candles(candles):
                         merged_stream.append((payload.open_time, symbol, timeframe, stream_key, payload))
                         history_bucket.append(payload)
 
@@ -233,7 +247,7 @@ class PaperExecutionService:
                     state=runtime_state,
                     fee_rate=fee_rate,
                     slippage_rate=slippage_rate,
-                    strategy_config_override=strategy_override,
+                    strategy_config_override=strategy_config.model_dump(),
                     runtime_metadata={
                         "strategy_run_id": run.id,
                         "stream_key": stream_key,
@@ -253,6 +267,20 @@ class PaperExecutionService:
                     )
                     signal_id = signal.id
                     counters.signals_created += 1
+                    if result.signal_event.signal_type == SignalType.HOLD.value:
+                        logger.info(
+                            "Paper entry skipped",
+                            extra={
+                                "run_id": run.id,
+                                "strategy_code": strategy.code,
+                                "symbol": symbol,
+                                "timeframe": timeframe,
+                                "reason_skipped": result.signal_event.payload_json.get("metadata", {}).get("reason_skipped"),
+                                "skip_reason_detail": result.signal_event.payload_json.get("metadata", {}).get(
+                                    "skip_reason_detail"
+                                ),
+                            },
+                        )
 
                 for order_event in result.orders:
                     order_repository.create_filled_order(
@@ -370,6 +398,25 @@ class PaperExecutionService:
         if not isinstance(value, str) or not value:
             return None
         return parse_iso8601(value)
+
+    def _required_history_bars(self, strategy, timeframe: str, strategy_config) -> int:
+        required_history = getattr(strategy, "required_history_bars", None)
+        if callable(required_history):
+            return max(1, int(required_history(timeframe, strategy_config)))
+        return 1
+
+    def _to_backtest_candles(self, candles) -> list[BacktestCandle]:
+        return [
+            BacktestCandle(
+                open_time=candle.open_time,
+                open=candle.open,
+                high=candle.high,
+                low=candle.low,
+                close=candle.close,
+                volume=candle.volume,
+            )
+            for candle in candles
+        ]
 
     def _build_runtime_position(
         self,

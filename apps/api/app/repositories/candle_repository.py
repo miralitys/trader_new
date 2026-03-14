@@ -210,6 +210,39 @@ class CandleRepository(BaseRepository):
             stmt = stmt.limit(limit)
         return list(self.session.scalars(stmt))
 
+    def list_recent_candles(
+        self,
+        exchange_code: str,
+        symbol_code: str,
+        timeframe: str,
+        end_at: Optional[datetime],
+        limit: int,
+    ) -> list[Candle]:
+        if limit <= 0:
+            return []
+
+        exchange = self.get_exchange(exchange_code)
+        if exchange is None:
+            return []
+
+        symbol = self.get_symbol(exchange.id, symbol_code)
+        if symbol is None:
+            return []
+
+        stmt = (
+            select(Candle)
+            .where(
+                Candle.exchange_id == exchange.id,
+                Candle.symbol_id == symbol.id,
+                Candle.timeframe == timeframe,
+            )
+            .order_by(Candle.open_time.desc())
+            .limit(limit)
+        )
+        if end_at is not None:
+            stmt = stmt.where(Candle.open_time <= end_at)
+        return list(reversed(list(self.session.scalars(stmt))))
+
     def upsert_candles(
         self,
         exchange_id: int,
