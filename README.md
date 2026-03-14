@@ -62,7 +62,6 @@ Recommended deployment flow:
 3. Select the GitHub repository.
 4. Render will provision:
    - `trader-mvp-db` PostgreSQL
-   - `trader-mvp-redis` Key Value
    - `trader-mvp-backend` FastAPI web service
    - `trader-mvp-worker` background worker
    - `trader-mvp-frontend` Next.js web service
@@ -74,6 +73,7 @@ Notes:
 
 - The backend automatically normalizes Render Postgres URLs from `postgresql://...` to `postgresql+psycopg://...`.
 - Backend and worker run `alembic upgrade head` and `python -m app.db.seed` on startup, so schema and reference data stay initialized.
+- Redis is optional for the current MVP deployment and is not required by the active worker/runtime path.
 - The worker requires a paid Render worker plan. Frontend/backend can stay on free plans for MVP testing.
 
 ## Local startup
