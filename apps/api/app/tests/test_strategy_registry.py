@@ -24,7 +24,7 @@ def test_strategy_registry_contains_research_and_scaffold_strategies() -> None:
 def test_strategy_descriptors_are_serializable() -> None:
     descriptors = {item["key"]: item for item in strategy_descriptors()}
     assert len(descriptors) == 4
-    assert descriptors["breakout_continuation"]["status"] == "implemented"
+    assert descriptors["breakout_continuation"]["status"] == "archived"
     assert descriptors["breakout_retest"]["status"] == "scaffold"
     assert descriptors["pullback_to_trend"]["status"] == "scaffold"
     assert descriptors["trend_retrace_70"]["status"] == "scaffold"
@@ -32,7 +32,6 @@ def test_strategy_descriptors_are_serializable() -> None:
 
 def test_interface_visible_strategies_match_supported_product_strategies() -> None:
     assert INTERFACE_VISIBLE_STRATEGY_CODES == {
-        "breakout_continuation",
         "breakout_retest",
         "pullback_to_trend",
         "trend_retrace_70",

@@ -47,6 +47,12 @@ class FakeStrategy(BaseStrategy):
     config_model = BaseStrategyConfig
 
 
+class ArchivedFakeStrategy(FakeStrategy):
+    key = "archived_fake_strategy"
+    name = "ArchivedFakeStrategy"
+    status = "archived"
+
+
 class FakeBacktestRepository:
     current_run: SimpleNamespace | None = None
     save_result_exception: Exception | None = None
@@ -210,6 +216,26 @@ def test_backtest_runner_marks_failed_when_engine_raises(monkeypatch: pytest.Mon
     assert FakeBacktestRepository.current_run.status == BacktestStatus.FAILED
     assert FakeBacktestRepository.current_run.error_text == "engine exploded"
     assert len(session_factory.sessions) == 3
+
+
+def test_backtest_runner_rejects_archived_strategy(monkeypatch: pytest.MonkeyPatch) -> None:
+    session_factory = SessionFactory()
+    FakeBacktestRepository.reset()
+
+    monkeypatch.setattr("app.services.backtest_runner_service.SessionLocal", session_factory)
+    monkeypatch.setattr("app.services.backtest_runner_service.BacktestRepository", FakeBacktestRepository)
+    monkeypatch.setattr("app.services.backtest_runner_service.CandleRepository", FakeCandleRepository)
+    monkeypatch.setattr(
+        "app.services.backtest_runner_service.get_strategy",
+        lambda _code: ArchivedFakeStrategy(),
+    )
+
+    service = BacktestRunnerService(engine=StaticReportEngine())
+
+    with pytest.raises(ValueError, match="archived"):
+        service.run_backtest(_request())
+
+    assert FakeBacktestRepository.current_run is None
 
 
 def test_backtest_runner_marks_failed_when_result_persistence_fails(monkeypatch: pytest.MonkeyPatch) -> None:

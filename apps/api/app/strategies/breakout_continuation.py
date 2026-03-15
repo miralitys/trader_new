@@ -55,7 +55,7 @@ class BreakoutContinuationStrategy(BaseStrategy):
     key = "breakout_continuation"
     name = "BreakoutContinuation"
     description = "Research strategy for long-only breakout continuation after a local base."
-    status = "implemented"
+    status = "archived"
     config_model = BreakoutContinuationConfig
     runtime_indicator_cache_enabled = True
 

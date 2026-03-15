@@ -22,7 +22,6 @@ from app.strategies.registry import get_strategy, list_strategies
 
 INTERFACE_VISIBLE_STRATEGY_CODES = frozenset(
     {
-        "breakout_continuation",
         "breakout_retest",
         "pullback_to_trend",
         "trend_retrace_70",
@@ -194,9 +193,12 @@ class StrategyService:
 
     def _resolve_strategy(self, code: str) -> BaseStrategy:
         try:
-            return get_strategy(code)
+            strategy = get_strategy(code)
         except KeyError as exc:
             raise NotFoundError(f"Strategy {code} was not found") from exc
+        if getattr(strategy, "status", "") == "archived":
+            raise NotFoundError(f"Strategy {code} is archived")
+        return strategy
 
     def _build_effective_config(
         self,

@@ -43,6 +43,8 @@ class BacktestRunnerService:
             backtest_repository = BacktestRepository(session)
 
             strategy = get_strategy(request.strategy_code)
+            if getattr(strategy, "status", "") == "archived":
+                raise ValueError(f"Strategy {request.strategy_code} is archived")
             strategy_row = backtest_repository.ensure_strategy(
                 code=strategy.key,
                 name=strategy.name,
