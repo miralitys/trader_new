@@ -25,7 +25,7 @@ def test_strategy_descriptors_are_serializable() -> None:
     descriptors = {item["key"]: item for item in strategy_descriptors()}
     assert len(descriptors) == 4
     assert descriptors["breakout_continuation"]["status"] == "archived"
-    assert descriptors["breakout_retest"]["status"] == "scaffold"
+    assert descriptors["breakout_retest"]["status"] == "implemented"
     assert descriptors["pullback_to_trend"]["status"] == "scaffold"
     assert descriptors["trend_retrace_70"]["status"] == "scaffold"
 

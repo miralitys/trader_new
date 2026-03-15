@@ -30,6 +30,12 @@ class EntryPlan:
 
 
 @dataclass(frozen=True)
+class EntryDecision:
+    plan: Optional[EntryPlan]
+    reject_reason: Optional[str] = None
+
+
+@dataclass(frozen=True)
 class ExitPlan:
     fill_price: Decimal
     fee_paid: Decimal
@@ -70,17 +76,37 @@ class RiskEngine(EngineBase):
         override_stop_price: Optional[Decimal] = None,
         override_take_profit_price: Optional[Decimal] = None,
     ) -> Optional[EntryPlan]:
+        return self.calculate_entry_decision(
+            available_cash=available_cash,
+            reference_price=reference_price,
+            fee_rate=fee_rate,
+            slippage_rate=slippage_rate,
+            risk_plan=risk_plan,
+            override_stop_price=override_stop_price,
+            override_take_profit_price=override_take_profit_price,
+        ).plan
+
+    def calculate_entry_decision(
+        self,
+        available_cash: Decimal,
+        reference_price: Decimal,
+        fee_rate: Decimal,
+        slippage_rate: Decimal,
+        risk_plan: RiskPlan,
+        override_stop_price: Optional[Decimal] = None,
+        override_take_profit_price: Optional[Decimal] = None,
+    ) -> EntryDecision:
         if available_cash <= ZERO or reference_price <= ZERO:
-            return None
+            return EntryDecision(plan=None, reject_reason="risk_rejected")
 
         capital_budget = available_cash * risk_plan.position_size_pct
         if capital_budget <= ZERO:
-            return None
+            return EntryDecision(plan=None, reject_reason="position_size_zero")
 
         fill_price = reference_price * (Decimal("1") + slippage_rate)
         gross_qty = capital_budget / (fill_price * (Decimal("1") + fee_rate))
         if gross_qty <= ZERO:
-            return None
+            return EntryDecision(plan=None, reject_reason="position_size_zero")
 
         fee_paid = gross_qty * fill_price * fee_rate
         cost = gross_qty * fill_price
@@ -91,25 +117,27 @@ class RiskEngine(EngineBase):
 
         if override_stop_price is not None:
             if override_stop_price <= ZERO or override_stop_price >= fill_price:
-                return None
+                return EntryDecision(plan=None, reject_reason="missing_stop")
             stop_price = override_stop_price
         elif risk_plan.stop_loss_pct > ZERO:
             stop_price = fill_price * (Decimal("1") - risk_plan.stop_loss_pct)
         if override_take_profit_price is not None:
             if override_take_profit_price <= fill_price:
-                return None
+                return EntryDecision(plan=None, reject_reason="missing_take_profit")
             take_profit_price = override_take_profit_price
         elif risk_plan.take_profit_pct > ZERO:
             take_profit_price = fill_price * (Decimal("1") + risk_plan.take_profit_pct)
 
-        return EntryPlan(
-            qty=gross_qty,
-            fill_price=fill_price,
-            fee_paid=fee_paid,
-            slippage_paid=slippage_paid,
-            capital_committed=capital_committed,
-            stop_price=stop_price,
-            take_profit_price=take_profit_price,
+        return EntryDecision(
+            plan=EntryPlan(
+                qty=gross_qty,
+                fill_price=fill_price,
+                fee_paid=fee_paid,
+                slippage_paid=slippage_paid,
+                capital_committed=capital_committed,
+                stop_price=stop_price,
+                take_profit_price=take_profit_price,
+            ),
         )
 
     def evaluate_intrabar_exit(

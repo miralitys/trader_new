@@ -46,6 +46,7 @@ class BaseStrategy:
     spot_only = True
     long_only = True
     status = "scaffold"
+    debug_counter_keys: tuple[str, ...] = ()
     config_model: Type[BaseStrategyConfig] = BaseStrategyConfig
 
     def descriptor(self) -> StrategyDescriptor:

@@ -31,6 +31,12 @@ export default function BacktestDetailPage() {
     return <ErrorState message={`Backtest ${id} was not found.`} />;
   }
 
+  const pipelineCounters = backtest.diagnostics.pipeline_counters ?? {};
+  const rejectReasons = backtest.diagnostics.reject_reasons ?? {};
+  const rejectReasonDetails = backtest.diagnostics.reject_reason_details ?? {};
+  const strategySpecificCounters = backtest.diagnostics.strategy_specific_counters ?? {};
+  const strategyDebug = backtest.diagnostics.strategy_debug ?? {};
+
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
@@ -134,6 +140,27 @@ export default function BacktestDetailPage() {
             },
           ]}
         />
+      </SectionCard>
+
+      <SectionCard title="Debug diagnostics" eyebrow="Backtest pipeline observability">
+        <div className="grid gap-6 xl:grid-cols-3">
+          <div className="rounded-2xl border border-white/8 bg-slate-950/50 p-4">
+            <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">Pipeline counters</p>
+            <pre className="mt-3 overflow-x-auto text-xs text-slate-300">{prettyJson(pipelineCounters)}</pre>
+          </div>
+          <div className="rounded-2xl border border-white/8 bg-slate-950/50 p-4">
+            <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">Reject reasons</p>
+            <pre className="mt-3 overflow-x-auto text-xs text-slate-300">{prettyJson(rejectReasons)}</pre>
+            <p className="mt-4 text-[11px] uppercase tracking-[0.2em] text-slate-400">Reject details</p>
+            <pre className="mt-3 overflow-x-auto text-xs text-slate-300">{prettyJson(rejectReasonDetails)}</pre>
+          </div>
+          <div className="rounded-2xl border border-white/8 bg-slate-950/50 p-4">
+            <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">Strategy-specific counters</p>
+            <pre className="mt-3 overflow-x-auto text-xs text-slate-300">{prettyJson(strategySpecificCounters)}</pre>
+            <p className="mt-4 text-[11px] uppercase tracking-[0.2em] text-slate-400">Strategy debug</p>
+            <pre className="mt-3 overflow-x-auto text-xs text-slate-300">{prettyJson(strategyDebug)}</pre>
+          </div>
+        </div>
       </SectionCard>
     </div>
   );

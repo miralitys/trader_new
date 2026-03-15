@@ -134,6 +134,9 @@ class BacktestEngine(EngineBase):
             "entry_hold_reasons": {
                 "insufficient_history": 0,
                 "regime_blocked": 0,
+                "breakout_not_valid": 0,
+                "retest_not_reached": 0,
+                "retest_failed": 0,
                 "range_not_tight_enough": 0,
                 "breakout_not_confirmed": 0,
                 "breakout_bar_not_green": 0,
@@ -155,6 +158,38 @@ class BacktestEngine(EngineBase):
             "entry_hold_reason_details": {},
             "regime_blocked_details": {},
             "entry_hold_total": 0,
+            "pipeline_counters": {
+                "total_candles_processed": 0,
+                "total_iterations": 0,
+                "total_setups_detected": 0,
+                "total_signals_generated": 0,
+                "total_signals_rejected": 0,
+                "total_orders_created": 0,
+                "total_orders_filled": 0,
+                "total_positions_opened": 0,
+                "total_positions_closed": 0,
+                "total_trades_closed": 0,
+            },
+            "reject_reasons": {
+                "insufficient_lookback": 0,
+                "invalid_config": 0,
+                "no_entry_confirmation": 0,
+                "risk_rejected": 0,
+                "position_size_zero": 0,
+                "order_not_fillable": 0,
+                "already_in_position": 0,
+                "missing_stop": 0,
+                "missing_take_profit": 0,
+                "other": 0,
+            },
+            "reject_reason_details": {},
+            "strategy_specific_counters": {
+                key: 0
+                for key in tuple(getattr(strategy, "debug_counter_keys", tuple()) or tuple())
+            },
+            "strategy_debug": {
+                "strategy_key": strategy.key,
+            },
         }
         one_hour_history: list[BacktestCandle] = []
         one_hour_closes: list[Decimal] = []
@@ -183,6 +218,8 @@ class BacktestEngine(EngineBase):
 
         for bar_index, candle in enumerate(ordered_candles):
             processed_bars = bar_index + 1
+            self._increment_pipeline_counter(diagnostics, "total_candles_processed")
+            self._increment_pipeline_counter(diagnostics, "total_iterations")
             if (
                 should_abort is not None
                 and stop_check_interval_bars > 0
@@ -256,6 +293,8 @@ class BacktestEngine(EngineBase):
                         exit_time=candle.open_time,
                     )
                     closed_trades.append(trade)
+                    self._increment_pipeline_counter(diagnostics, "total_positions_closed")
+                    self._increment_pipeline_counter(diagnostics, "total_trades_closed")
                     position = None
 
             history_start = max(0, bar_index + 1 - history_window_bars)
@@ -323,10 +362,13 @@ class BacktestEngine(EngineBase):
                     metadata=metadata,
                 )
             )
+            self._record_strategy_debug_metadata(diagnostics, signal.metadata)
             if position is None and signal.action == "hold":
                 self._record_entry_hold_diagnostic(diagnostics, signal.reason, signal.metadata)
+                self._record_signal_rejection(diagnostics, signal.reason, signal.metadata)
 
             if position is not None and signal.action == "exit":
+                self._increment_pipeline_counter(diagnostics, "total_signals_generated")
                 exit_plan = self.risk_engine.build_market_exit(
                     reference_price=candle.close,
                     qty=position.qty,
@@ -341,11 +383,15 @@ class BacktestEngine(EngineBase):
                     exit_time=candle.open_time,
                 )
                 closed_trades.append(trade)
+                self._increment_pipeline_counter(diagnostics, "total_positions_closed")
+                self._increment_pipeline_counter(diagnostics, "total_trades_closed")
                 position = None
             elif position is None and signal.action == "enter":
+                self._increment_pipeline_counter(diagnostics, "total_signals_generated")
+                self._increment_pipeline_counter(diagnostics, "total_orders_created")
                 stop_price = self._metadata_decimal(signal.metadata, "stop_price")
                 take_profit_price = self._metadata_decimal(signal.metadata, "take_profit_price")
-                entry_plan = self.risk_engine.calculate_entry_plan(
+                entry_decision = self.risk_engine.calculate_entry_decision(
                     available_cash=cash,
                     reference_price=candle.close,
                     fee_rate=fee_rate,
@@ -354,6 +400,7 @@ class BacktestEngine(EngineBase):
                     override_stop_price=stop_price,
                     override_take_profit_price=take_profit_price,
                 )
+                entry_plan = entry_decision.plan
                 if entry_plan is not None:
                     position, cash = self._open_position(
                         candle_time=candle.open_time,
@@ -362,12 +409,37 @@ class BacktestEngine(EngineBase):
                         cash=cash,
                         entry_metadata=signal.metadata,
                     )
+                    self._increment_pipeline_counter(diagnostics, "total_orders_filled")
+                    self._increment_pipeline_counter(diagnostics, "total_positions_opened")
                 else:
-                    self._record_entry_hold_diagnostic(
+                    self._record_signal_rejection(
                         diagnostics,
                         "entry_plan_rejected",
-                        {"skip_reason_detail": "risk_engine_rejected_entry_plan"},
+                        {
+                            "debug_reject_reason": entry_decision.reject_reason or "risk_rejected",
+                            "skip_reason_detail": "risk_engine_rejected_entry_plan",
+                        },
                     )
+            elif position is not None and signal.action == "enter":
+                self._increment_pipeline_counter(diagnostics, "total_signals_generated")
+                self._record_signal_rejection(
+                    diagnostics,
+                    "already_in_position",
+                    {
+                        "debug_reject_reason": "already_in_position",
+                        "debug_reject_detail": "position_already_open",
+                    },
+                )
+            elif position is None and signal.action == "exit":
+                self._increment_pipeline_counter(diagnostics, "total_signals_generated")
+                self._record_signal_rejection(
+                    diagnostics,
+                    "orphan_exit_signal",
+                    {
+                        "debug_reject_reason": "other",
+                        "debug_reject_detail": "exit_signal_without_position",
+                    },
+                )
 
             equity_curve.append(
                 EquityPoint(
@@ -582,6 +654,12 @@ class BacktestEngine(EngineBase):
             return "insufficient_history", None
         if reason == "regime_blocked":
             return "regime_blocked", None
+        if reason == "breakout_not_valid":
+            return "breakout_not_valid", None
+        if reason == "retest_not_reached":
+            return "retest_not_reached", None
+        if reason == "retest_failed":
+            return "retest_failed", None
         if reason == "range_not_tight_enough":
             return "range_not_tight_enough", None
         if reason == "breakout_not_confirmed":
@@ -625,6 +703,100 @@ class BacktestEngine(EngineBase):
 
         label = detail or str(reason or "unknown_hold_reason")
         return "any_other_hold_reason", label
+
+    def _increment_pipeline_counter(
+        self,
+        diagnostics: dict[str, Any],
+        key: str,
+        amount: int = 1,
+    ) -> None:
+        counters = diagnostics.setdefault("pipeline_counters", {})
+        counters[key] = int(counters.get(key, 0)) + amount
+
+    def _record_strategy_debug_metadata(
+        self,
+        diagnostics: dict[str, Any],
+        metadata: dict[str, object],
+    ) -> None:
+        setup_delta = metadata.get("debug_setup_detected")
+        if isinstance(setup_delta, bool) and setup_delta:
+            self._increment_pipeline_counter(diagnostics, "total_setups_detected")
+        elif isinstance(setup_delta, int) and setup_delta > 0:
+            self._increment_pipeline_counter(diagnostics, "total_setups_detected", setup_delta)
+
+        counter_deltas = metadata.get("debug_strategy_counters_delta")
+        if not isinstance(counter_deltas, dict):
+            return
+
+        strategy_counters = diagnostics.setdefault("strategy_specific_counters", {})
+        for key, value in counter_deltas.items():
+            try:
+                increment = int(value)
+            except (TypeError, ValueError):
+                continue
+            strategy_counters[str(key)] = int(strategy_counters.get(str(key), 0)) + increment
+
+    def _record_signal_rejection(
+        self,
+        diagnostics: dict[str, Any],
+        reason: Optional[str],
+        metadata: dict[str, object],
+    ) -> None:
+        reject_reason, detail = self._normalize_reject_reason(reason, metadata)
+        if reject_reason is None:
+            return
+
+        self._increment_pipeline_counter(diagnostics, "total_signals_rejected")
+        reject_reasons = diagnostics.setdefault("reject_reasons", {})
+        reject_reasons[reject_reason] = int(reject_reasons.get(reject_reason, 0)) + 1
+        if detail:
+            reject_reason_details = diagnostics.setdefault("reject_reason_details", {})
+            reject_reason_details[detail] = int(reject_reason_details.get(detail, 0)) + 1
+
+    def _normalize_reject_reason(
+        self,
+        reason: Optional[str],
+        metadata: dict[str, object],
+    ) -> tuple[Optional[str], Optional[str]]:
+        explicit_reason = str(metadata.get("debug_reject_reason") or "").strip()
+        explicit_detail = str(
+            metadata.get("debug_reject_detail")
+            or metadata.get("skip_reason_detail")
+            or reason
+            or ""
+        ).strip()
+
+        if explicit_reason in {
+            "insufficient_lookback",
+            "invalid_config",
+            "no_entry_confirmation",
+            "risk_rejected",
+            "position_size_zero",
+            "order_not_fillable",
+            "already_in_position",
+            "missing_stop",
+            "missing_take_profit",
+            "other",
+        }:
+            return explicit_reason, explicit_detail or None
+
+        if reason == "insufficient_history":
+            return "insufficient_lookback", explicit_detail or "insufficient_history"
+        if reason in {
+            "breakout_not_confirmed",
+            "range_not_tight_enough",
+            "reclaim_not_confirmed",
+            "entry_bar_not_green",
+            "breakout_bar_not_green",
+        }:
+            return "no_entry_confirmation", explicit_detail or reason
+        if reason == "entry_plan_rejected":
+            return "risk_rejected", explicit_detail or "entry_plan_rejected"
+        if reason == "already_in_position":
+            return "already_in_position", explicit_detail or "already_in_position"
+        if reason and reason != "hold":
+            return "other", explicit_detail or reason
+        return None, None
 
     def _normalized_hold_reason_detail(self, detail: object) -> str:
         raw = str(detail or "").strip()

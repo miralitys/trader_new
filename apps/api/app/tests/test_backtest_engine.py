@@ -7,6 +7,7 @@ import pytest
 
 from app.engines.backtest_engine import BacktestEngine, BacktestStopRequestedError
 from app.schemas.backtest import BacktestCandle, BacktestRequest
+from app.strategies.breakout_retest import BreakoutRetestStrategy
 from app.strategies.base import BaseStrategy, BaseStrategyConfig, StrategyContext, StrategySignal
 
 
@@ -170,6 +171,63 @@ class DiagnosticHoldStrategy(BaseStrategy):
         if index == 16:
             return StrategySignal(action="hold", reason="breakout_bar_too_extended")
         return StrategySignal(action="hold", reason="invalid_target")
+
+
+class TelemetryStrategy(BaseStrategy):
+    key = "telemetry_strategy"
+    name = "TelemetryStrategy"
+    description = "Produces deterministic debug telemetry for the backtest pipeline."
+    config_model = BaseStrategyConfig
+    debug_counter_keys = (
+        "breakout_candidate_count",
+        "retest_candidate_count",
+        "confirmation_pass_count",
+        "entry_signal_count",
+    )
+
+    def generate_signal(self, context: StrategyContext) -> StrategySignal:
+        index = context.metadata["bar_index"]
+        has_position = context.metadata["has_position"]
+        if index == 0:
+            return StrategySignal(
+                action="hold",
+                reason="insufficient_history",
+                metadata={
+                    "debug_reject_reason": "insufficient_lookback",
+                    "debug_reject_detail": "warmup_not_ready",
+                },
+            )
+        if index == 1:
+            return StrategySignal(
+                action="hold",
+                reason="breakout_not_confirmed",
+                metadata={
+                    "debug_setup_detected": True,
+                    "debug_reject_reason": "no_entry_confirmation",
+                    "debug_reject_detail": "retest_confirmation_missing",
+                    "debug_strategy_counters_delta": {
+                        "breakout_candidate_count": 1,
+                        "retest_candidate_count": 1,
+                    },
+                },
+            )
+        if index == 2 and not has_position:
+            return StrategySignal(
+                action="enter",
+                reason="telemetry_entry",
+                metadata={
+                    "debug_setup_detected": True,
+                    "debug_strategy_counters_delta": {
+                        "breakout_candidate_count": 1,
+                        "retest_candidate_count": 1,
+                        "confirmation_pass_count": 1,
+                        "entry_signal_count": 1,
+                    },
+                },
+            )
+        if index == 3 and has_position:
+            return StrategySignal(action="exit", reason="telemetry_exit")
+        return StrategySignal(action="hold", reason="hold")
 
 
 def _candle(ts: datetime, price: str) -> BacktestCandle:
@@ -363,6 +421,9 @@ def test_backtest_engine_aggregates_entry_hold_reason_diagnostics() -> None:
     assert report.diagnostics["entry_hold_reasons"] == {
         "insufficient_history": 1,
         "regime_blocked": 1,
+        "breakout_not_valid": 0,
+        "retest_not_reached": 0,
+        "retest_failed": 0,
         "range_not_tight_enough": 1,
         "breakout_not_confirmed": 1,
         "breakout_bar_not_green": 1,
@@ -393,3 +454,107 @@ def test_backtest_engine_aggregates_entry_hold_reason_diagnostics() -> None:
     }
     assert report.diagnostics["regime_blocked_details"] == {"close_below_ema200_1h": 1}
     assert report.diagnostics["entry_hold_other_reasons"] == {"invalid_target": 1}
+
+
+def test_backtest_engine_records_pipeline_debug_counters() -> None:
+    engine = BacktestEngine()
+    candles = [
+        _candle(datetime(2026, 1, 1, 0, 0, tzinfo=timezone.utc), "100"),
+        _candle(datetime(2026, 1, 1, 0, 5, tzinfo=timezone.utc), "101"),
+        _candle(datetime(2026, 1, 1, 0, 10, tzinfo=timezone.utc), "102"),
+        _candle(datetime(2026, 1, 1, 0, 15, tzinfo=timezone.utc), "103"),
+    ]
+
+    report = engine.run(
+        request=_request("telemetry_strategy"),
+        strategy=TelemetryStrategy(),
+        candles=candles,
+    )
+
+    pipeline = report.diagnostics["pipeline_counters"]
+    reject_reasons = report.diagnostics["reject_reasons"]
+    strategy_counters = report.diagnostics["strategy_specific_counters"]
+
+    assert pipeline["total_candles_processed"] == 4
+    assert pipeline["total_iterations"] == 4
+    assert pipeline["total_setups_detected"] == 2
+    assert pipeline["total_signals_generated"] == 2
+    assert pipeline["total_signals_rejected"] == 2
+    assert pipeline["total_orders_created"] == 1
+    assert pipeline["total_orders_filled"] == 1
+    assert pipeline["total_positions_opened"] == 1
+    assert pipeline["total_positions_closed"] == 1
+    assert pipeline["total_trades_closed"] == 1
+
+    assert reject_reasons["insufficient_lookback"] == 1
+    assert reject_reasons["no_entry_confirmation"] == 1
+    assert strategy_counters["breakout_candidate_count"] == 2
+    assert strategy_counters["retest_candidate_count"] == 2
+    assert strategy_counters["confirmation_pass_count"] == 1
+    assert strategy_counters["entry_signal_count"] == 1
+
+
+def test_breakout_retest_debug_diagnostics_show_retest_not_reached_path() -> None:
+    engine = BacktestEngine()
+    candles = [
+        BacktestCandle(
+            open_time=datetime(2026, 1, 1, 0, 0, tzinfo=timezone.utc) + timedelta(minutes=5 * index),
+            open=Decimal(value[0]),
+            high=Decimal(value[1]),
+            low=Decimal(value[2]),
+            close=Decimal(value[3]),
+            volume=Decimal("1"),
+        )
+        for index, value in enumerate(
+            [
+                ("100.0", "100.8", "99.7", "100.4"),
+                ("100.4", "100.9", "100.0", "100.6"),
+                ("100.6", "101.0", "100.2", "100.7"),
+                ("100.7", "101.1", "100.3", "100.8"),
+                ("100.8", "101.3", "100.6", "101.2"),
+                ("101.55", "101.7", "101.52", "101.62"),
+            ]
+        )
+    ]
+
+    report = engine.run(
+        request=_request(
+            "breakout_retest",
+        ).model_copy(
+            update={
+                "strategy_config_override": {
+                    "breakout_lookback": 4,
+                    "atr_period": 3,
+                    "regime_filter_enabled": False,
+                    "require_cost_edge": False,
+                    "max_bars_in_trade": 3,
+                    "retest_tolerance_pct": 0.004,
+                    "breakout_min_body_pct": 0.001,
+                    "breakout_max_body_pct": 0.03,
+                    "max_breakout_extension_pct": 0.01,
+                    "confirmation_min_body_pct": 0.0005,
+                    "max_stop_pct": 0.05,
+                    "stop_buffer_atr_mult": 0.0,
+                }
+            }
+        ),
+        strategy=BreakoutRetestStrategy(),
+        candles=candles,
+    )
+
+    pipeline = report.diagnostics["pipeline_counters"]
+    reject_reasons = report.diagnostics["reject_reasons"]
+    reject_reason_details = report.diagnostics["reject_reason_details"]
+    strategy_counters = report.diagnostics["strategy_specific_counters"]
+
+    assert report.metrics.total_trades == 0
+    assert pipeline["total_candles_processed"] == len(candles)
+    assert pipeline["total_signals_generated"] == 0
+    assert pipeline["total_orders_filled"] == 0
+    assert reject_reasons["insufficient_lookback"] > 0
+    assert reject_reasons["no_entry_confirmation"] > 0
+    assert reject_reason_details["retest_not_reached"] > 0
+    assert strategy_counters["breakout_candidate_count"] >= 1
+    assert strategy_counters["retest_candidate_count"] == 0
+    assert strategy_counters["confirmation_pass_count"] == 0
+    assert strategy_counters["entry_signal_count"] == 0
