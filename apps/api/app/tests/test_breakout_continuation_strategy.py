@@ -123,6 +123,72 @@ def test_breakout_continuation_rejects_overextended_breakout() -> None:
     assert signal.metadata["reason_skipped"] == "breakout_bar_too_extended"
 
 
+def test_breakout_continuation_cached_regime_snapshot_matches_uncached_result() -> None:
+    strategy = BreakoutContinuationStrategy()
+    config = _entry_config(
+        regime_filter_enabled=True,
+        range_lookback_bars=4,
+        atr_period=2,
+        regime_ema_period=3,
+        regime_atr_period=2,
+        min_htf_rsi=0,
+        filter_expanding_downside_volatility=False,
+        require_cost_edge=False,
+    )
+    start = datetime(2026, 1, 1, 0, 0, tzinfo=timezone.utc)
+    history = [
+        _candle(start + timedelta(hours=0), "105", "106", "104", "105"),
+        _candle(start + timedelta(hours=1), "104", "105", "103", "104"),
+        _candle(start + timedelta(hours=2), "103", "104", "102", "103"),
+        _candle(start + timedelta(hours=3), "102", "103", "101", "102"),
+        _candle(start + timedelta(hours=4), "101", "102", "100", "101"),
+    ]
+    closes = [strategy._decimal(candle.close) for candle in history]
+    ema_series = strategy._ema_series(closes, config.regime_ema_period)
+    atr_value = strategy._atr(history, config.regime_atr_period)
+    assert atr_value is not None
+
+    uncached_signal = strategy.generate_signal(
+        StrategyContext(
+            symbol="BTC-USDT",
+            timeframe="1h",
+            timestamp=history[-1].open_time,
+            mode="backtest",
+            metadata={"history": history, "config": config, "has_position": False},
+        )
+    )
+
+    cached_signal = strategy.generate_signal(
+        StrategyContext(
+            symbol="BTC-USDT",
+            timeframe="1h",
+            timestamp=history[-1].open_time,
+            mode="backtest",
+            metadata={
+                "history": history,
+                "config": config,
+                "has_position": False,
+                "regime_snapshot": {
+                    "one_hour_bars": len(history),
+                    "regime_close_1h": closes[-1],
+                    "regime_ema_1h": ema_series[-1],
+                    "regime_previous_ema_1h": ema_series[-2],
+                    "regime_atr_pct_1h": atr_value / closes[-1],
+                    "regime_rsi_1h": None,
+                    "regime_closes_tail": tuple(closes[-5:]),
+                },
+            },
+        )
+    )
+
+    assert uncached_signal.action == "hold"
+    assert uncached_signal.reason == "regime_blocked"
+    assert uncached_signal.metadata["skip_reason_detail"] == "close_below_ema200_1h"
+    assert cached_signal.action == uncached_signal.action
+    assert cached_signal.reason == uncached_signal.reason
+    assert cached_signal.metadata["skip_reason_detail"] == uncached_signal.metadata["skip_reason_detail"]
+
+
 def test_breakout_continuation_exits_on_breakout_failure() -> None:
     strategy = BreakoutContinuationStrategy()
     history = _entry_history()

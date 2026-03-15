@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from decimal import Decimal
 from statistics import pstdev
-from typing import Iterable, Literal, Sequence
+from typing import Iterable, Literal, Mapping, Sequence
 
 from pydantic import Field
 
@@ -57,7 +57,7 @@ class BreakoutContinuationStrategy(BaseStrategy):
     description = "Research strategy for long-only breakout continuation after a local base."
     status = "implemented"
     config_model = BreakoutContinuationConfig
-    runtime_indicator_cache_enabled = False
+    runtime_indicator_cache_enabled = True
 
     def required_history_bars(
         self,
@@ -84,7 +84,8 @@ class BreakoutContinuationStrategy(BaseStrategy):
 
     def generate_signal(self, context: StrategyContext) -> StrategySignal:
         config = self._config_from_context(context)
-        history = list(context.metadata.get("history", []))
+        raw_history = context.metadata.get("history", [])
+        history = raw_history if isinstance(raw_history, Sequence) else list(raw_history)
         if not config.enabled:
             return self._hold("disabled")
         if len(history) < self.required_history_bars(context.timeframe, config):
@@ -105,7 +106,12 @@ class BreakoutContinuationStrategy(BaseStrategy):
         range_low = min(self._decimal(bar.low) for bar in prior_range)
         range_width_pct = self._ratio(range_high - range_low, range_high)
 
-        regime_block_reason = self._regime_block_reason(history=history, timeframe=context.timeframe, config=config)
+        regime_block_reason = self._regime_block_reason(
+            history=history,
+            timeframe=context.timeframe,
+            config=config,
+            metadata=context.metadata,
+        )
         if regime_block_reason is not None:
             return self._hold(
                 "regime_blocked",
@@ -285,9 +291,14 @@ class BreakoutContinuationStrategy(BaseStrategy):
         history: Sequence[BacktestCandle],
         timeframe: str,
         config: BreakoutContinuationConfig,
+        metadata: Mapping[str, object] | None = None,
     ) -> str | None:
         if not config.regime_filter_enabled:
             return None
+
+        cache_handled, cached_reason = self._cached_regime_block_reason(config=config, metadata=metadata)
+        if cache_handled:
+            return cached_reason
 
         one_hour_history = self._aggregate_to_one_hour(history, timeframe)
         closes = [self._decimal(candle.close) for candle in one_hour_history]
@@ -328,6 +339,69 @@ class BreakoutContinuationStrategy(BaseStrategy):
             return "expanding_downside_volatility"
 
         return None
+
+    def _cached_regime_block_reason(
+        self,
+        config: BreakoutContinuationConfig,
+        metadata: Mapping[str, object] | None,
+    ) -> tuple[bool, str | None]:
+        if not self.runtime_indicator_cache_enabled or metadata is None:
+            return False, None
+
+        snapshot = metadata.get("regime_snapshot")
+        if not isinstance(snapshot, Mapping):
+            return False, None
+
+        one_hour_bars = self._snapshot_int(snapshot.get("one_hour_bars"))
+        current_close = self._snapshot_decimal(snapshot.get("regime_close_1h"))
+        current_ema = self._snapshot_decimal(snapshot.get("regime_ema_1h"))
+        previous_ema = self._snapshot_decimal(snapshot.get("regime_previous_ema_1h"))
+        atr_pct = self._snapshot_decimal(snapshot.get("regime_atr_pct_1h"))
+        htf_rsi = self._snapshot_decimal(snapshot.get("regime_rsi_1h"))
+        closes_tail = self._snapshot_decimal_sequence(snapshot.get("regime_closes_tail"))
+
+        minimum_bars = max(config.regime_ema_period, config.regime_atr_period + 1, 3)
+        if one_hour_bars is None:
+            return False, None
+        if one_hour_bars < minimum_bars:
+            return True, "insufficient_history"
+        if current_close is None or current_ema is None or previous_ema is None:
+            return False, None
+
+        if config.require_close_above_ema200_1h and current_close <= current_ema:
+            return True, "close_below_ema200_1h"
+
+        ema_slope = self._ratio(current_ema - previous_ema, previous_ema)
+        if ema_slope < self._decimal(config.min_ema_slope):
+            return True, "ema200_slope_below_threshold"
+
+        if atr_pct is None:
+            return False, None
+        if atr_pct < self._decimal(config.min_atr_pct_1h):
+            return True, "atr_pct_below_min"
+        if atr_pct > self._decimal(config.max_atr_pct_1h):
+            return True, "atr_pct_above_max"
+
+        if config.min_htf_rsi > 0:
+            if htf_rsi is None:
+                if one_hour_bars <= config.htf_rsi_period:
+                    return True, "insufficient_history"
+                return False, None
+            if htf_rsi < self._decimal(config.min_htf_rsi):
+                return True, "htf_rsi_below_threshold"
+
+        if config.filter_expanding_downside_volatility:
+            required_tail = (config.downside_volatility_lookback * 2) + 1
+            if len(closes_tail) < required_tail:
+                return True, None
+            if self._expanding_downside_volatility(
+                closes=closes_tail,
+                lookback=config.downside_volatility_lookback,
+                ratio_threshold=self._decimal(config.downside_volatility_expansion_ratio),
+            ):
+                return True, "expanding_downside_volatility"
+
+        return True, None
 
     def _stop_price(
         self,
@@ -513,3 +587,26 @@ class BreakoutContinuationStrategy(BaseStrategy):
         if denominator == ZERO:
             return ZERO
         return numerator / denominator
+
+    def _snapshot_decimal(self, value: object) -> Decimal | None:
+        if value is None:
+            return None
+        return self._decimal(value)
+
+    def _snapshot_decimal_sequence(self, values: object) -> tuple[Decimal, ...]:
+        if not isinstance(values, Iterable) or isinstance(values, (str, bytes)):
+            return tuple()
+        result: list[Decimal] = []
+        for value in values:
+            if value is None:
+                continue
+            result.append(self._decimal(value))
+        return tuple(result)
+
+    def _snapshot_int(self, value: object) -> int | None:
+        if value is None:
+            return None
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return None
