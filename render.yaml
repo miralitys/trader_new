@@ -9,7 +9,7 @@ services:
     name: trader-mvp-backend
     runtime: python
     rootDir: apps/api
-    plan: free
+    plan: standard
     buildCommand: pip install --upgrade pip && pip install -e .
     startCommand: >
       bash -lc "alembic upgrade head &&
@@ -52,7 +52,7 @@ services:
       - key: MARKET_DATA_INCREMENTAL_OVERLAP_CANDLES
         value: "3"
       - key: DEFAULT_SYMBOLS
-        value: BTC-USD,ETH-USD,SOL-USD
+        value: BTC-USDT,ETH-USDT,SOL-USDT,ARB-USDT
       - key: DEFAULT_TIMEFRAMES
         value: 5m,15m,1h
       - key: WORKER_POLL_SECONDS
@@ -104,7 +104,7 @@ services:
       - key: MARKET_DATA_INCREMENTAL_OVERLAP_CANDLES
         value: "3"
       - key: DEFAULT_SYMBOLS
-        value: BTC-USD,ETH-USD,SOL-USD
+        value: BTC-USDT,ETH-USDT,SOL-USDT,ARB-USDT
       - key: DEFAULT_TIMEFRAMES
         value: 5m,15m,1h
       - key: WORKER_POLL_SECONDS

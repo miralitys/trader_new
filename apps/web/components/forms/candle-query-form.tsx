@@ -32,7 +32,7 @@ export function CandleQueryForm({ onSubmit }: CandleQueryFormProps) {
     <form onSubmit={handleSubmit} className="space-y-5">
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
         <Field label="Symbol">
-          <input value={symbol} onChange={(event) => setSymbol(event.target.value)} className={inputClassName} placeholder="BTC-USDT" />
+          <input value={symbol} onChange={(event) => setSymbol(event.target.value)} className={inputClassName} placeholder="BTC-USDT or ARB-USDT" />
         </Field>
 
         <Field label="Timeframe">

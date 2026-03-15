@@ -11,7 +11,7 @@ type BacktestFormProps = {
   strategies: StrategySummary[];
 };
 
-const presetSymbols = ["BTC-USDT", "ETH-USDT", "SOL-USDT"] as const;
+const presetSymbols = ["BTC-USDT", "ETH-USDT", "SOL-USDT", "ARB-USDT"] as const;
 const rangePresets = [30, 60, 90, 180] as const;
 
 function buildRangeInputs(days: number) {

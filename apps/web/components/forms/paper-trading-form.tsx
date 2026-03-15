@@ -79,7 +79,7 @@ export function PaperTradingForm({ strategy, initialConfig }: PaperTradingFormPr
               value={symbols.join(", ")}
               onChange={(event) => setSymbols(compactList(event.target.value.split(",")))}
               className={inputClassName}
-              placeholder="BTC-USDT, ETH-USDT"
+              placeholder="BTC-USDT, ETH-USDT, SOL-USDT, ARB-USDT"
             />
           </Field>
 

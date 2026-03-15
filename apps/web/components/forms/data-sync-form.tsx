@@ -5,7 +5,7 @@ import { FormEvent, useState } from "react";
 import { useRunDataSync } from "@/lib/query-hooks";
 import { toDatetimeLocalInput } from "@/lib/utils";
 
-const presetSymbols = ["BTC-USDT", "ETH-USDT", "SOL-USDT"] as const;
+const presetSymbols = ["BTC-USDT", "ETH-USDT", "SOL-USDT", "ARB-USDT"] as const;
 
 export function DataSyncForm() {
   const syncMutation = useRunDataSync();
