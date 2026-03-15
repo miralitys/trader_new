@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+from datetime import datetime
+from decimal import Decimal
 from typing import Any
 
 
@@ -20,3 +23,13 @@ class BaseExchangeIntegration:
             "timeframe": timeframe,
             "status": "not_implemented",
         }
+
+
+@dataclass(frozen=True)
+class NormalizedCandle:
+    open_time: datetime
+    open: Decimal
+    high: Decimal
+    low: Decimal
+    close: Decimal
+    volume: Decimal

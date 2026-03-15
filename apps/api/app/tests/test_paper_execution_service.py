@@ -188,7 +188,7 @@ def test_process_active_runs_continues_after_single_run_failure(
             status="running",
             symbols=["BTC-USD"],
             timeframes=["5m"],
-            exchange_code="coinbase",
+            exchange_code="binance_us",
             account_balance=Decimal("10000"),
             currency="USD",
         )
@@ -263,7 +263,7 @@ def test_process_run_loads_warmup_history_for_paper_engine(
             end_at: datetime,
             limit: int,
         ):
-            assert exchange_code == "coinbase"
+            assert exchange_code == "binance_us"
             assert symbol_code == "BTC-USD"
             assert timeframe == "5m"
             assert end_at == watermark_time
@@ -328,7 +328,7 @@ def test_process_run_loads_warmup_history_for_paper_engine(
                 symbols_json=["BTC-USD"],
                 timeframes_json=["5m"],
                 metadata_json={
-                        "exchange_code": "coinbase",
+                        "exchange_code": "binance_us",
                         "fee": "0",
                         "slippage": "0",
                         "strategy_config_override": {},

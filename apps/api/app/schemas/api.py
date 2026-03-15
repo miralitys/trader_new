@@ -6,9 +6,9 @@ from typing import Any, Literal, Optional
 
 from pydantic import Field, field_validator, model_validator
 
-from app.integrations.coinbase import CoinbaseTimeframe
+from app.integrations.binance_us import BinanceUSTimeframe
 from app.schemas.common import APIModel
-from app.utils.exchanges import SUPPORTED_EXCHANGE_CODES, normalize_exchange_code
+from app.utils.exchanges import normalize_exchange_code
 
 SyncMode = Literal["initial", "incremental", "manual"]
 
@@ -56,7 +56,7 @@ class StrategyPaperStartRequest(APIModel):
         if not normalized:
             raise ValueError("At least one timeframe is required")
         for timeframe in normalized:
-            CoinbaseTimeframe.from_code(timeframe)
+            BinanceUSTimeframe.from_code(timeframe)
         return normalized
 
 
@@ -155,7 +155,7 @@ class DataSyncRequest(APIModel):
     @field_validator("timeframe")
     @classmethod
     def validate_timeframe(cls, value: str) -> str:
-        CoinbaseTimeframe.from_code(value)
+        BinanceUSTimeframe.from_code(value)
         return value
 
     @model_validator(mode="after")
@@ -166,6 +166,20 @@ class DataSyncRequest(APIModel):
         if self.start_at is not None and self.end_at is not None and self.end_at <= self.start_at:
             raise ValueError("end_at must be greater than start_at")
         return self
+
+
+class CandleCoverageResponse(APIModel):
+    exchange_code: str
+    symbol: str
+    timeframe: str
+    requested_start_at: Optional[datetime] = None
+    requested_end_at: Optional[datetime] = None
+    loaded_start_at: Optional[datetime] = None
+    loaded_end_at: Optional[datetime] = None
+    candle_count: int = 0
+    expected_candle_count: int = 0
+    missing_candle_count: int = 0
+    completion_pct: Decimal = Decimal("0")
 
 
 class DataSyncResponse(APIModel):
@@ -179,6 +193,7 @@ class DataSyncResponse(APIModel):
     normalized_rows: int
     inserted_rows: int
     status: str
+    coverage: Optional[CandleCoverageResponse] = None
 
 
 class SyncJobResponse(APIModel):
@@ -193,6 +208,7 @@ class SyncJobResponse(APIModel):
     error_text: Optional[str] = None
     created_at: datetime
     updated_at: datetime
+    coverage: Optional[CandleCoverageResponse] = None
 
 
 class CandleResponse(APIModel):

@@ -3,6 +3,7 @@
 from app.schemas.api import (
     AppLogResponse,
     BacktestListItemResponse,
+    CandleCoverageResponse,
     CandleResponse,
     DashboardDataSyncStatus,
     DashboardPerformanceSnapshot,
@@ -45,6 +46,7 @@ __all__ = [
     "BacktestResponse",
     "BacktestStopRequest",
     "BacktestTrade",
+    "CandleCoverageResponse",
     "CandleResponse",
     "DashboardDataSyncStatus",
     "DashboardPerformanceSnapshot",

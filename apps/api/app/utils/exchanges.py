@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-SUPPORTED_EXCHANGE_CODES = {"coinbase", "binance_us"}
+SUPPORTED_EXCHANGE_CODES = {"binance_us"}
 
 _EXCHANGE_CODE_ALIASES = {
-    "coinbase": "coinbase",
     "binance_us": "binance_us",
     "binanceus": "binance_us",
     "binance.us": "binance_us",

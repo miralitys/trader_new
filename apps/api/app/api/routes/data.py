@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, Query, status
 
 from app.api.dependencies import get_market_data_service, get_query_service
 from app.api.errors import BadRequestError
-from app.schemas.api import CandleResponse, DataSyncRequest, DataSyncResponse, SyncJobResponse
+from app.schemas.api import CandleCoverageResponse, CandleResponse, DataSyncRequest, DataSyncResponse, SyncJobResponse
 from app.services.market_data_service import MarketDataService
 from app.services.query_service import QueryService
 
@@ -57,6 +57,23 @@ def run_data_sync(
         normalized_rows=result.normalized_rows,
         inserted_rows=result.inserted_rows,
         status=result.status,
+        coverage=(
+            CandleCoverageResponse(
+                exchange_code=result.coverage.exchange_code,
+                symbol=result.coverage.symbol_code,
+                timeframe=result.coverage.timeframe,
+                requested_start_at=result.coverage.requested_start_at,
+                requested_end_at=result.coverage.requested_end_at,
+                loaded_start_at=result.coverage.actual_start_at,
+                loaded_end_at=result.coverage.actual_end_at,
+                candle_count=result.coverage.candle_count,
+                expected_candle_count=result.coverage.expected_candle_count,
+                missing_candle_count=result.coverage.missing_candle_count,
+                completion_pct=result.coverage.completion_pct,
+            )
+            if result.coverage is not None
+            else None
+        ),
     )
 
 
@@ -93,4 +110,22 @@ def list_candles(
         start_at=start_at,
         end_at=end_at,
         limit=limit,
+    )
+
+
+@router.get("/candles/coverage", response_model=CandleCoverageResponse, summary="Query stored candle coverage")
+def get_candle_coverage(
+    symbol: str = Query(...),
+    timeframe: str = Query(...),
+    start_at: datetime = Query(...),
+    end_at: datetime = Query(...),
+    exchange_code: str = Query(default="binance_us"),
+    service: QueryService = Depends(get_query_service),
+) -> CandleCoverageResponse:
+    return service.get_candle_coverage(
+        exchange_code=exchange_code,
+        symbol=symbol,
+        timeframe=timeframe,
+        start_at=start_at,
+        end_at=end_at,
     )

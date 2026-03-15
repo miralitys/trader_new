@@ -6,7 +6,7 @@ from typing import Any, Optional
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-from app.integrations.coinbase import CoinbaseTimeframe
+from app.integrations.binance_us import BinanceUSTimeframe
 from app.utils.exchanges import normalize_exchange_code
 
 
@@ -26,7 +26,7 @@ class BacktestRequest(BaseModel):
     @field_validator("timeframe")
     @classmethod
     def validate_timeframe(cls, value: str) -> str:
-        CoinbaseTimeframe.from_code(value)
+        BinanceUSTimeframe.from_code(value)
         return value
 
     @field_validator("strategy_code", "symbol")

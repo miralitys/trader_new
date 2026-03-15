@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   getBacktest,
   getBacktests,
+  getCandleCoverage,
   getCandles,
   getDashboardSummary,
   getHealth,
@@ -54,6 +55,7 @@ export const queryKeys = {
   backtest: (id: number) => ["backtests", id] as const,
   syncJobs: (filters: SyncJobFilters) => ["sync-jobs", filters] as const,
   candles: (filters: CandleFilters | null) => ["candles", filters] as const,
+  candleCoverage: (filters: CandleFilters | null) => ["candles", "coverage", filters] as const,
   signals: (filters: SignalFilters) => ["signals", filters] as const,
   trades: (filters: TradeFilters) => ["trades", filters] as const,
   positions: (filters: PositionFilters) => ["positions", filters] as const,
@@ -138,6 +140,14 @@ export function useCandles(filters: CandleFilters | null, enabled = true) {
   return useQuery({
     queryKey: queryKeys.candles(filters),
     queryFn: () => getCandles(filters as CandleFilters),
+    enabled: Boolean(filters) && enabled,
+  });
+}
+
+export function useCandleCoverage(filters: CandleFilters | null, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.candleCoverage(filters),
+    queryFn: () => getCandleCoverage(filters as CandleFilters),
     enabled: Boolean(filters) && enabled,
   });
 }
@@ -269,6 +279,7 @@ export function useRunDataSync() {
         queryClient.invalidateQueries({ queryKey: ["sync-jobs"] }),
         queryClient.invalidateQueries({ queryKey: queryKeys.dashboard }),
         queryClient.invalidateQueries({ queryKey: ["candles"] }),
+        queryClient.invalidateQueries({ queryKey: ["candles", "coverage"] }),
       ]);
     },
   });

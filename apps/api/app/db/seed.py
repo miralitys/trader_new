@@ -28,17 +28,6 @@ def seed_reference_data() -> None:
             session.add(binance_us_exchange)
             session.flush()
 
-        coinbase_exchange = session.scalar(select(Exchange).where(Exchange.code == "coinbase"))
-        if coinbase_exchange is None:
-            coinbase_exchange = Exchange(
-                code="coinbase",
-                name="Coinbase",
-                description="Coinbase Exchange reference record.",
-                is_active=True,
-            )
-            session.add(coinbase_exchange)
-            session.flush()
-
         for timeframe_code in settings.default_timeframe_list:
             timeframe = timeframe_rows.get(timeframe_code)
             if timeframe is None:

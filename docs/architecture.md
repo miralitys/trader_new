@@ -11,18 +11,18 @@ flowchart LR
     Worker["Celery Worker"] --> Redis
     Beat["Celery Beat"] --> Redis
     Worker --> DB
-    Worker --> Coinbase["Coinbase Exchange API"]
+    Worker --> BinanceUS["Binance.US Exchange API"]
     API --> Engine["Strategy / Backtest / Paper Engines"]
     Engine --> DB
     Engine --> Adapter["Exchange Adapter Layer"]
-    Adapter --> Coinbase
+    Adapter --> BinanceUS
 ```
 
 ## Core decisions
 
 - `FastAPI + SQLAlchemy + Alembic` keeps the backend modular and easy to extend into live trading later.
 - `Celery + Redis` gives immediate parallelism for historical sync, backtests, and future execution jobs without overcomplicating the MVP.
-- `ExchangeAdapter` isolates Coinbase-specific logic from the rest of the domain model.
+- `ExchangeAdapter` isolates Binance.US-specific logic from the rest of the domain model.
 - `BaseStrategy` plus a strategy registry gives four independent strategy modules with separate config, signals, positions, trades, and metrics.
 - `PostgreSQL` stores canonical market data, runs, logs, and results so backtests and paper trading can share the same candle history.
 - `Next.js` provides a clean operator UI with dashboard, strategy drilldown, data manager, logs, and backtest workflows.
@@ -59,7 +59,7 @@ flowchart LR
 ### Historical sync
 
 1. UI or scheduler creates `sync_job`.
-2. Celery task fetches Coinbase candles through the adapter with retry/backoff.
+2. Worker fetches Binance.US candles through the adapter with retry/backoff.
 3. Data is normalized, deduplicated, validated, and upserted into `candles`.
 4. Sync state and logs are persisted for the Data Manager screen.
 

@@ -134,6 +134,11 @@ class BacktestEngine(EngineBase):
             "entry_hold_reasons": {
                 "insufficient_history": 0,
                 "regime_blocked": 0,
+                "range_not_tight_enough": 0,
+                "breakout_not_confirmed": 0,
+                "breakout_bar_not_green": 0,
+                "breakout_bar_too_weak": 0,
+                "breakout_bar_too_extended": 0,
                 "flush_not_deep_enough": 0,
                 "late_rebound_entry": 0,
                 "flush_low_too_old": 0,
@@ -577,10 +582,30 @@ class BacktestEngine(EngineBase):
             return "insufficient_history", None
         if reason == "regime_blocked":
             return "regime_blocked", None
+        if reason == "range_not_tight_enough":
+            return "range_not_tight_enough", None
+        if reason == "breakout_not_confirmed":
+            return "breakout_not_confirmed", None
+        if reason == "breakout_bar_not_green":
+            return "breakout_bar_not_green", None
+        if reason == "breakout_bar_too_weak":
+            return "breakout_bar_too_weak", None
+        if reason == "breakout_bar_too_extended":
+            return "breakout_bar_too_extended", None
         if reason == "insufficient_tp_vs_cost":
             return "insufficient_tp_vs_cost", None
         if reason == "max_stop_exceeded":
             return "max_stop_exceeded", None
+        if detail == "range_not_tight_enough":
+            return "range_not_tight_enough", None
+        if detail == "breakout_not_confirmed":
+            return "breakout_not_confirmed", None
+        if detail == "breakout_bar_not_green":
+            return "breakout_bar_not_green", None
+        if detail == "breakout_bar_too_weak":
+            return "breakout_bar_too_weak", None
+        if detail == "breakout_bar_too_extended":
+            return "breakout_bar_too_extended", None
         if detail == "flush_not_deep_enough":
             return "flush_not_deep_enough", None
         if detail == "late_rebound_entry":

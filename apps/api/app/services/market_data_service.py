@@ -9,9 +9,7 @@ from app.core.logging import get_logger
 from app.integrations.binance_us.client import BinanceUSClientError
 from app.integrations.binance_us import BinanceUSClient, BinanceUSTimeframe, normalize_binance_us_candles
 from app.db.session import SessionLocal
-from app.integrations.coinbase.client import CoinbaseClientError
-from app.integrations.coinbase import CoinbaseClient, CoinbaseTimeframe, normalize_coinbase_candles
-from app.repositories.candle_repository import CandleRepository
+from app.repositories.candle_repository import CandleCoverageSummary, CandleRepository
 from app.repositories.sync_job_repository import SyncJobRepository
 from app.utils.exchanges import normalize_exchange_code
 from app.utils.time import ensure_utc, utc_now
@@ -31,21 +29,19 @@ class MarketDataSyncResult:
     normalized_rows: int
     inserted_rows: int
     status: str
+    coverage: Optional[CandleCoverageSummary] = None
 
 
 class MarketDataService:
     def __init__(
         self,
         settings: Optional[Settings] = None,
-        coinbase_client: Optional[CoinbaseClient] = None,
         binance_us_client: Optional[BinanceUSClient] = None,
     ) -> None:
         self.settings = settings or get_settings()
-        self.coinbase_client = coinbase_client or CoinbaseClient(settings=self.settings)
         self.binance_us_client = binance_us_client or BinanceUSClient(settings=self.settings)
 
     def close(self) -> None:
-        self.coinbase_client.close()
         self.binance_us_client.close()
 
     def initial_historical_sync(
@@ -148,6 +144,7 @@ class MarketDataService:
         total_fetched = 0
         total_normalized = 0
         total_inserted = 0
+        coverage: Optional[CandleCoverageSummary] = None
 
         try:
             candle_repository = CandleRepository(session)
@@ -188,6 +185,13 @@ class MarketDataService:
                 total_inserted += inserted_rows
                 session.commit()
 
+            coverage = candle_repository.get_candle_coverage(
+                exchange_code=exchange.code,
+                symbol_code=symbol,
+                timeframe=timeframe_value.value,
+                start_at=normalized_start,
+                end_at=normalized_end,
+            )
             sync_job_repository.mark_completed(sync_job, rows_inserted=total_inserted)
             session.commit()
 
@@ -217,6 +221,7 @@ class MarketDataService:
                 normalized_rows=total_normalized,
                 inserted_rows=total_inserted,
                 status=sync_job.status.value,
+                coverage=coverage,
             )
         except Exception as exc:
             session.rollback()
@@ -244,23 +249,19 @@ class MarketDataService:
                     session.rollback()
                     logger.exception("Failed to record sync job failure state", extra={"job_id": sync_job.id})
 
-            if isinstance(exc, (CoinbaseClientError, BinanceUSClientError)):
+            if isinstance(exc, BinanceUSClientError):
                 raise ValueError(str(exc)) from exc
 
             raise
         finally:
             session.close()
 
-    def _client_for_exchange(self, exchange_code: str) -> CoinbaseClient | BinanceUSClient:
-        if exchange_code == "coinbase":
-            return self.coinbase_client
+    def _client_for_exchange(self, exchange_code: str) -> BinanceUSClient:
         if exchange_code == "binance_us":
             return self.binance_us_client
         raise ValueError(f"Unsupported exchange: {exchange_code}")
 
-    def _timeframe_for_exchange(self, exchange_code: str, timeframe: str) -> CoinbaseTimeframe | BinanceUSTimeframe:
-        if exchange_code == "coinbase":
-            return CoinbaseTimeframe.from_code(timeframe)
+    def _timeframe_for_exchange(self, exchange_code: str, timeframe: str) -> BinanceUSTimeframe:
         if exchange_code == "binance_us":
             return BinanceUSTimeframe.from_code(timeframe)
         raise ValueError(f"Unsupported exchange: {exchange_code}")
@@ -271,14 +272,12 @@ class MarketDataService:
         raw_chunk: list[list[object]],
         timeframe: str,
     ):
-        if exchange_code == "coinbase":
-            return normalize_coinbase_candles(raw_chunk, CoinbaseTimeframe.from_code(timeframe))
         if exchange_code == "binance_us":
             return normalize_binance_us_candles(raw_chunk, BinanceUSTimeframe.from_code(timeframe))
         raise ValueError(f"Unsupported exchange: {exchange_code}")
 
     def _exchange_name(self, exchange_code: str) -> str:
-        mapping = {"coinbase": "Coinbase", "binance_us": "Binance.US"}
+        mapping = {"binance_us": "Binance.US"}
         try:
             return mapping[exchange_code]
         except KeyError as exc:
@@ -286,7 +285,6 @@ class MarketDataService:
 
     def _max_candles_per_request(self, exchange_code: str) -> int:
         mapping = {
-            "coinbase": self.settings.coinbase_max_candles_per_request,
             "binance_us": self.settings.binance_us_max_candles_per_request,
         }
         try:

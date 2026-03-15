@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from app.strategies.base import BaseStrategy
+from app.strategies.breakout_continuation import BreakoutContinuationStrategy
 from app.strategies.breakout_retest import BreakoutRetestStrategy
 from app.strategies.pullback_to_trend import PullbackToTrendStrategy
 from app.strategies.trend_retrace_70 import TrendRetrace70Strategy
@@ -9,6 +10,7 @@ from app.strategies.trend_retrace_70 import TrendRetrace70Strategy
 _STRATEGIES: dict[str, BaseStrategy] = {
     strategy.key: strategy
     for strategy in [
+        BreakoutContinuationStrategy(),
         BreakoutRetestStrategy(),
         PullbackToTrendStrategy(),
         TrendRetrace70Strategy(),

@@ -10,5 +10,4 @@ def test_health_endpoint_returns_ok(client: TestClient) -> None:
     payload = response.json()
     assert payload["status"] == "ok"
     assert payload["services"]["api"] == "ready"
-    assert payload["services"]["coinbase"] == "configured"
     assert payload["services"]["binance_us"] == "configured"

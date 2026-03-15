@@ -9,6 +9,7 @@ from app.api.dependencies import get_backtest_runner_service, get_query_service,
 from app.main import app
 from app.schemas.api import (
     BacktestListItemResponse,
+    CandleCoverageResponse,
     DashboardDataSyncStatus,
     DashboardRunStatus,
     DashboardSummaryResponse,
@@ -63,7 +64,7 @@ class FakeBacktestRunnerService:
             strategy_code="breakout_retest",
             symbol="BTC-USD",
             timeframe="5m",
-            exchange_code="coinbase",
+            exchange_code="binance_us",
             status="failed",
             initial_capital=Decimal("10000"),
             final_equity=Decimal("10000"),
@@ -112,6 +113,28 @@ class FakeQueryService:
             data_sync_status=DashboardDataSyncStatus(),
         )
 
+    def get_candle_coverage(
+        self,
+        exchange_code: str,
+        symbol: str,
+        timeframe: str,
+        start_at: datetime,
+        end_at: datetime,
+    ) -> CandleCoverageResponse:
+        return CandleCoverageResponse(
+            exchange_code=exchange_code,
+            symbol=symbol,
+            timeframe=timeframe,
+            requested_start_at=start_at,
+            requested_end_at=end_at,
+            loaded_start_at=start_at,
+            loaded_end_at=end_at,
+            candle_count=13,
+            expected_candle_count=13,
+            missing_candle_count=0,
+            completion_pct=Decimal("100"),
+        )
+
 
 def test_strategies_endpoint_returns_registered_strategies(client: TestClient) -> None:
     app.dependency_overrides[get_strategy_service] = lambda: FakeStrategyService()
@@ -135,6 +158,7 @@ def test_backtest_run_endpoint_returns_report(client: TestClient) -> None:
             "timeframe": "5m",
             "start_at": "2026-03-14T00:00:00Z",
             "end_at": "2026-03-14T01:00:00Z",
+            "exchange_code": "binance_us",
             "initial_capital": "10000",
             "fee": "0.001",
             "slippage": "0.0005",
@@ -172,3 +196,24 @@ def test_dashboard_summary_endpoint_returns_aggregate_payload(client: TestClient
     assert payload["run_status"]["active_paper_runs"] == 1
     assert payload["open_positions_count"] == 2
     assert payload["recent_backtests"][0]["strategy_code"] == "trend_retrace_70"
+
+
+def test_candle_coverage_endpoint_returns_aggregate_payload(client: TestClient) -> None:
+    app.dependency_overrides[get_query_service] = lambda: FakeQueryService()
+
+    response = client.get(
+        "/api/candles/coverage",
+        params={
+            "exchange_code": "binance_us",
+            "symbol": "BTC-USD",
+            "timeframe": "5m",
+            "start_at": "2026-03-14T00:00:00Z",
+            "end_at": "2026-03-14T01:00:00Z",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["symbol"] == "BTC-USD"
+    assert payload["candle_count"] == 13
+    assert payload["completion_pct"] == "100"

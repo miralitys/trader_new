@@ -22,6 +22,7 @@ from app.repositories.trade_repository import TradeRepository
 from app.schemas.api import (
     AppLogResponse,
     BacktestListItemResponse,
+    CandleCoverageResponse,
     CandleResponse,
     DashboardDataSyncStatus,
     DashboardPerformanceSnapshot,
@@ -175,9 +176,49 @@ class QueryService:
                 error_text=job.error_text,
                 created_at=job.created_at,
                 updated_at=job.updated_at,
+                coverage=(
+                    self.get_candle_coverage(
+                        exchange_code=job.exchange,
+                        symbol=job.symbol,
+                        timeframe=job.timeframe,
+                        start_at=job.start_at,
+                        end_at=job.end_at,
+                    )
+                    if job.start_at is not None and job.end_at is not None
+                    else None
+                ),
             )
             for job in jobs
         ]
+
+    def get_candle_coverage(
+        self,
+        exchange_code: str,
+        symbol: str,
+        timeframe: str,
+        start_at: datetime,
+        end_at: datetime,
+    ) -> CandleCoverageResponse:
+        coverage = self.candle_repository.get_candle_coverage(
+            exchange_code=exchange_code,
+            symbol_code=symbol,
+            timeframe=timeframe,
+            start_at=ensure_utc(start_at),
+            end_at=ensure_utc(end_at),
+        )
+        return CandleCoverageResponse(
+            exchange_code=coverage.exchange_code,
+            symbol=symbol,
+            timeframe=timeframe,
+            requested_start_at=coverage.requested_start_at,
+            requested_end_at=coverage.requested_end_at,
+            loaded_start_at=coverage.actual_start_at,
+            loaded_end_at=coverage.actual_end_at,
+            candle_count=coverage.candle_count,
+            expected_candle_count=coverage.expected_candle_count,
+            missing_candle_count=coverage.missing_candle_count,
+            completion_pct=coverage.completion_pct,
+        )
 
     def list_candles(
         self,

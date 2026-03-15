@@ -37,17 +37,17 @@ services:
         fromDatabase:
           name: trader-mvp-db
           property: connectionString
-      - key: COINBASE_API_BASE_URL
-        value: https://api.exchange.coinbase.com
-      - key: COINBASE_TIMEOUT_SECONDS
+      - key: BINANCE_US_API_BASE_URL
+        value: https://api.binance.us
+      - key: BINANCE_US_TIMEOUT_SECONDS
         value: "20"
-      - key: COINBASE_MAX_CANDLES_PER_REQUEST
-        value: "300"
-      - key: COINBASE_RETRY_ATTEMPTS
+      - key: BINANCE_US_MAX_CANDLES_PER_REQUEST
+        value: "1000"
+      - key: BINANCE_US_RETRY_ATTEMPTS
         value: "5"
-      - key: COINBASE_BACKOFF_MIN_SECONDS
+      - key: BINANCE_US_BACKOFF_MIN_SECONDS
         value: "1.0"
-      - key: COINBASE_BACKOFF_MAX_SECONDS
+      - key: BINANCE_US_BACKOFF_MAX_SECONDS
         value: "8.0"
       - key: MARKET_DATA_INCREMENTAL_OVERLAP_CANDLES
         value: "3"
@@ -89,17 +89,17 @@ services:
         fromDatabase:
           name: trader-mvp-db
           property: connectionString
-      - key: COINBASE_API_BASE_URL
-        value: https://api.exchange.coinbase.com
-      - key: COINBASE_TIMEOUT_SECONDS
+      - key: BINANCE_US_API_BASE_URL
+        value: https://api.binance.us
+      - key: BINANCE_US_TIMEOUT_SECONDS
         value: "20"
-      - key: COINBASE_MAX_CANDLES_PER_REQUEST
-        value: "300"
-      - key: COINBASE_RETRY_ATTEMPTS
+      - key: BINANCE_US_MAX_CANDLES_PER_REQUEST
+        value: "1000"
+      - key: BINANCE_US_RETRY_ATTEMPTS
         value: "5"
-      - key: COINBASE_BACKOFF_MIN_SECONDS
+      - key: BINANCE_US_BACKOFF_MIN_SECONDS
         value: "1.0"
-      - key: COINBASE_BACKOFF_MAX_SECONDS
+      - key: BINANCE_US_BACKOFF_MAX_SECONDS
         value: "8.0"
       - key: MARKET_DATA_INCREMENTAL_OVERLAP_CANDLES
         value: "3"

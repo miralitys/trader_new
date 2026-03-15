@@ -159,6 +159,16 @@ class DiagnosticHoldStrategy(BaseStrategy):
             return StrategySignal(action="hold", reason="insufficient_tp_vs_cost")
         if index == 11:
             return StrategySignal(action="hold", reason="max_stop_exceeded")
+        if index == 12:
+            return StrategySignal(action="hold", reason="range_not_tight_enough")
+        if index == 13:
+            return StrategySignal(action="hold", reason="breakout_not_confirmed")
+        if index == 14:
+            return StrategySignal(action="hold", reason="breakout_bar_not_green")
+        if index == 15:
+            return StrategySignal(action="hold", reason="breakout_bar_too_weak")
+        if index == 16:
+            return StrategySignal(action="hold", reason="breakout_bar_too_extended")
         return StrategySignal(action="hold", reason="invalid_target")
 
 
@@ -340,7 +350,7 @@ def test_backtest_engine_aggregates_entry_hold_reason_diagnostics() -> None:
     start = datetime(2026, 1, 1, 0, 0, tzinfo=timezone.utc)
     candles = [
         _candle(start + timedelta(minutes=index * 5), str(100 + index))
-        for index in range(13)
+        for index in range(18)
     ]
 
     report = engine.run(
@@ -349,10 +359,15 @@ def test_backtest_engine_aggregates_entry_hold_reason_diagnostics() -> None:
         candles=candles,
     )
 
-    assert report.diagnostics["entry_hold_total"] == 13
+    assert report.diagnostics["entry_hold_total"] == 18
     assert report.diagnostics["entry_hold_reasons"] == {
         "insufficient_history": 1,
         "regime_blocked": 1,
+        "range_not_tight_enough": 1,
+        "breakout_not_confirmed": 1,
+        "breakout_bar_not_green": 1,
+        "breakout_bar_too_weak": 1,
+        "breakout_bar_too_extended": 1,
         "flush_not_deep_enough": 1,
         "late_rebound_entry": 1,
         "flush_low_too_old": 1,

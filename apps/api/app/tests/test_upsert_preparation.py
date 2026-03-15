@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from decimal import Decimal
 
-from app.integrations.coinbase.schemas import NormalizedCandle
+from app.integrations.binance_us import NormalizedCandle
 from app.repositories.candle_repository import prepare_candle_upsert_rows
 
 

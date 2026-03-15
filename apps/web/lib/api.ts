@@ -7,6 +7,7 @@ import type {
   BacktestRunRequest,
   BacktestStopRequest,
   Candle,
+  CandleCoverage,
   CandleFilters,
   DashboardSummary,
   DataSyncRequest,
@@ -190,6 +191,18 @@ export function getCandles(filters: CandleFilters) {
       end_at: filters.endAt,
       exchange_code: filters.exchangeCode ?? "binance_us",
       limit: filters.limit,
+    })}`,
+  );
+}
+
+export function getCandleCoverage(filters: CandleFilters) {
+  return apiRequest<CandleCoverage>(
+    `/api/candles/coverage${buildQueryString({
+      symbol: filters.symbol,
+      timeframe: filters.timeframe,
+      start_at: filters.startAt,
+      end_at: filters.endAt,
+      exchange_code: filters.exchangeCode ?? "binance_us",
     })}`,
   );
 }

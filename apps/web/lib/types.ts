@@ -201,6 +201,7 @@ export type DataSyncResponse = {
   normalized_rows: number;
   inserted_rows: number;
   status: string;
+  coverage: CandleCoverage | null;
 };
 
 export type SyncJob = {
@@ -215,6 +216,21 @@ export type SyncJob = {
   error_text: string | null;
   created_at: string;
   updated_at: string;
+  coverage: CandleCoverage | null;
+};
+
+export type CandleCoverage = {
+  exchange_code: string;
+  symbol: string;
+  timeframe: string;
+  requested_start_at: string | null;
+  requested_end_at: string | null;
+  loaded_start_at: string | null;
+  loaded_end_at: string | null;
+  candle_count: number;
+  expected_candle_count: number;
+  missing_candle_count: number;
+  completion_pct: NumericValue;
 };
 
 export type Candle = {

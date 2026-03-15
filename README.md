@@ -1,8 +1,8 @@
 # Trader MVP
 
-Trader MVP is a locally runnable scaffold for algorithmic trading research on Coinbase. It includes:
+Trader MVP is a locally runnable scaffold for algorithmic trading research on Binance.US. It includes:
 
-- candle ingestion from Coinbase into Postgres
+- candle ingestion from Binance.US into Postgres
 - a FastAPI backend with strategy, backtest, paper trading, data, logs, and dashboard endpoints
 - a Next.js frontend for operating the system
 - a background worker that processes paper trading runs against new candles
@@ -136,7 +136,7 @@ curl -X POST http://localhost:8000/api/data/sync \
   -H "Content-Type: application/json" \
   -d '{
     "mode": "manual",
-    "symbol": "BTC-USD",
+    "symbol": "BTC-USDT",
     "timeframe": "5m",
     "start_at": "2026-03-01T00:00:00Z",
     "end_at": "2026-03-02T00:00:00Z"
@@ -150,7 +150,7 @@ curl -X POST http://localhost:8000/api/data/sync \
   -H "Content-Type: application/json" \
   -d '{
     "mode": "incremental",
-    "symbol": "BTC-USD",
+    "symbol": "BTC-USDT",
     "timeframe": "5m"
   }'
 ```
@@ -168,11 +168,11 @@ curl -X POST http://localhost:8000/api/backtests/run \
   -H "Content-Type: application/json" \
   -d '{
     "strategy_code": "breakout_retest",
-    "symbol": "BTC-USD",
+    "symbol": "BTC-USDT",
     "timeframe": "5m",
     "start_at": "2026-03-01T00:00:00Z",
     "end_at": "2026-03-07T00:00:00Z",
-    "exchange_code": "coinbase",
+    "exchange_code": "binance_us",
     "initial_capital": "10000",
     "fee": "0.001",
     "slippage": "0.0005",
@@ -201,9 +201,9 @@ Start a paper run:
 curl -X POST http://localhost:8000/api/strategies/breakout_retest/start-paper \
   -H "Content-Type: application/json" \
   -d '{
-    "symbols": ["BTC-USD"],
+    "symbols": ["BTC-USDT"],
     "timeframes": ["5m"],
-    "exchange_code": "coinbase",
+    "exchange_code": "binance_us",
     "initial_balance": "10000",
     "currency": "USD",
     "fee": "0.001",
@@ -240,7 +240,7 @@ curl http://localhost:8000/api/dashboard/summary
 Get candles for a range:
 
 ```bash
-curl "http://localhost:8000/api/candles?symbol=BTC-USD&timeframe=5m&start_at=2026-03-01T00:00:00Z&end_at=2026-03-02T00:00:00Z"
+curl "http://localhost:8000/api/candles?symbol=BTC-USDT&timeframe=5m&start_at=2026-03-01T00:00:00Z&end_at=2026-03-02T00:00:00Z"
 ```
 
 List trades:
@@ -277,5 +277,5 @@ npm run lint
 ## Notes
 
 - Redis is included for local parity and future async expansion, even though the current worker loop is lightweight.
-- The backend assumes Coinbase-supported timeframes `5m`, `15m`, and `1h`.
+- The backend assumes Binance.US-supported timeframes `5m`, `15m`, and `1h`.
 - Frontend API calls use `NEXT_PUBLIC_API_URL`, which defaults to `http://localhost:8000`.

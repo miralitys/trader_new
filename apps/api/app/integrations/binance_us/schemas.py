@@ -5,7 +5,7 @@ from decimal import Decimal, InvalidOperation
 from enum import Enum
 from typing import Iterable, Iterator, Optional, Sequence
 
-from app.integrations.coinbase.schemas import NormalizedCandle
+from app.integrations.base import NormalizedCandle
 from app.utils.time import ensure_utc
 
 

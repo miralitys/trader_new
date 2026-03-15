@@ -1,17 +1,58 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime
+from decimal import Decimal, ROUND_HALF_UP
 from typing import Iterable, Optional
 
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
 
 from app.core.logging import get_logger
-from app.integrations.coinbase.schemas import CoinbaseTimeframe, NormalizedCandle
+from app.integrations.binance_us import BinanceUSTimeframe, NormalizedCandle
 from app.models import Candle, Exchange, Symbol, Timeframe
 from app.repositories.base import BaseRepository
+from app.utils.time import ensure_utc
 
 logger = get_logger(__name__)
+
+
+@dataclass(frozen=True)
+class CandleCoverageSummary:
+    exchange_code: str
+    symbol_code: str
+    timeframe: str
+    requested_start_at: Optional[datetime]
+    requested_end_at: Optional[datetime]
+    actual_start_at: Optional[datetime]
+    actual_end_at: Optional[datetime]
+    candle_count: int
+    expected_candle_count: int
+    missing_candle_count: int
+    completion_pct: Decimal
+
+
+def estimate_expected_candle_count(
+    timeframe: str,
+    start_at: Optional[datetime],
+    end_at: Optional[datetime],
+) -> int:
+    if start_at is None or end_at is None:
+        return 0
+
+    timeframe_value = BinanceUSTimeframe.from_code(timeframe)
+    normalized_start = int(ensure_utc(start_at).timestamp())
+    normalized_end = int(ensure_utc(end_at).timestamp())
+    if normalized_end < normalized_start:
+        return 0
+
+    step_seconds = timeframe_value.granularity_seconds
+    aligned_start = ((normalized_start + step_seconds - 1) // step_seconds) * step_seconds
+    aligned_end = (normalized_end // step_seconds) * step_seconds
+    if aligned_end < aligned_start:
+        return 0
+
+    return ((aligned_end - aligned_start) // step_seconds) + 1
 
 
 def prepare_candle_upsert_rows(
@@ -77,7 +118,7 @@ class CandleRepository(BaseRepository):
         if timeframe_row is not None:
             return timeframe_row
 
-        timeframe_value = CoinbaseTimeframe.from_code(timeframe)
+        timeframe_value = BinanceUSTimeframe.from_code(timeframe)
         stmt = (
             insert(Timeframe)
             .values(
@@ -242,6 +283,85 @@ class CandleRepository(BaseRepository):
         if end_at is not None:
             stmt = stmt.where(Candle.open_time <= end_at)
         return list(reversed(list(self.session.scalars(stmt))))
+
+    def get_candle_coverage(
+        self,
+        exchange_code: str,
+        symbol_code: str,
+        timeframe: str,
+        start_at: Optional[datetime] = None,
+        end_at: Optional[datetime] = None,
+    ) -> CandleCoverageSummary:
+        expected_candle_count = estimate_expected_candle_count(timeframe, start_at, end_at)
+
+        exchange = self.get_exchange(exchange_code)
+        if exchange is None:
+            return CandleCoverageSummary(
+                exchange_code=exchange_code,
+                symbol_code=symbol_code,
+                timeframe=timeframe,
+                requested_start_at=start_at,
+                requested_end_at=end_at,
+                actual_start_at=None,
+                actual_end_at=None,
+                candle_count=0,
+                expected_candle_count=expected_candle_count,
+                missing_candle_count=expected_candle_count,
+                completion_pct=Decimal("0"),
+            )
+
+        symbol = self.get_symbol(exchange.id, symbol_code)
+        if symbol is None:
+            return CandleCoverageSummary(
+                exchange_code=exchange_code,
+                symbol_code=symbol_code,
+                timeframe=timeframe,
+                requested_start_at=start_at,
+                requested_end_at=end_at,
+                actual_start_at=None,
+                actual_end_at=None,
+                candle_count=0,
+                expected_candle_count=expected_candle_count,
+                missing_candle_count=expected_candle_count,
+                completion_pct=Decimal("0"),
+            )
+
+        stmt = select(
+            func.count(Candle.id),
+            func.min(Candle.open_time),
+            func.max(Candle.open_time),
+        ).where(
+            Candle.exchange_id == exchange.id,
+            Candle.symbol_id == symbol.id,
+            Candle.timeframe == timeframe,
+        )
+        if start_at is not None:
+            stmt = stmt.where(Candle.open_time >= start_at)
+        if end_at is not None:
+            stmt = stmt.where(Candle.open_time <= end_at)
+
+        candle_count, actual_start_at, actual_end_at = self.session.execute(stmt).one()
+        candle_count = int(candle_count or 0)
+        missing_candle_count = max(expected_candle_count - candle_count, 0)
+        completion_pct = Decimal("0")
+        if expected_candle_count > 0:
+            completion_pct = (
+                (Decimal(candle_count) * Decimal("100")) / Decimal(expected_candle_count)
+            ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+        return CandleCoverageSummary(
+            exchange_code=exchange_code,
+            symbol_code=symbol_code,
+            timeframe=timeframe,
+            requested_start_at=start_at,
+            requested_end_at=end_at,
+            actual_start_at=actual_start_at,
+            actual_end_at=actual_end_at,
+            candle_count=candle_count,
+            expected_candle_count=expected_candle_count,
+            missing_candle_count=missing_candle_count,
+            completion_pct=completion_pct,
+        )
 
     def upsert_candles(
         self,

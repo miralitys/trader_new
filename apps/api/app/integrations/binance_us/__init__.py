@@ -3,6 +3,7 @@
 from app.integrations.binance_us.client import BinanceUSClient
 from app.integrations.binance_us.schemas import (
     BinanceUSTimeframe,
+    NormalizedCandle,
     normalize_binance_us_candles,
     normalize_binance_us_symbol,
 )
@@ -13,6 +14,7 @@ __all__ = [
     "BinanceUSClient",
     "BinanceUSIntegration",
     "BinanceUSTimeframe",
+    "NormalizedCandle",
     "normalize_binance_us_candles",
     "normalize_binance_us_symbol",
 ]

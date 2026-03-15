@@ -6,7 +6,7 @@ from typing import Any, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
-from app.integrations.coinbase import CoinbaseTimeframe
+from app.integrations.binance_us import BinanceUSTimeframe
 from app.utils.exchanges import normalize_exchange_code
 
 
@@ -50,7 +50,7 @@ class PaperRunStartRequest(BaseModel):
         if not normalized:
             raise ValueError("At least one timeframe is required")
         for timeframe in normalized:
-            CoinbaseTimeframe.from_code(timeframe)
+            BinanceUSTimeframe.from_code(timeframe)
         return normalized
 
 

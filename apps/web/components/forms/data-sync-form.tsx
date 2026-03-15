@@ -2,8 +2,9 @@
 
 import { FormEvent, useState } from "react";
 
+import { DateRangePresets } from "@/components/forms/date-range-presets";
 import { useRunDataSync } from "@/lib/query-hooks";
-import { toDatetimeLocalInput } from "@/lib/utils";
+import { formatInteger, formatPercent, toDatetimeLocalInput } from "@/lib/utils";
 
 const presetSymbols = ["BTC-USDT", "ETH-USDT", "SOL-USDT", "ARB-USDT"] as const;
 
@@ -15,6 +16,13 @@ export function DataSyncForm() {
   const [startAt, setStartAt] = useState(toDatetimeLocalInput(new Date(Date.now() - 1000 * 60 * 60 * 24 * 7)));
   const [endAt, setEndAt] = useState(toDatetimeLocalInput(new Date()));
   const [message, setMessage] = useState<string | null>(null);
+
+  function applyDayPreset(days: number) {
+    const nextEnd = new Date();
+    const nextStart = new Date(nextEnd.getTime() - days * 24 * 60 * 60 * 1000);
+    setStartAt(toDatetimeLocalInput(nextStart));
+    setEndAt(toDatetimeLocalInput(nextEnd));
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -29,7 +37,12 @@ export function DataSyncForm() {
         start_at: mode === "incremental" ? undefined : new Date(startAt).toISOString(),
         end_at: new Date(endAt).toISOString(),
       });
-      setMessage(`Sync job #${result.job_id} finished with status ${result.status}. Inserted ${result.inserted_rows} candles.`);
+      const coverageMessage = result.coverage
+        ? ` Coverage ${formatInteger(result.coverage.candle_count)} / ${formatInteger(result.coverage.expected_candle_count)} (${formatPercent(result.coverage.completion_pct)}).`
+        : "";
+      setMessage(
+        `Sync job #${result.job_id} finished with status ${result.status}. Inserted ${formatInteger(result.inserted_rows)} new candles.${coverageMessage}`,
+      );
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to run data sync.");
     }
@@ -75,6 +88,14 @@ export function DataSyncForm() {
         <Field label="End">
           <input type="datetime-local" value={endAt} onChange={(event) => setEndAt(event.target.value)} className={inputClassName} />
         </Field>
+
+        {showRange ? (
+          <Field label="Quick range">
+            <div className="flex h-11 items-center rounded-xl border border-white/10 bg-slate-950/40 px-3">
+              <DateRangePresets onSelect={applyDayPreset} />
+            </div>
+          </Field>
+        ) : null}
       </div>
 
       <div className="flex flex-col gap-3 border-t border-white/6 pt-4 md:flex-row md:items-center md:justify-between">

@@ -123,7 +123,7 @@ export default function DashboardPage() {
         <MetricCard
           label="Latest sync"
           value={latestJob ? `${latestJob.symbol} ${latestJob.timeframe}` : "No jobs"}
-          hint={latestJob ? `${formatInteger(latestJob.rows_inserted)} rows · ${formatStatusLabel(latestJob.status)}` : "Run data sync"}
+          hint={latestJob ? `${formatInteger(latestJob.rows_inserted)} new rows · ${formatStatusLabel(latestJob.status)}` : "Run data sync"}
           tone={latestJob?.status === "failed" ? "danger" : latestJob ? "positive" : "default"}
         />
       </section>
