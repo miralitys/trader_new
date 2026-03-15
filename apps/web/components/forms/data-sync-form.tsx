@@ -5,10 +5,12 @@ import { FormEvent, useState } from "react";
 import { useRunDataSync } from "@/lib/query-hooks";
 import { toDatetimeLocalInput } from "@/lib/utils";
 
+const presetSymbols = ["BTC-USDT", "ETH-USDT", "SOL-USDT"] as const;
+
 export function DataSyncForm() {
   const syncMutation = useRunDataSync();
   const [mode, setMode] = useState<"initial" | "incremental" | "manual">("manual");
-  const [symbol, setSymbol] = useState("BTC-USDT");
+  const [symbol, setSymbol] = useState<string>(presetSymbols[0]);
   const [timeframe, setTimeframe] = useState("5m");
   const [startAt, setStartAt] = useState(toDatetimeLocalInput(new Date(Date.now() - 1000 * 60 * 60 * 24 * 7)));
   const [endAt, setEndAt] = useState(toDatetimeLocalInput(new Date()));
@@ -47,7 +49,13 @@ export function DataSyncForm() {
         </Field>
 
         <Field label="Symbol">
-          <input value={symbol} onChange={(event) => setSymbol(event.target.value)} className={inputClassName} placeholder="BTC-USDT" />
+          <select value={symbol} onChange={(event) => setSymbol(event.target.value)} className={inputClassName}>
+            {presetSymbols.map((presetSymbol) => (
+              <option key={presetSymbol} value={presetSymbol}>
+                {presetSymbol}
+              </option>
+            ))}
+          </select>
         </Field>
 
         <Field label="Timeframe">

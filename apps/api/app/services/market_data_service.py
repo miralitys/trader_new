@@ -6,8 +6,10 @@ from typing import Optional
 
 from app.core.config import Settings, get_settings
 from app.core.logging import get_logger
+from app.integrations.binance_us.client import BinanceUSClientError
 from app.integrations.binance_us import BinanceUSClient, BinanceUSTimeframe, normalize_binance_us_candles
 from app.db.session import SessionLocal
+from app.integrations.coinbase.client import CoinbaseClientError
 from app.integrations.coinbase import CoinbaseClient, CoinbaseTimeframe, normalize_coinbase_candles
 from app.repositories.candle_repository import CandleRepository
 from app.repositories.sync_job_repository import SyncJobRepository
@@ -241,6 +243,9 @@ class MarketDataService:
                 except Exception:
                     session.rollback()
                     logger.exception("Failed to record sync job failure state", extra={"job_id": sync_job.id})
+
+            if isinstance(exc, (CoinbaseClientError, BinanceUSClientError)):
+                raise ValueError(str(exc)) from exc
 
             raise
         finally:

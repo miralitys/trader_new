@@ -146,6 +146,16 @@ class BinanceUSClient:
                     raise BinanceUSTransientError(
                         f"Binance.US server error {response.status_code}: {response.text}"
                     )
+                if 400 <= response.status_code < 500:
+                    try:
+                        payload = response.json()
+                    except ValueError:
+                        payload = None
+                    if isinstance(payload, dict) and payload.get("msg"):
+                        raise BinanceUSResponseError(str(payload["msg"]))
+                    raise BinanceUSResponseError(
+                        f"Binance.US request failed with status {response.status_code}"
+                    )
                 response.raise_for_status()
                 payload = response.json()
                 if not isinstance(payload, list):
