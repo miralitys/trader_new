@@ -8,18 +8,18 @@ type DateRangePresetsProps = {
 
 export function DateRangePresets({ onSelect }: DateRangePresetsProps) {
   return (
-    <div className="flex flex-wrap gap-2">
+    <div className="flex flex-wrap items-center gap-2">
       {dayPresets.map((days) => (
         <button
           key={days}
           type="button"
           onClick={() => onSelect(days)}
-          className="rounded-full border border-white/10 bg-slate-950/60 px-3 py-1.5 text-sm font-medium text-slate-200 transition hover:border-sky-400/30 hover:bg-sky-500/10 hover:text-sky-100"
+          className="min-w-[60px] rounded-full border border-white/10 bg-slate-950/60 px-3 py-1.5 text-sm font-medium text-slate-200 transition hover:border-sky-400/30 hover:bg-sky-500/10 hover:text-sky-100"
         >
           {days}
         </button>
       ))}
-      <span className="self-center text-xs text-slate-500">days</span>
+      <span className="text-xs text-slate-500">days</span>
     </div>
   );
 }

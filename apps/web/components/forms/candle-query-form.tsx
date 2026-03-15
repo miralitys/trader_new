@@ -10,8 +10,10 @@ type CandleQueryFormProps = {
   onSubmit: (filters: CandleFilters) => void;
 };
 
+const presetSymbols = ["BTC-USDT", "ETH-USDT", "SOL-USDT"] as const;
+
 export function CandleQueryForm({ onSubmit }: CandleQueryFormProps) {
-  const [symbol, setSymbol] = useState("BTC-USDT");
+  const [symbol, setSymbol] = useState<string>(presetSymbols[0]);
   const [timeframe, setTimeframe] = useState("5m");
   const [startAt, setStartAt] = useState(toDatetimeLocalInput(new Date(Date.now() - 1000 * 60 * 60 * 24 * 3)));
   const [endAt, setEndAt] = useState(toDatetimeLocalInput(new Date()));
@@ -40,7 +42,13 @@ export function CandleQueryForm({ onSubmit }: CandleQueryFormProps) {
     <form onSubmit={handleSubmit} className="space-y-5">
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
         <Field label="Symbol">
-          <input value={symbol} onChange={(event) => setSymbol(event.target.value)} className={inputClassName} placeholder="BTC-USDT or ARB-USDT" />
+          <select value={symbol} onChange={(event) => setSymbol(event.target.value)} className={inputClassName}>
+            {presetSymbols.map((presetSymbol) => (
+              <option key={presetSymbol} value={presetSymbol}>
+                {presetSymbol}
+              </option>
+            ))}
+          </select>
         </Field>
 
         <Field label="Timeframe">
@@ -59,8 +67,8 @@ export function CandleQueryForm({ onSubmit }: CandleQueryFormProps) {
           <input type="datetime-local" value={endAt} onChange={(event) => setEndAt(event.target.value)} className={inputClassName} />
         </Field>
 
-        <Field label="Quick range">
-          <div className="flex h-11 items-center rounded-xl border border-white/10 bg-slate-950/40 px-3">
+        <Field label="Quick range" className="md:col-span-2 xl:col-span-2">
+          <div className="min-h-11 rounded-xl border border-white/10 bg-slate-950/40 px-3 py-3">
             <DateRangePresets onSelect={applyDayPreset} />
           </div>
         </Field>
@@ -82,9 +90,17 @@ export function CandleQueryForm({ onSubmit }: CandleQueryFormProps) {
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({
+  label,
+  children,
+  className = "",
+}: {
+  label: string;
+  children: React.ReactNode;
+  className?: string;
+}) {
   return (
-    <label className="grid gap-2">
+    <label className={`grid gap-2 ${className}`.trim()}>
       <span className="text-[11px] uppercase tracking-[0.2em] text-slate-400">{label}</span>
       {children}
     </label>

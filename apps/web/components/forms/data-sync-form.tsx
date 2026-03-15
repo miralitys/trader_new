@@ -6,7 +6,7 @@ import { DateRangePresets } from "@/components/forms/date-range-presets";
 import { useRunDataSync } from "@/lib/query-hooks";
 import { formatInteger, formatPercent, toDatetimeLocalInput } from "@/lib/utils";
 
-const presetSymbols = ["BTC-USDT", "ETH-USDT", "SOL-USDT", "ARB-USDT"] as const;
+const presetSymbols = ["BTC-USDT", "ETH-USDT", "SOL-USDT"] as const;
 
 export function DataSyncForm() {
   const syncMutation = useRunDataSync();
@@ -90,8 +90,8 @@ export function DataSyncForm() {
         </Field>
 
         {showRange ? (
-          <Field label="Quick range">
-            <div className="flex h-11 items-center rounded-xl border border-white/10 bg-slate-950/40 px-3">
+          <Field label="Quick range" className="md:col-span-2 xl:col-span-3">
+            <div className="min-h-11 rounded-xl border border-white/10 bg-slate-950/40 px-3 py-3">
               <DateRangePresets onSelect={applyDayPreset} />
             </div>
           </Field>
@@ -115,9 +115,17 @@ export function DataSyncForm() {
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({
+  label,
+  children,
+  className = "",
+}: {
+  label: string;
+  children: React.ReactNode;
+  className?: string;
+}) {
   return (
-    <label className="grid gap-2">
+    <label className={`grid gap-2 ${className}`.trim()}>
       <span className="text-[11px] uppercase tracking-[0.2em] text-slate-400">{label}</span>
       {children}
     </label>
