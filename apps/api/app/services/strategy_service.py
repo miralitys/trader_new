@@ -20,7 +20,7 @@ from app.services.paper_execution_service import PaperExecutionService
 from app.strategies.base import BaseStrategy
 from app.strategies.registry import get_strategy, list_strategies
 
-INTERFACE_VISIBLE_STRATEGY_CODES = frozenset({"mean_reversion_hard_stop"})
+INTERFACE_VISIBLE_STRATEGY_CODES = frozenset({"mean_reversion_hard_stop", "rsi_micro_bounce"})
 
 
 class StrategyService:
