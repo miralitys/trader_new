@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     )
     worker_poll_seconds: int = Field(default=15, alias="WORKER_POLL_SECONDS")
     worker_max_candles_per_stream: int = Field(default=100, alias="WORKER_MAX_CANDLES_PER_STREAM")
-    backtest_stale_after_seconds: int = Field(default=1800, alias="BACKTEST_STALE_AFTER_SECONDS")
+    backtest_stale_after_seconds: int = Field(default=14400, alias="BACKTEST_STALE_AFTER_SECONDS")
     backtest_progress_interval_bars: int = Field(default=500, alias="BACKTEST_PROGRESS_INTERVAL_BARS")
     backtest_stop_check_interval_bars: int = Field(default=100, alias="BACKTEST_STOP_CHECK_INTERVAL_BARS")
     default_symbols: str = Field(default="BTC-USDT,ETH-USDT,SOL-USDT", alias="DEFAULT_SYMBOLS")

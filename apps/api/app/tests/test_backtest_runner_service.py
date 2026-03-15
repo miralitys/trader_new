@@ -268,6 +268,50 @@ def test_query_service_returns_null_completed_at_for_running_backtest() -> None:
     assert response.completed_at is None
 
 
+def test_query_service_does_not_trigger_stale_recovery_when_listing_backtests() -> None:
+    session = FakeSession()
+    query_service = QueryService(session)  # type: ignore[arg-type]
+
+    run = SimpleNamespace(
+        id=11,
+        status=BacktestStatus.RUNNING,
+        started_at=datetime(2026, 3, 14, 12, 0, tzinfo=timezone.utc),
+        completed_at=None,
+        error_text=None,
+        params_json={
+            "symbol": "BTC-USDT",
+            "timeframe": "5m",
+            "exchange_code": "binance_us",
+            "initial_capital": "1000",
+        },
+        created_at=datetime(2026, 3, 14, 11, 59, tzinfo=timezone.utc),
+    )
+    strategy = SimpleNamespace(code="breakout_continuation", name="BreakoutContinuation")
+
+    class FakeQueryBacktestRepository:
+        def recover_stale_runs(self, stale_before: datetime) -> list[dict[str, object]]:
+            raise AssertionError("query path should not attempt stale recovery")
+
+        def list_runs(
+            self,
+            limit: int = 100,
+            status: BacktestStatus | None = None,
+            strategy_code: str | None = None,
+        ) -> list[tuple[SimpleNamespace, SimpleNamespace, None]]:
+            assert limit == 100
+            assert status is None
+            assert strategy_code is None
+            return [(run, strategy, None)]
+
+    query_service.backtest_repository = FakeQueryBacktestRepository()  # type: ignore[assignment]
+
+    rows = query_service.list_backtests()
+
+    assert len(rows) == 1
+    assert rows[0].id == 11
+    assert rows[0].status == "running"
+
+
 def test_query_service_returns_backtest_diagnostics_from_summary() -> None:
     session = FakeSession()
     query_service = QueryService(session)  # type: ignore[arg-type]
