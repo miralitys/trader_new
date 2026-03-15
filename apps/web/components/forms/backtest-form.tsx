@@ -11,14 +11,27 @@ type BacktestFormProps = {
   strategies: StrategySummary[];
 };
 
+const presetSymbols = ["BTC-USDT", "ETH-USDT", "SOL-USDT"] as const;
+const rangePresets = [30, 60, 90] as const;
+
+function buildRangeInputs(days: number) {
+  const end = new Date();
+  const start = new Date(end.getTime() - 1000 * 60 * 60 * 24 * days);
+  return {
+    startAt: toDatetimeLocalInput(start),
+    endAt: toDatetimeLocalInput(end),
+  };
+}
+
 export function BacktestForm({ strategies }: BacktestFormProps) {
   const router = useRouter();
   const runBacktest = useRunBacktest();
   const [strategyCode, setStrategyCode] = useState(strategies[0]?.code ?? "");
-  const [symbol, setSymbol] = useState("BTC-USDT");
+  const [symbol, setSymbol] = useState(presetSymbols[0]);
   const [timeframe, setTimeframe] = useState("5m");
-  const [startAt, setStartAt] = useState(toDatetimeLocalInput(new Date(Date.now() - 1000 * 60 * 60 * 24 * 30)));
-  const [endAt, setEndAt] = useState(toDatetimeLocalInput(new Date()));
+  const [selectedRangeDays, setSelectedRangeDays] = useState<number | null>(30);
+  const [startAt, setStartAt] = useState(buildRangeInputs(30).startAt);
+  const [endAt, setEndAt] = useState(buildRangeInputs(30).endAt);
   const [initialCapital, setInitialCapital] = useState("10000");
   const [fee, setFee] = useState("0.001");
   const [slippage, setSlippage] = useState("0.0005");
@@ -28,6 +41,13 @@ export function BacktestForm({ strategies }: BacktestFormProps) {
 
   const disabled = runBacktest.isPending || !strategyCode;
   const sortedStrategies = useMemo(() => strategies.slice().sort((left, right) => left.name.localeCompare(right.name)), [strategies]);
+
+  function applyRangePreset(days: number) {
+    const nextRange = buildRangeInputs(days);
+    setSelectedRangeDays(days);
+    setStartAt(nextRange.startAt);
+    setEndAt(nextRange.endAt);
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -73,7 +93,13 @@ export function BacktestForm({ strategies }: BacktestFormProps) {
         </Field>
 
         <Field label="Symbol">
-          <input value={symbol} onChange={(event) => setSymbol(compactList([event.target.value])[0] ?? "")} className={inputClassName} placeholder="BTC-USDT" />
+          <select value={symbol} onChange={(event) => setSymbol(compactList([event.target.value])[0] ?? presetSymbols[0])} className={inputClassName}>
+            {presetSymbols.map((presetSymbol) => (
+              <option key={presetSymbol} value={presetSymbol}>
+                {presetSymbol}
+              </option>
+            ))}
+          </select>
         </Field>
 
         <Field label="Timeframe">
@@ -89,11 +115,46 @@ export function BacktestForm({ strategies }: BacktestFormProps) {
         </Field>
 
         <Field label="Start">
-          <input type="datetime-local" value={startAt} onChange={(event) => setStartAt(event.target.value)} className={inputClassName} />
+          <input
+            type="datetime-local"
+            value={startAt}
+            onChange={(event) => {
+              setSelectedRangeDays(null);
+              setStartAt(event.target.value);
+            }}
+            className={inputClassName}
+          />
         </Field>
 
         <Field label="End">
-          <input type="datetime-local" value={endAt} onChange={(event) => setEndAt(event.target.value)} className={inputClassName} />
+          <input
+            type="datetime-local"
+            value={endAt}
+            onChange={(event) => {
+              setSelectedRangeDays(null);
+              setEndAt(event.target.value);
+            }}
+            className={inputClassName}
+          />
+        </Field>
+
+        <Field label="Quick range">
+          <div className="flex h-11 items-center gap-2 rounded-xl border border-white/10 bg-slate-950/60 px-2">
+            {rangePresets.map((days) => (
+              <button
+                key={days}
+                type="button"
+                onClick={() => applyRangePreset(days)}
+                className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
+                  selectedRangeDays === days
+                    ? "bg-emerald-400 text-slate-950"
+                    : "text-slate-300 hover:bg-white/5 hover:text-white"
+                }`}
+              >
+                {days}d
+              </button>
+            ))}
+          </div>
         </Field>
 
         <Field label="Fee">
