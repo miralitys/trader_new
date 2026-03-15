@@ -134,22 +134,27 @@ class BacktestEngine(EngineBase):
             "entry_hold_reasons": {
                 "insufficient_history": 0,
                 "regime_blocked": 0,
-                "oversold_not_detected": 0,
-                "bb_reclaim_not_confirmed": 0,
-                "rsi_reclaim_not_confirmed": 0,
-                "weak_recovery": 0,
+                "flush_not_deep_enough": 0,
+                "late_rebound_entry": 0,
+                "flush_low_too_old": 0,
+                "context_not_reset": 0,
+                "reclaim_not_confirmed": 0,
+                "entry_bar_not_green": 0,
+                "entry_bar_too_weak": 0,
+                "entry_bar_too_strong": 0,
                 "insufficient_tp_vs_cost": 0,
                 "max_stop_exceeded": 0,
                 "any_other_hold_reason": 0,
             },
             "entry_hold_other_reasons": {},
             "entry_hold_reason_details": {},
+            "regime_blocked_details": {},
             "entry_hold_total": 0,
         }
         one_hour_history: list[BacktestCandle] = []
         one_hour_closes: list[Decimal] = []
         total_bars = len(ordered_candles)
-        use_mean_reversion_runtime_cache = strategy.key == "mean_reversion_hard_stop"
+        use_runtime_indicator_cache = bool(getattr(strategy, "runtime_indicator_cache_enabled", False))
         rsi_period = int(getattr(strategy_config, "rsi_period", 0) or 0)
         rsi_avg_gain: Optional[Decimal] = None
         rsi_avg_loss: Optional[Decimal] = None
@@ -187,7 +192,7 @@ class BacktestEngine(EngineBase):
                 candle=candle,
                 timeframe=request.timeframe,
             )
-            if use_mean_reversion_runtime_cache and previous_one_hour_bucket is not None and (
+            if use_runtime_indicator_cache and previous_one_hour_bucket is not None and (
                 previous_one_hour_bucket.open_time != one_hour_history[-1].open_time
             ):
                 completed_close = Decimal(str(previous_one_hour_bucket.close))
@@ -211,7 +216,7 @@ class BacktestEngine(EngineBase):
                         self._true_range(previous_completed_close, previous_one_hour_bucket)
                     )
                 completed_one_hour_close = completed_close
-            if use_mean_reversion_runtime_cache:
+            if use_runtime_indicator_cache:
                 current_close = ordered_closes[bar_index]
                 previous_close = ordered_closes[bar_index - 1] if bar_index > 0 else None
                 next_rsi, rsi_avg_gain, rsi_avg_loss = self._next_rsi_value(
@@ -265,7 +270,7 @@ class BacktestEngine(EngineBase):
                 "fee_rate": fee_rate,
                 "slippage_rate": slippage_rate,
             }
-            if use_mean_reversion_runtime_cache:
+            if use_runtime_indicator_cache:
                 current_one_hour_close = one_hour_closes[-1] if one_hour_closes else None
                 current_one_hour_ema = (
                     self._next_ema_value(completed_one_hour_ema, current_one_hour_close, regime_ema_period)
@@ -532,21 +537,6 @@ class BacktestEngine(EngineBase):
         strategy_config: object,
         total_bars: int,
     ) -> int:
-        if strategy.key == "mean_reversion_hard_stop":
-            oversold_lookback = int(getattr(strategy_config, "oversold_lookback_bars", 0) or 0)
-            lookback_period = int(getattr(strategy_config, "lookback_period", 0) or 0)
-            rsi_period = int(getattr(strategy_config, "rsi_period", 0) or 0)
-            atr_period = int(getattr(strategy_config, "atr_period", 0) or 0)
-            stop_lookback_bars = int(getattr(strategy_config, "stop_lookback_bars", 0) or 0)
-            buffered_window = max(
-                lookback_period + oversold_lookback + 1,
-                rsi_period + oversold_lookback + 1,
-                atr_period + oversold_lookback + 1,
-                stop_lookback_bars,
-                2,
-            )
-            return min(total_bars, buffered_window)
-
         required_history = total_bars
         required_history_fn = getattr(strategy, "required_history_bars", None)
         if callable(required_history_fn):
@@ -565,12 +555,15 @@ class BacktestEngine(EngineBase):
         entry_hold_reasons = diagnostics["entry_hold_reasons"]
         other_reasons = diagnostics["entry_hold_other_reasons"]
         detail_reasons = diagnostics["entry_hold_reason_details"]
+        regime_details = diagnostics["regime_blocked_details"]
         category, other_label = self._entry_hold_reason_bucket(reason=reason, metadata=metadata)
         entry_hold_reasons[category] = int(entry_hold_reasons.get(category, 0)) + 1
         diagnostics["entry_hold_total"] = int(diagnostics.get("entry_hold_total", 0)) + 1
-        detail = str(metadata.get("skip_reason_detail") or "").strip()
+        detail = self._normalized_hold_reason_detail(metadata.get("skip_reason_detail"))
         if detail:
             detail_reasons[detail] = int(detail_reasons.get(detail, 0)) + 1
+            if category == "regime_blocked":
+                regime_details[detail] = int(regime_details.get(detail, 0)) + 1
         if other_label is not None:
             other_reasons[other_label] = int(other_reasons.get(other_label, 0)) + 1
 
@@ -579,7 +572,7 @@ class BacktestEngine(EngineBase):
         reason: Optional[str],
         metadata: dict[str, object],
     ) -> tuple[str, Optional[str]]:
-        detail = str(metadata.get("skip_reason_detail") or "").strip()
+        detail = self._normalized_hold_reason_detail(metadata.get("skip_reason_detail"))
         if reason == "insufficient_history":
             return "insufficient_history", None
         if reason == "regime_blocked":
@@ -588,17 +581,36 @@ class BacktestEngine(EngineBase):
             return "insufficient_tp_vs_cost", None
         if reason == "max_stop_exceeded":
             return "max_stop_exceeded", None
-        if detail == "oversold_not_detected":
-            return "oversold_not_detected", None
-        if detail == "bb_reentry_not_confirmed":
-            return "bb_reclaim_not_confirmed", None
-        if detail == "rsi_reclaim_not_confirmed":
-            return "rsi_reclaim_not_confirmed", None
-        if detail == "recovery_not_strong_enough":
-            return "weak_recovery", None
+        if detail == "flush_not_deep_enough":
+            return "flush_not_deep_enough", None
+        if detail == "late_rebound_entry":
+            return "late_rebound_entry", None
+        if detail == "flush_low_too_old":
+            return "flush_low_too_old", None
+        if detail == "context_not_reset":
+            return "context_not_reset", None
+        if detail == "reclaim_not_confirmed":
+            return "reclaim_not_confirmed", None
+        if detail == "entry_bar_not_green":
+            return "entry_bar_not_green", None
+        if detail == "entry_bar_too_weak":
+            return "entry_bar_too_weak", None
+        if detail == "entry_bar_too_strong":
+            return "entry_bar_too_strong", None
 
         label = detail or str(reason or "unknown_hold_reason")
         return "any_other_hold_reason", label
+
+    def _normalized_hold_reason_detail(self, detail: object) -> str:
+        raw = str(detail or "").strip()
+        mapping = {
+            "no_reclaim_close": "reclaim_not_confirmed",
+            "entry_candle_not_green": "entry_bar_not_green",
+            "entry_bar_not_strong_enough": "entry_bar_too_weak",
+            "entry_bar_overextended": "entry_bar_too_strong",
+            "htf_rsi_below_min": "htf_rsi_below_threshold",
+        }
+        return mapping.get(raw, raw)
 
     def _append_one_hour_candle(
         self,

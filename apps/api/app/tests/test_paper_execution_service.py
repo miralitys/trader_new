@@ -215,8 +215,8 @@ def test_process_run_loads_warmup_history_for_paper_engine(
     captured_history_lengths: list[int] = []
 
     class FakeStrategy:
-        key = "mean_reversion_hard_stop"
-        name = "MeanReversionHardStop"
+        key = "breakout_retest"
+        name = "BreakoutRetest"
         description = "Strategy with warmup requirement."
 
         def default_config(self) -> dict[str, object]:
@@ -339,7 +339,7 @@ def test_process_run_loads_warmup_history_for_paper_engine(
             )
 
         def get_strategy_by_id(self, strategy_id: int):
-            return SimpleNamespace(id=strategy_id, code="mean_reversion_hard_stop")
+            return SimpleNamespace(id=strategy_id, code="breakout_retest")
 
         def update_last_processed(self, run, candle_time, stream_key: str) -> None:
             run.last_processed_candle_at = candle_time

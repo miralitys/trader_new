@@ -250,7 +250,7 @@ def test_query_service_returns_null_completed_at_for_running_backtest() -> None:
         },
         created_at=datetime(2026, 3, 14, 11, 59, tzinfo=timezone.utc),
     )
-    strategy = SimpleNamespace(code="mean_reversion_hard_stop", name="MeanReversionHardStop")
+    strategy = SimpleNamespace(code="breakout_retest", name="BreakoutRetest")
 
     class FakeQueryBacktestRepository:
         def recover_stale_runs(self, stale_before: datetime) -> list[dict[str, object]]:
@@ -286,7 +286,7 @@ def test_query_service_returns_backtest_diagnostics_from_summary() -> None:
         },
         created_at=datetime(2026, 3, 14, 11, 59, tzinfo=timezone.utc),
     )
-    strategy = SimpleNamespace(code="mean_reversion_hard_stop", name="MeanReversionHardStop")
+    strategy = SimpleNamespace(code="breakout_retest", name="BreakoutRetest")
     result = SimpleNamespace(
         total_return_pct=Decimal("0"),
         max_drawdown_pct=Decimal("0"),

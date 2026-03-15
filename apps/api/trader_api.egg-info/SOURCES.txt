@@ -73,7 +73,6 @@ app/services/strategy_service.py
 app/strategies/__init__.py
 app/strategies/base.py
 app/strategies/breakout_retest.py
-app/strategies/mean_reversion_hard_stop.py
 app/strategies/pullback_to_trend.py
 app/strategies/registry.py
 app/strategies/trend_retrace_70.py

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 import pytest
@@ -102,34 +102,62 @@ class DiagnosticHoldStrategy(BaseStrategy):
         if index == 0:
             return StrategySignal(action="hold", reason="insufficient_history")
         if index == 1:
-            return StrategySignal(action="hold", reason="regime_blocked")
+            return StrategySignal(
+                action="hold",
+                reason="regime_blocked",
+                metadata={"skip_reason_detail": "close_below_ema200_1h"},
+            )
         if index == 2:
             return StrategySignal(
                 action="hold",
                 reason="safety_guard_failed",
-                metadata={"skip_reason_detail": "oversold_not_detected"},
+                metadata={"skip_reason_detail": "flush_not_deep_enough"},
             )
         if index == 3:
             return StrategySignal(
                 action="hold",
                 reason="safety_guard_failed",
-                metadata={"skip_reason_detail": "bb_reentry_not_confirmed"},
+                metadata={"skip_reason_detail": "late_rebound_entry"},
             )
         if index == 4:
             return StrategySignal(
                 action="hold",
                 reason="safety_guard_failed",
-                metadata={"skip_reason_detail": "rsi_reclaim_not_confirmed"},
+                metadata={"skip_reason_detail": "flush_low_too_old"},
             )
         if index == 5:
             return StrategySignal(
                 action="hold",
                 reason="safety_guard_failed",
-                metadata={"skip_reason_detail": "recovery_not_strong_enough"},
+                metadata={"skip_reason_detail": "context_not_reset"},
             )
         if index == 6:
-            return StrategySignal(action="hold", reason="insufficient_tp_vs_cost")
+            return StrategySignal(
+                action="hold",
+                reason="safety_guard_failed",
+                metadata={"skip_reason_detail": "no_reclaim_close"},
+            )
         if index == 7:
+            return StrategySignal(
+                action="hold",
+                reason="safety_guard_failed",
+                metadata={"skip_reason_detail": "entry_candle_not_green"},
+            )
+        if index == 8:
+            return StrategySignal(
+                action="hold",
+                reason="safety_guard_failed",
+                metadata={"skip_reason_detail": "entry_bar_not_strong_enough"},
+            )
+        if index == 9:
+            return StrategySignal(
+                action="hold",
+                reason="safety_guard_failed",
+                metadata={"skip_reason_detail": "entry_bar_overextended"},
+            )
+        if index == 10:
+            return StrategySignal(action="hold", reason="insufficient_tp_vs_cost")
+        if index == 11:
             return StrategySignal(action="hold", reason="max_stop_exceeded")
         return StrategySignal(action="hold", reason="invalid_target")
 
@@ -309,9 +337,10 @@ def test_backtest_engine_stops_when_abort_callback_requests_it() -> None:
 
 def test_backtest_engine_aggregates_entry_hold_reason_diagnostics() -> None:
     engine = BacktestEngine()
+    start = datetime(2026, 1, 1, 0, 0, tzinfo=timezone.utc)
     candles = [
-        _candle(datetime(2026, 1, 1, 0, index * 5, tzinfo=timezone.utc), str(100 + index))
-        for index in range(9)
+        _candle(start + timedelta(minutes=index * 5), str(100 + index))
+        for index in range(13)
     ]
 
     report = engine.run(
@@ -320,22 +349,32 @@ def test_backtest_engine_aggregates_entry_hold_reason_diagnostics() -> None:
         candles=candles,
     )
 
-    assert report.diagnostics["entry_hold_total"] == 9
+    assert report.diagnostics["entry_hold_total"] == 13
     assert report.diagnostics["entry_hold_reasons"] == {
         "insufficient_history": 1,
         "regime_blocked": 1,
-        "oversold_not_detected": 1,
-        "bb_reclaim_not_confirmed": 1,
-        "rsi_reclaim_not_confirmed": 1,
-        "weak_recovery": 1,
+        "flush_not_deep_enough": 1,
+        "late_rebound_entry": 1,
+        "flush_low_too_old": 1,
+        "context_not_reset": 1,
+        "reclaim_not_confirmed": 1,
+        "entry_bar_not_green": 1,
+        "entry_bar_too_weak": 1,
+        "entry_bar_too_strong": 1,
         "insufficient_tp_vs_cost": 1,
         "max_stop_exceeded": 1,
         "any_other_hold_reason": 1,
     }
     assert report.diagnostics["entry_hold_reason_details"] == {
-        "oversold_not_detected": 1,
-        "bb_reentry_not_confirmed": 1,
-        "rsi_reclaim_not_confirmed": 1,
-        "recovery_not_strong_enough": 1,
+        "close_below_ema200_1h": 1,
+        "flush_not_deep_enough": 1,
+        "late_rebound_entry": 1,
+        "flush_low_too_old": 1,
+        "context_not_reset": 1,
+        "reclaim_not_confirmed": 1,
+        "entry_bar_not_green": 1,
+        "entry_bar_too_weak": 1,
+        "entry_bar_too_strong": 1,
     }
+    assert report.diagnostics["regime_blocked_details"] == {"close_below_ema200_1h": 1}
     assert report.diagnostics["entry_hold_other_reasons"] == {"invalid_target": 1}

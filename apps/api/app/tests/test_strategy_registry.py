@@ -15,27 +15,25 @@ def test_strategy_registry_contains_research_and_scaffold_strategies() -> None:
     keys = {strategy.key for strategy in list_strategies()}
     assert keys == {
         "breakout_retest",
-        "deep_flush_micro_reclaim",
         "pullback_to_trend",
-        "mean_reversion_hard_stop",
-        "rsi_micro_bounce",
         "trend_retrace_70",
     }
 
 
 def test_strategy_descriptors_are_serializable() -> None:
     descriptors = {item["key"]: item for item in strategy_descriptors()}
-    assert len(descriptors) == 6
-    assert descriptors["deep_flush_micro_reclaim"]["status"] == "implemented"
-    assert descriptors["mean_reversion_hard_stop"]["status"] == "implemented"
-    assert descriptors["rsi_micro_bounce"]["status"] == "implemented"
+    assert len(descriptors) == 3
     assert descriptors["breakout_retest"]["status"] == "scaffold"
     assert descriptors["pullback_to_trend"]["status"] == "scaffold"
     assert descriptors["trend_retrace_70"]["status"] == "scaffold"
 
 
-def test_deep_flush_micro_reclaim_is_visible_in_interface_lists() -> None:
-    assert "deep_flush_micro_reclaim" in INTERFACE_VISIBLE_STRATEGY_CODES
+def test_interface_visible_strategies_match_supported_product_strategies() -> None:
+    assert INTERFACE_VISIBLE_STRATEGY_CODES == {
+        "breakout_retest",
+        "pullback_to_trend",
+        "trend_retrace_70",
+    }
 
 
 class TestStrategy(BaseStrategy):

@@ -21,7 +21,11 @@ from app.strategies.base import BaseStrategy
 from app.strategies.registry import get_strategy, list_strategies
 
 INTERFACE_VISIBLE_STRATEGY_CODES = frozenset(
-    {"mean_reversion_hard_stop", "rsi_micro_bounce", "deep_flush_micro_reclaim"}
+    {
+        "breakout_retest",
+        "pullback_to_trend",
+        "trend_retrace_70",
+    }
 )
 
 
