@@ -116,7 +116,7 @@ services:
     name: trader-mvp-frontend
     runtime: node
     rootDir: apps/web
-    plan: free
+    plan: standard
     buildCommand: npm ci && npm run build
     startCommand: npm run start -- --hostname 0.0.0.0 --port $PORT
     envVars:
