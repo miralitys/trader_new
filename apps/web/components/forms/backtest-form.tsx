@@ -27,7 +27,7 @@ export function BacktestForm({ strategies }: BacktestFormProps) {
   const router = useRouter();
   const runBacktest = useRunBacktest();
   const [strategyCode, setStrategyCode] = useState(strategies[0]?.code ?? "");
-  const [symbol, setSymbol] = useState(presetSymbols[0]);
+  const [symbol, setSymbol] = useState<string>(presetSymbols[0]);
   const [timeframe, setTimeframe] = useState("5m");
   const [selectedRangeDays, setSelectedRangeDays] = useState<number | null>(30);
   const [startAt, setStartAt] = useState(buildRangeInputs(30).startAt);
