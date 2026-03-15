@@ -24,7 +24,6 @@ INTERFACE_VISIBLE_STRATEGY_CODES = frozenset(
     {
         "breakout_retest",
         "pullback_in_trend",
-        "pullback_in_trend_v2",
         "pullback_to_trend",
         "trend_retrace_70",
     }
@@ -198,8 +197,9 @@ class StrategyService:
             strategy = get_strategy(code)
         except KeyError as exc:
             raise NotFoundError(f"Strategy {code} was not found") from exc
-        if getattr(strategy, "status", "") == "archived":
-            raise NotFoundError(f"Strategy {code} is archived")
+        status = getattr(strategy, "status", "")
+        if status in {"archived", "paused"}:
+            raise NotFoundError(f"Strategy {code} is {status}")
         return strategy
 
     def _build_effective_config(

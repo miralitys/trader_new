@@ -77,7 +77,7 @@ class PullbackInTrendV2Strategy(PullbackInTrendStrategy):
     key = "pullback_in_trend_v2"
     name = "PullbackInTrendV2"
     description = "Long-only continuation strategy with stricter trend, pullback-shape, and trigger quality filters."
-    status = "implemented"
+    status = "paused"
     config_model = PullbackInTrendV2Config
     debug_counter_keys = (
         "context_pass_count",

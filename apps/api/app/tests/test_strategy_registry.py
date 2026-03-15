@@ -29,7 +29,7 @@ def test_strategy_descriptors_are_serializable() -> None:
     assert descriptors["breakout_continuation"]["status"] == "archived"
     assert descriptors["breakout_retest"]["status"] == "implemented"
     assert descriptors["pullback_in_trend"]["status"] == "implemented"
-    assert descriptors["pullback_in_trend_v2"]["status"] == "implemented"
+    assert descriptors["pullback_in_trend_v2"]["status"] == "paused"
     assert descriptors["pullback_to_trend"]["status"] == "scaffold"
     assert descriptors["trend_retrace_70"]["status"] == "scaffold"
 
@@ -38,7 +38,6 @@ def test_interface_visible_strategies_match_supported_product_strategies() -> No
     assert INTERFACE_VISIBLE_STRATEGY_CODES == {
         "breakout_retest",
         "pullback_in_trend",
-        "pullback_in_trend_v2",
         "pullback_to_trend",
         "trend_retrace_70",
     }

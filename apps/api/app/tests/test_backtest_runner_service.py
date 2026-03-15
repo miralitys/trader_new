@@ -53,6 +53,12 @@ class ArchivedFakeStrategy(FakeStrategy):
     status = "archived"
 
 
+class PausedFakeStrategy(FakeStrategy):
+    key = "paused_fake_strategy"
+    name = "PausedFakeStrategy"
+    status = "paused"
+
+
 class FakeBacktestRepository:
     current_run: SimpleNamespace | None = None
     save_result_exception: Exception | None = None
@@ -218,7 +224,18 @@ def test_backtest_runner_marks_failed_when_engine_raises(monkeypatch: pytest.Mon
     assert len(session_factory.sessions) == 3
 
 
-def test_backtest_runner_rejects_archived_strategy(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize(
+    ("strategy_factory", "expected_status"),
+    [
+        (ArchivedFakeStrategy, "archived"),
+        (PausedFakeStrategy, "paused"),
+    ],
+)
+def test_backtest_runner_rejects_unavailable_strategy(
+    monkeypatch: pytest.MonkeyPatch,
+    strategy_factory: type[FakeStrategy],
+    expected_status: str,
+) -> None:
     session_factory = SessionFactory()
     FakeBacktestRepository.reset()
 
@@ -227,12 +244,12 @@ def test_backtest_runner_rejects_archived_strategy(monkeypatch: pytest.MonkeyPat
     monkeypatch.setattr("app.services.backtest_runner_service.CandleRepository", FakeCandleRepository)
     monkeypatch.setattr(
         "app.services.backtest_runner_service.get_strategy",
-        lambda _code: ArchivedFakeStrategy(),
+        lambda _code: strategy_factory(),
     )
 
     service = BacktestRunnerService(engine=StaticReportEngine())
 
-    with pytest.raises(ValueError, match="archived"):
+    with pytest.raises(ValueError, match=expected_status):
         service.run_backtest(_request())
 
     assert FakeBacktestRepository.current_run is None
