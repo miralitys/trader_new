@@ -11,6 +11,8 @@ type PaperTradingFormProps = {
   initialConfig: Record<string, unknown>;
 };
 
+const allowedSymbols = ["BTC-USDT", "ETH-USDT", "SOL-USDT"] as const;
+
 export function PaperTradingForm({ strategy, initialConfig }: PaperTradingFormProps) {
   const startPaper = useStartStrategyPaper(strategy.code);
   const stopPaper = useStopStrategyPaper(strategy.code);
@@ -25,11 +27,18 @@ export function PaperTradingForm({ strategy, initialConfig }: PaperTradingFormPr
   const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    const nextSymbols = compactList(initialConfig.symbols);
+    const nextSymbols = compactList(initialConfig.symbols).filter((symbol) =>
+      allowedSymbols.includes(symbol as (typeof allowedSymbols)[number]),
+    );
     const nextTimeframes = compactList(initialConfig.timeframes);
-    setSymbols(nextSymbols.length ? nextSymbols : ["BTC-USDT"]);
+    const nextInitialConfig = {
+      ...initialConfig,
+      symbols: nextSymbols.length ? nextSymbols : [allowedSymbols[0]],
+      timeframes: nextTimeframes.length ? nextTimeframes : ["5m"],
+    };
+    setSymbols(nextSymbols.length ? nextSymbols : [allowedSymbols[0]]);
     setTimeframes(nextTimeframes.length ? nextTimeframes : ["5m"]);
-    setOverrideText(prettyJson(initialConfig));
+    setOverrideText(prettyJson(nextInitialConfig));
   }, [initialConfig]);
 
   const running = strategy.active_paper_status === "running";
@@ -77,9 +86,15 @@ export function PaperTradingForm({ strategy, initialConfig }: PaperTradingFormPr
           <Field label="Symbols">
             <input
               value={symbols.join(", ")}
-              onChange={(event) => setSymbols(compactList(event.target.value.split(",")))}
+              onChange={(event) =>
+                setSymbols(
+                  compactList(event.target.value.split(",")).filter((symbol) =>
+                    allowedSymbols.includes(symbol as (typeof allowedSymbols)[number]),
+                  ),
+                )
+              }
               className={inputClassName}
-              placeholder="BTC-USDT, ETH-USDT, SOL-USDT, ARB-USDT"
+              placeholder="BTC-USDT, ETH-USDT, SOL-USDT"
             />
           </Field>
 

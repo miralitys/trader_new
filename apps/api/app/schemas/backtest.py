@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.integrations.binance_us import BinanceUSTimeframe
 from app.utils.exchanges import normalize_exchange_code
+from app.utils.symbols import normalize_supported_symbol
 
 
 class BacktestRequest(BaseModel):
@@ -29,13 +30,18 @@ class BacktestRequest(BaseModel):
         BinanceUSTimeframe.from_code(value)
         return value
 
-    @field_validator("strategy_code", "symbol")
+    @field_validator("strategy_code")
     @classmethod
     def validate_non_empty_string(cls, value: str) -> str:
         normalized = value.strip()
         if not normalized:
             raise ValueError("Value must not be empty")
         return normalized
+
+    @field_validator("symbol")
+    @classmethod
+    def validate_symbol(cls, value: str) -> str:
+        return normalize_supported_symbol(value)
 
     @field_validator("exchange_code")
     @classmethod

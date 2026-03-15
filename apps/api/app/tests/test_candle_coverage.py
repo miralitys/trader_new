@@ -33,7 +33,7 @@ def test_query_service_list_sync_jobs_includes_actual_coverage() -> None:
     job = SimpleNamespace(
         id=11,
         exchange="binance_us",
-        symbol="BTC-USD",
+        symbol="BTC-USDT",
         timeframe="5m",
         start_at=datetime(2026, 3, 1, 0, 0, tzinfo=timezone.utc),
         end_at=datetime(2026, 3, 1, 1, 0, tzinfo=timezone.utc),
@@ -51,11 +51,11 @@ def test_query_service_list_sync_jobs_includes_actual_coverage() -> None:
     class FakeCandleRepository:
         def get_candle_coverage(self, **kwargs: object) -> CandleCoverageSummary:
             assert kwargs["exchange_code"] == "binance_us"
-            assert kwargs["symbol_code"] == "BTC-USD"
+            assert kwargs["symbol_code"] == "BTC-USDT"
             assert kwargs["timeframe"] == "5m"
             return CandleCoverageSummary(
                 exchange_code="binance_us",
-                symbol_code="BTC-USD",
+                symbol_code="BTC-USDT",
                 timeframe="5m",
                 requested_start_at=job.start_at,
                 requested_end_at=job.end_at,

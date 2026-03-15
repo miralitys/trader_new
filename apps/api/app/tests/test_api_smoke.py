@@ -62,7 +62,7 @@ class FakeBacktestRunnerService:
         return BacktestResponse(
             run_id=run_id,
             strategy_code="breakout_retest",
-            symbol="BTC-USD",
+            symbol="BTC-USDT",
             timeframe="5m",
             exchange_code="binance_us",
             status="failed",
@@ -98,7 +98,7 @@ class FakeQueryService:
                     strategy_code="trend_retrace_70",
                     strategy_name="TrendRetrace70",
                     status="completed",
-                    symbol="BTC-USD",
+                    symbol="BTC-USDT",
                     timeframe="5m",
                     started_at=datetime(2026, 3, 14, 12, 0, tzinfo=timezone.utc),
                     completed_at=datetime(2026, 3, 14, 12, 15, tzinfo=timezone.utc),
@@ -154,7 +154,7 @@ def test_backtest_run_endpoint_returns_report(client: TestClient) -> None:
         "/api/backtests/run",
         json={
             "strategy_code": "breakout_retest",
-            "symbol": "BTC-USD",
+            "symbol": "BTC-USDT",
             "timeframe": "5m",
             "start_at": "2026-03-14T00:00:00Z",
             "end_at": "2026-03-14T01:00:00Z",
@@ -205,7 +205,7 @@ def test_candle_coverage_endpoint_returns_aggregate_payload(client: TestClient) 
         "/api/candles/coverage",
         params={
             "exchange_code": "binance_us",
-            "symbol": "BTC-USD",
+            "symbol": "BTC-USDT",
             "timeframe": "5m",
             "start_at": "2026-03-14T00:00:00Z",
             "end_at": "2026-03-14T01:00:00Z",
@@ -214,6 +214,6 @@ def test_candle_coverage_endpoint_returns_aggregate_payload(client: TestClient) 
 
     assert response.status_code == 200
     payload = response.json()
-    assert payload["symbol"] == "BTC-USD"
+    assert payload["symbol"] == "BTC-USDT"
     assert payload["candle_count"] == 13
     assert payload["completion_pct"] == "100"

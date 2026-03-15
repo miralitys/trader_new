@@ -12,6 +12,7 @@ from app.core.logging import get_logger
 from app.integrations.binance_us import BinanceUSTimeframe, NormalizedCandle
 from app.models import Candle, Exchange, Symbol, Timeframe
 from app.repositories.base import BaseRepository
+from app.utils.symbols import normalize_supported_symbol
 from app.utils.time import ensure_utc
 
 logger = get_logger(__name__)
@@ -140,6 +141,7 @@ class CandleRepository(BaseRepository):
         return timeframe_row
 
     def ensure_symbol(self, exchange_id: int, symbol_code: str) -> Symbol:
+        symbol_code = normalize_supported_symbol(symbol_code)
         symbol = self.session.scalar(
             select(Symbol).where(Symbol.exchange_id == exchange_id, Symbol.code == symbol_code)
         )

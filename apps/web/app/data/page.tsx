@@ -99,7 +99,7 @@ export default function DataPage() {
 
           <label className="grid gap-2">
             <span className="text-[11px] uppercase tracking-[0.2em] text-slate-400">Symbol</span>
-            <input value={symbolFilter} onChange={(event) => setSymbolFilter(event.target.value)} className={inputClassName} placeholder="BTC-USDT or ARB-USDT" />
+            <input value={symbolFilter} onChange={(event) => setSymbolFilter(event.target.value)} className={inputClassName} placeholder="BTC-USDT, ETH-USDT or SOL-USDT" />
           </label>
 
           <label className="grid gap-2">

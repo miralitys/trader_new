@@ -187,7 +187,7 @@ def _candle(ts: datetime, price: str) -> BacktestCandle:
 def _request(strategy_code: str) -> BacktestRequest:
     return BacktestRequest(
         strategy_code=strategy_code,
-        symbol="BTC-USD",
+        symbol="BTC-USDT",
         timeframe="5m",
         start_at=datetime(2026, 1, 1, 0, 0, tzinfo=timezone.utc),
         end_at=datetime(2026, 1, 1, 0, 20, tzinfo=timezone.utc),

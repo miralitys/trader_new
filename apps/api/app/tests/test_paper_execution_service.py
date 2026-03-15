@@ -146,7 +146,7 @@ def test_start_run_requests_account_reset(monkeypatch: pytest.MonkeyPatch) -> No
     response = service.start_run(
         PaperRunStartRequest(
             strategy_code="breakout_retest",
-            symbols=["BTC-USD"],
+            symbols=["BTC-USDT"],
             timeframes=["5m"],
             initial_balance=Decimal("15000"),
             currency="USD",
@@ -186,7 +186,7 @@ def test_process_active_runs_continues_after_single_run_failure(
             run_id=run_id,
             strategy_code="breakout_retest",
             status="running",
-            symbols=["BTC-USD"],
+            symbols=["BTC-USDT"],
             timeframes=["5m"],
             exchange_code="binance_us",
             account_balance=Decimal("10000"),
@@ -264,7 +264,7 @@ def test_process_run_loads_warmup_history_for_paper_engine(
             limit: int,
         ):
             assert exchange_code == "binance_us"
-            assert symbol_code == "BTC-USD"
+            assert symbol_code == "BTC-USDT"
             assert timeframe == "5m"
             assert end_at == watermark_time
             assert limit == 3
@@ -325,14 +325,14 @@ def test_process_run_loads_warmup_history_for_paper_engine(
                 id=run_id,
                 strategy_id=7,
                 status=SimpleNamespace(value="running"),
-                symbols_json=["BTC-USD"],
+                symbols_json=["BTC-USDT"],
                 timeframes_json=["5m"],
                 metadata_json={
                         "exchange_code": "binance_us",
                         "fee": "0",
                         "slippage": "0",
                         "strategy_config_override": {},
-                        "last_processed_by_stream": {"BTC-USD|5m": watermark_time.isoformat()},
+                        "last_processed_by_stream": {"BTC-USDT|5m": watermark_time.isoformat()},
                         "open_positions_runtime": {},
                     },
                 last_processed_candle_at=None,

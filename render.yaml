@@ -52,7 +52,7 @@ services:
       - key: MARKET_DATA_INCREMENTAL_OVERLAP_CANDLES
         value: "3"
       - key: DEFAULT_SYMBOLS
-        value: BTC-USDT,ETH-USDT,SOL-USDT,ARB-USDT
+        value: BTC-USDT,ETH-USDT,SOL-USDT
       - key: DEFAULT_TIMEFRAMES
         value: 5m,15m,1h
       - key: WORKER_POLL_SECONDS
@@ -104,7 +104,7 @@ services:
       - key: MARKET_DATA_INCREMENTAL_OVERLAP_CANDLES
         value: "3"
       - key: DEFAULT_SYMBOLS
-        value: BTC-USDT,ETH-USDT,SOL-USDT,ARB-USDT
+        value: BTC-USDT,ETH-USDT,SOL-USDT
       - key: DEFAULT_TIMEFRAMES
         value: 5m,15m,1h
       - key: WORKER_POLL_SECONDS

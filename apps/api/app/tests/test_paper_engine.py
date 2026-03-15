@@ -88,7 +88,7 @@ def test_paper_engine_opens_position() -> None:
 
     result = engine.process_candle(
         strategy=EnterThenExitPaperStrategy(),
-        symbol="BTC-USD",
+        symbol="BTC-USDT",
         timeframe="5m",
         candle=candle,
         history=[candle],
@@ -114,7 +114,7 @@ def test_paper_engine_closes_position() -> None:
 
     final_state, results = engine.process_candle_batch(
         strategy=EnterThenExitPaperStrategy(),
-        symbol="BTC-USD",
+        symbol="BTC-USDT",
         timeframe="5m",
         candles=candles,
         state=PaperRuntimeState(cash=Decimal("1000"), position=None),
@@ -135,7 +135,7 @@ def test_paper_engine_handles_no_signal_case() -> None:
 
     result = engine.process_candle(
         strategy=HoldPaperStrategy(),
-        symbol="BTC-USD",
+        symbol="BTC-USDT",
         timeframe="5m",
         candle=candle,
         history=[candle],
@@ -158,7 +158,7 @@ def test_paper_engine_emits_hold_signal_event_for_skipped_entry() -> None:
 
     result = engine.process_candle(
         strategy=SkippedEntryPaperStrategy(),
-        symbol="BTC-USD",
+        symbol="BTC-USDT",
         timeframe="5m",
         candle=candle,
         history=[candle],
@@ -183,7 +183,7 @@ def test_paper_engine_updates_account_balance_with_fees_and_profit() -> None:
 
     final_state, results = engine.process_candle_batch(
         strategy=EnterThenExitPaperStrategy(),
-        symbol="BTC-USD",
+        symbol="BTC-USDT",
         timeframe="5m",
         candles=candles,
         state=PaperRuntimeState(cash=Decimal("1000"), position=None),
@@ -214,7 +214,7 @@ def test_paper_engine_honors_dynamic_stop_from_signal_metadata() -> None:
 
     final_state, results = engine.process_candle_batch(
         strategy=DynamicStopPaperStrategy(),
-        symbol="BTC-USD",
+        symbol="BTC-USDT",
         timeframe="5m",
         candles=candles,
         state=PaperRuntimeState(cash=Decimal("1000"), position=None),

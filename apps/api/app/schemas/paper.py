@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from app.integrations.binance_us import BinanceUSTimeframe
 from app.utils.exchanges import normalize_exchange_code
+from app.utils.symbols import compact_supported_symbols
 
 
 class PaperRunStartRequest(BaseModel):
@@ -38,7 +39,7 @@ class PaperRunStartRequest(BaseModel):
     @field_validator("symbols")
     @classmethod
     def validate_symbols(cls, value: list[str]) -> list[str]:
-        normalized = [symbol.strip() for symbol in value if symbol.strip()]
+        normalized = compact_supported_symbols(value)
         if not normalized:
             raise ValueError("At least one symbol is required")
         return normalized

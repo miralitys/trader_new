@@ -3,9 +3,10 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Type
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.schemas.strategy import StrategyDescriptor
+from app.utils.symbols import compact_supported_symbols
 
 
 class BaseStrategyConfig(BaseModel):
@@ -15,6 +16,11 @@ class BaseStrategyConfig(BaseModel):
     position_size_pct: float = 0.1
     stop_loss_pct: float = 0.03
     take_profit_pct: float = 0.06
+
+    @field_validator("symbols")
+    @classmethod
+    def validate_symbols(cls, value: list[str]) -> list[str]:
+        return compact_supported_symbols(value)
 
 
 class StrategyContext(BaseModel):

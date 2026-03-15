@@ -9,6 +9,7 @@ from pydantic import Field, field_validator, model_validator
 from app.integrations.binance_us import BinanceUSTimeframe
 from app.schemas.common import APIModel
 from app.utils.exchanges import normalize_exchange_code
+from app.utils.symbols import compact_supported_symbols, normalize_supported_symbol
 
 SyncMode = Literal["initial", "incremental", "manual"]
 
@@ -44,7 +45,7 @@ class StrategyPaperStartRequest(APIModel):
     @field_validator("symbols")
     @classmethod
     def validate_symbols(cls, value: list[str]) -> list[str]:
-        normalized = [symbol.strip() for symbol in value if symbol.strip()]
+        normalized = compact_supported_symbols(value)
         if not normalized:
             raise ValueError("At least one symbol is required")
         return normalized
@@ -142,10 +143,7 @@ class DataSyncRequest(APIModel):
     @field_validator("symbol")
     @classmethod
     def validate_symbol(cls, value: str) -> str:
-        normalized = value.strip()
-        if not normalized:
-            raise ValueError("Symbol must not be empty")
-        return normalized
+        return normalize_supported_symbol(value)
 
     @field_validator("exchange_code")
     @classmethod

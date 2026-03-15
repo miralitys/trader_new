@@ -180,7 +180,7 @@ class StopRequestedEngine:
 def _request() -> BacktestRequest:
     return BacktestRequest(
         strategy_code="fake_strategy",
-        symbol="BTC-USD",
+        symbol="BTC-USDT",
         timeframe="5m",
         start_at=datetime(2026, 3, 1, 0, 0, tzinfo=timezone.utc),
         end_at=datetime(2026, 3, 2, 0, 0, tzinfo=timezone.utc),
@@ -243,7 +243,7 @@ def test_query_service_returns_null_completed_at_for_running_backtest() -> None:
         completed_at=None,
         error_text=None,
         params_json={
-            "symbol": "BTC-USD",
+            "symbol": "BTC-USDT",
             "timeframe": "5m",
             "exchange_code": "binance_us",
             "initial_capital": "1000",
@@ -279,7 +279,7 @@ def test_query_service_returns_backtest_diagnostics_from_summary() -> None:
         completed_at=datetime(2026, 3, 14, 12, 5, tzinfo=timezone.utc),
         error_text=None,
         params_json={
-            "symbol": "BTC-USD",
+            "symbol": "BTC-USDT",
             "timeframe": "5m",
             "exchange_code": "binance_us",
             "initial_capital": "1000",
@@ -298,7 +298,7 @@ def test_query_service_returns_backtest_diagnostics_from_summary() -> None:
         avg_loser=Decimal("0"),
         equity_curve_json=[],
         summary_json={
-            "symbol": "BTC-USD",
+            "symbol": "BTC-USDT",
             "timeframe": "5m",
             "exchange_code": "binance_us",
             "initial_capital": "1000",
@@ -369,7 +369,7 @@ def test_backtest_runner_returns_failed_response_when_stop_is_requested(monkeypa
         lambda run_id: BacktestResponse(
             run_id=run_id,
             strategy_code="fake_strategy",
-            symbol="BTC-USD",
+            symbol="BTC-USDT",
             timeframe="5m",
             exchange_code="binance_us",
             status="failed",
@@ -399,7 +399,7 @@ def test_backtest_runner_stop_backtest_marks_running_run_failed(monkeypatch: pyt
     FakeBacktestRepository.current_run = SimpleNamespace(
         id=9,
         strategy_id=1,
-        params_json={"symbol": "BTC-USD", "timeframe": "5m"},
+        params_json={"symbol": "BTC-USDT", "timeframe": "5m"},
         status=BacktestStatus.RUNNING,
         started_at=datetime(2026, 3, 14, 15, 0, tzinfo=timezone.utc),
         completed_at=None,
@@ -417,7 +417,7 @@ def test_backtest_runner_stop_backtest_marks_running_run_failed(monkeypatch: pyt
         lambda run_id: BacktestResponse(
             run_id=run_id,
             strategy_code="fake_strategy",
-            symbol="BTC-USD",
+            symbol="BTC-USDT",
             timeframe="5m",
             exchange_code="binance_us",
             status="failed",

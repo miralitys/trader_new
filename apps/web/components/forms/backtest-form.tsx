@@ -11,7 +11,7 @@ type BacktestFormProps = {
   strategies: StrategySummary[];
 };
 
-const presetSymbols = ["BTC-USDT", "ETH-USDT", "SOL-USDT", "ARB-USDT"] as const;
+const presetSymbols = ["BTC-USDT", "ETH-USDT", "SOL-USDT"] as const;
 const rangePresets = [30, 60, 90, 180] as const;
 
 function buildRangeInputs(days: number) {
@@ -176,7 +176,7 @@ export function BacktestForm({ strategies }: BacktestFormProps) {
           onChange={(event) => setOverrides(event.target.value)}
           rows={8}
           className={textareaClassName}
-          placeholder='{"symbols":["BTC-USDT"],"timeframes":["5m"]}'
+          placeholder='{"symbols":["BTC-USDT","ETH-USDT"],"timeframes":["5m"]}'
         />
       </Field>
 
