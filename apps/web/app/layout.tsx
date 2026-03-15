@@ -12,7 +12,7 @@ const monoFont = IBM_Plex_Mono({ subsets: ["latin"], weight: ["400", "500"], var
 
 export const metadata: Metadata = {
   title: "Trader MVP",
-  description: "Algorithmic trading dashboard for Coinbase paper trading and backtests.",
+  description: "Algorithmic trading dashboard for Binance.US paper trading and backtests.",
 };
 
 const links = [
@@ -31,7 +31,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             <div className="mx-auto grid min-h-screen max-w-[1680px] grid-cols-1 gap-0 xl:grid-cols-[300px_minmax(0,1fr)]">
               <aside className="border-b border-white/10 bg-[rgba(7,12,20,0.74)] px-5 py-6 backdrop-blur xl:sticky xl:top-0 xl:h-screen xl:border-b-0 xl:border-r">
                 <div className="xl:max-w-[220px]">
-                  <p className="text-[11px] uppercase tracking-[0.24em] text-emerald-300">Coinbase quant desk</p>
+                  <p className="text-[11px] uppercase tracking-[0.24em] text-emerald-300">Binance.US quant desk</p>
                   <h1 className="mt-3 text-3xl font-semibold tracking-tight text-white">Trader MVP</h1>
                   <p className="mt-4 text-sm leading-6 text-slate-400">
                     Unified operator console for strategy control, backtests, paper execution, and historical market data sync.

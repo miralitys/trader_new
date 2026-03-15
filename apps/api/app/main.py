@@ -18,7 +18,7 @@ def create_app() -> FastAPI:
         title=settings.app_name,
         version=settings.app_version,
         description=(
-            "Backend API for Coinbase-based algorithmic trading with market data sync, "
+            "Backend API for Binance.US-first algorithmic trading with market data sync, "
             "strategy management, paper trading, and backtesting."
         ),
         debug=settings.debug,

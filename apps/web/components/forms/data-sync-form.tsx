@@ -8,7 +8,7 @@ import { toDatetimeLocalInput } from "@/lib/utils";
 export function DataSyncForm() {
   const syncMutation = useRunDataSync();
   const [mode, setMode] = useState<"initial" | "incremental" | "manual">("manual");
-  const [symbol, setSymbol] = useState("BTC-USD");
+  const [symbol, setSymbol] = useState("BTC-USDT");
   const [timeframe, setTimeframe] = useState("5m");
   const [startAt, setStartAt] = useState(toDatetimeLocalInput(new Date(Date.now() - 1000 * 60 * 60 * 24 * 7)));
   const [endAt, setEndAt] = useState(toDatetimeLocalInput(new Date()));
@@ -21,6 +21,7 @@ export function DataSyncForm() {
     try {
       const result = await syncMutation.mutateAsync({
         mode,
+        exchange_code: "binance_us",
         symbol,
         timeframe,
         start_at: mode === "incremental" ? undefined : new Date(startAt).toISOString(),
@@ -46,7 +47,7 @@ export function DataSyncForm() {
         </Field>
 
         <Field label="Symbol">
-          <input value={symbol} onChange={(event) => setSymbol(event.target.value)} className={inputClassName} />
+          <input value={symbol} onChange={(event) => setSymbol(event.target.value)} className={inputClassName} placeholder="BTC-USDT" />
         </Field>
 
         <Field label="Timeframe">

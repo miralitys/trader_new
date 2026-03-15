@@ -27,7 +27,7 @@ export function PaperTradingForm({ strategy, initialConfig }: PaperTradingFormPr
   useEffect(() => {
     const nextSymbols = compactList(initialConfig.symbols);
     const nextTimeframes = compactList(initialConfig.timeframes);
-    setSymbols(nextSymbols.length ? nextSymbols : ["BTC-USD"]);
+    setSymbols(nextSymbols.length ? nextSymbols : ["BTC-USDT"]);
     setTimeframes(nextTimeframes.length ? nextTimeframes : ["5m"]);
     setOverrideText(prettyJson(initialConfig));
   }, [initialConfig]);
@@ -42,7 +42,7 @@ export function PaperTradingForm({ strategy, initialConfig }: PaperTradingFormPr
       const result = await startPaper.mutateAsync({
         symbols,
         timeframes,
-        exchange_code: "coinbase",
+        exchange_code: "binance_us",
         initial_balance: initialBalance,
         currency,
         fee,
@@ -79,7 +79,7 @@ export function PaperTradingForm({ strategy, initialConfig }: PaperTradingFormPr
               value={symbols.join(", ")}
               onChange={(event) => setSymbols(compactList(event.target.value.split(",")))}
               className={inputClassName}
-              placeholder="BTC-USD, ETH-USD"
+              placeholder="BTC-USDT, ETH-USDT"
             />
           </Field>
 

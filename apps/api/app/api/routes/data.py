@@ -22,6 +22,7 @@ def run_data_sync(
     try:
         if request.mode == "initial":
             result = service.initial_historical_sync(
+                exchange_code=request.exchange_code,
                 symbol=request.symbol,
                 timeframe=request.timeframe,
                 start_at=request.start_at,
@@ -29,12 +30,14 @@ def run_data_sync(
             )
         elif request.mode == "incremental":
             result = service.incremental_sync(
+                exchange_code=request.exchange_code,
                 symbol=request.symbol,
                 timeframe=request.timeframe,
                 end_at=request.end_at,
             )
         else:
             result = service.manual_sync(
+                exchange_code=request.exchange_code,
                 symbol=request.symbol,
                 timeframe=request.timeframe,
                 start_at=request.start_at,
@@ -79,7 +82,7 @@ def list_candles(
     timeframe: str = Query(...),
     start_at: datetime = Query(...),
     end_at: datetime = Query(...),
-    exchange_code: str = Query(default="coinbase"),
+    exchange_code: str = Query(default="binance_us"),
     limit: Optional[int] = Query(default=None, ge=1, le=5000),
     service: QueryService = Depends(get_query_service),
 ) -> list[CandleResponse]:

@@ -122,7 +122,7 @@ class PaperExecutionService:
                 status=run.status.value,
                 symbols=run.symbols_json,
                 timeframes=run.timeframes_json,
-                exchange_code=run.metadata_json.get("exchange_code", "coinbase"),
+                exchange_code=run.metadata_json.get("exchange_code", "binance_us"),
                 account_balance=account.balance,
                 currency=account.currency,
                 last_processed_candle_at=run.last_processed_candle_at,
@@ -175,7 +175,7 @@ class PaperExecutionService:
 
             strategy = get_strategy(strategy_row.code)
             metadata = dict(run.metadata_json or {})
-            exchange_code = metadata.get("exchange_code", "coinbase")
+            exchange_code = metadata.get("exchange_code", "binance_us")
             fee_rate = Decimal(str(metadata.get("fee", "0.001")))
             slippage_rate = Decimal(str(metadata.get("slippage", "0.0005")))
             strategy_override = dict(metadata.get("strategy_config_override", {}))

@@ -7,13 +7,14 @@ from typing import Any, Optional
 from pydantic import BaseModel, Field, field_validator
 
 from app.integrations.coinbase import CoinbaseTimeframe
+from app.utils.exchanges import normalize_exchange_code
 
 
 class PaperRunStartRequest(BaseModel):
     strategy_code: str
     symbols: list[str]
     timeframes: list[str]
-    exchange_code: str = "coinbase"
+    exchange_code: str = "binance_us"
     initial_balance: Decimal = Field(default=Decimal("10000"), gt=0)
     currency: str = "USD"
     fee: Decimal = Field(default=Decimal("0.001"), ge=0)
@@ -21,13 +22,18 @@ class PaperRunStartRequest(BaseModel):
     strategy_config_override: dict[str, Any] = Field(default_factory=dict)
     metadata: dict[str, Any] = Field(default_factory=dict)
 
-    @field_validator("strategy_code", "exchange_code", "currency")
+    @field_validator("strategy_code", "currency")
     @classmethod
     def validate_non_empty_string(cls, value: str) -> str:
         normalized = value.strip()
         if not normalized:
             raise ValueError("Value must not be empty")
         return normalized
+
+    @field_validator("exchange_code")
+    @classmethod
+    def validate_exchange_code(cls, value: str) -> str:
+        return normalize_exchange_code(value)
 
     @field_validator("symbols")
     @classmethod

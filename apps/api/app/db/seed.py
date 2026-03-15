@@ -17,15 +17,26 @@ def seed_reference_data() -> None:
     }
 
     with session_scope() as session:
-        exchange = session.scalar(select(Exchange).where(Exchange.code == "coinbase"))
-        if exchange is None:
-            exchange = Exchange(
+        binance_us_exchange = session.scalar(select(Exchange).where(Exchange.code == "binance_us"))
+        if binance_us_exchange is None:
+            binance_us_exchange = Exchange(
+                code="binance_us",
+                name="Binance.US",
+                description="Binance.US exchange reference record.",
+                is_active=True,
+            )
+            session.add(binance_us_exchange)
+            session.flush()
+
+        coinbase_exchange = session.scalar(select(Exchange).where(Exchange.code == "coinbase"))
+        if coinbase_exchange is None:
+            coinbase_exchange = Exchange(
                 code="coinbase",
                 name="Coinbase",
                 description="Coinbase Exchange reference record.",
                 is_active=True,
             )
-            session.add(exchange)
+            session.add(coinbase_exchange)
             session.flush()
 
         for timeframe_code in settings.default_timeframe_list:
@@ -39,7 +50,7 @@ def seed_reference_data() -> None:
 
         for symbol_code in settings.default_symbol_list:
             exists = session.scalar(
-                select(Symbol).where(Symbol.exchange_id == exchange.id, Symbol.code == symbol_code)
+                select(Symbol).where(Symbol.exchange_id == binance_us_exchange.id, Symbol.code == symbol_code)
             )
             if exists is not None:
                 continue
@@ -50,7 +61,7 @@ def seed_reference_data() -> None:
             base_asset, quote_asset = symbol_code.split("-", 1)
             session.add(
                 Symbol(
-                    exchange_id=exchange.id,
+                    exchange_id=binance_us_exchange.id,
                     code=symbol_code,
                     base_asset=base_asset,
                     quote_asset=quote_asset,

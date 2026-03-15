@@ -134,7 +134,7 @@ class QueryService:
             strategy_code=strategy.code,
             symbol=str(summary.get("symbol", params.get("symbol", ""))),
             timeframe=str(summary.get("timeframe", params.get("timeframe", ""))),
-            exchange_code=str(summary.get("exchange_code", params.get("exchange_code", "coinbase"))),
+            exchange_code=str(summary.get("exchange_code", params.get("exchange_code", "binance_us"))),
             status=run.status.value,
             initial_capital=initial_capital,
             final_equity=final_equity,

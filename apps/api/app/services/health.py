@@ -22,5 +22,6 @@ class HealthService:
                 "database": "configured",
                 "redis": "configured",
                 "coinbase": "configured",
+                "binance_us": "configured",
             },
         )

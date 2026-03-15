@@ -15,7 +15,7 @@ export function BacktestForm({ strategies }: BacktestFormProps) {
   const router = useRouter();
   const runBacktest = useRunBacktest();
   const [strategyCode, setStrategyCode] = useState(strategies[0]?.code ?? "");
-  const [symbol, setSymbol] = useState("BTC-USD");
+  const [symbol, setSymbol] = useState("BTC-USDT");
   const [timeframe, setTimeframe] = useState("5m");
   const [startAt, setStartAt] = useState(toDatetimeLocalInput(new Date(Date.now() - 1000 * 60 * 60 * 24 * 30)));
   const [endAt, setEndAt] = useState(toDatetimeLocalInput(new Date()));
@@ -40,7 +40,7 @@ export function BacktestForm({ strategies }: BacktestFormProps) {
         timeframe,
         start_at: new Date(startAt).toISOString(),
         end_at: new Date(endAt).toISOString(),
-        exchange_code: "coinbase",
+        exchange_code: "binance_us",
         initial_capital: initialCapital,
         fee,
         slippage,
@@ -73,7 +73,7 @@ export function BacktestForm({ strategies }: BacktestFormProps) {
         </Field>
 
         <Field label="Symbol">
-          <input value={symbol} onChange={(event) => setSymbol(compactList([event.target.value])[0] ?? "")} className={inputClassName} placeholder="BTC-USD" />
+          <input value={symbol} onChange={(event) => setSymbol(compactList([event.target.value])[0] ?? "")} className={inputClassName} placeholder="BTC-USDT" />
         </Field>
 
         <Field label="Timeframe">
@@ -115,7 +115,7 @@ export function BacktestForm({ strategies }: BacktestFormProps) {
           onChange={(event) => setOverrides(event.target.value)}
           rows={8}
           className={textareaClassName}
-          placeholder='{"symbols":["BTC-USD"],"timeframes":["5m"]}'
+          placeholder='{"symbols":["BTC-USDT"],"timeframes":["5m"]}'
         />
       </Field>
 

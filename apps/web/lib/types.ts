@@ -183,6 +183,7 @@ export type BacktestStopRequest = {
 
 export type DataSyncRequest = {
   mode: "initial" | "incremental" | "manual";
+  exchange_code: string;
   symbol: string;
   timeframe: string;
   start_at?: string;

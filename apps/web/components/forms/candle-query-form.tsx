@@ -10,7 +10,7 @@ type CandleQueryFormProps = {
 };
 
 export function CandleQueryForm({ onSubmit }: CandleQueryFormProps) {
-  const [symbol, setSymbol] = useState("BTC-USD");
+  const [symbol, setSymbol] = useState("BTC-USDT");
   const [timeframe, setTimeframe] = useState("5m");
   const [startAt, setStartAt] = useState(toDatetimeLocalInput(new Date(Date.now() - 1000 * 60 * 60 * 24 * 3)));
   const [endAt, setEndAt] = useState(toDatetimeLocalInput(new Date()));
@@ -23,7 +23,7 @@ export function CandleQueryForm({ onSubmit }: CandleQueryFormProps) {
       timeframe,
       startAt: new Date(startAt).toISOString(),
       endAt: new Date(endAt).toISOString(),
-      exchangeCode: "coinbase",
+      exchangeCode: "binance_us",
       limit: Number(limit),
     });
   }
@@ -32,7 +32,7 @@ export function CandleQueryForm({ onSubmit }: CandleQueryFormProps) {
     <form onSubmit={handleSubmit} className="space-y-5">
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
         <Field label="Symbol">
-          <input value={symbol} onChange={(event) => setSymbol(event.target.value)} className={inputClassName} />
+          <input value={symbol} onChange={(event) => setSymbol(event.target.value)} className={inputClassName} placeholder="BTC-USDT" />
         </Field>
 
         <Field label="Timeframe">

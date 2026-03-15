@@ -188,7 +188,7 @@ export function getCandles(filters: CandleFilters) {
       timeframe: filters.timeframe,
       start_at: filters.startAt,
       end_at: filters.endAt,
-      exchange_code: filters.exchangeCode ?? "coinbase",
+      exchange_code: filters.exchangeCode ?? "binance_us",
       limit: filters.limit,
     })}`,
   );

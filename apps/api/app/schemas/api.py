@@ -8,6 +8,7 @@ from pydantic import Field, field_validator, model_validator
 
 from app.integrations.coinbase import CoinbaseTimeframe
 from app.schemas.common import APIModel
+from app.utils.exchanges import SUPPORTED_EXCHANGE_CODES, normalize_exchange_code
 
 SyncMode = Literal["initial", "incremental", "manual"]
 
@@ -19,7 +20,7 @@ class StrategyConfigUpdateRequest(APIModel):
 class StrategyPaperStartRequest(APIModel):
     symbols: list[str]
     timeframes: list[str]
-    exchange_code: str = "coinbase"
+    exchange_code: str = "binance_us"
     initial_balance: Decimal = Field(default=Decimal("10000"), gt=0)
     currency: str = "USD"
     fee: Decimal = Field(default=Decimal("0.001"), ge=0)
@@ -27,13 +28,18 @@ class StrategyPaperStartRequest(APIModel):
     strategy_config_override: dict[str, Any] = Field(default_factory=dict)
     metadata: dict[str, Any] = Field(default_factory=dict)
 
-    @field_validator("exchange_code", "currency")
+    @field_validator("currency")
     @classmethod
     def validate_non_empty_string(cls, value: str) -> str:
         normalized = value.strip()
         if not normalized:
             raise ValueError("Value must not be empty")
         return normalized
+
+    @field_validator("exchange_code")
+    @classmethod
+    def validate_exchange_code(cls, value: str) -> str:
+        return normalize_exchange_code(value)
 
     @field_validator("symbols")
     @classmethod
@@ -127,6 +133,7 @@ class BacktestListItemResponse(APIModel):
 
 class DataSyncRequest(APIModel):
     mode: SyncMode = "manual"
+    exchange_code: str = "binance_us"
     symbol: str
     timeframe: str
     start_at: Optional[datetime] = None
@@ -139,6 +146,11 @@ class DataSyncRequest(APIModel):
         if not normalized:
             raise ValueError("Symbol must not be empty")
         return normalized
+
+    @field_validator("exchange_code")
+    @classmethod
+    def validate_exchange_code(cls, value: str) -> str:
+        return normalize_exchange_code(value)
 
     @field_validator("timeframe")
     @classmethod

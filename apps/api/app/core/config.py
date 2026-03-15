@@ -30,6 +30,12 @@ class Settings(BaseSettings):
     coinbase_retry_attempts: int = Field(default=5, alias="COINBASE_RETRY_ATTEMPTS")
     coinbase_backoff_min_seconds: float = Field(default=1.0, alias="COINBASE_BACKOFF_MIN_SECONDS")
     coinbase_backoff_max_seconds: float = Field(default=8.0, alias="COINBASE_BACKOFF_MAX_SECONDS")
+    binance_us_api_base_url: str = Field(default="https://api.binance.us", alias="BINANCE_US_API_BASE_URL")
+    binance_us_timeout_seconds: int = Field(default=20, alias="BINANCE_US_TIMEOUT_SECONDS")
+    binance_us_max_candles_per_request: int = Field(default=1000, alias="BINANCE_US_MAX_CANDLES_PER_REQUEST")
+    binance_us_retry_attempts: int = Field(default=5, alias="BINANCE_US_RETRY_ATTEMPTS")
+    binance_us_backoff_min_seconds: float = Field(default=1.0, alias="BINANCE_US_BACKOFF_MIN_SECONDS")
+    binance_us_backoff_max_seconds: float = Field(default=8.0, alias="BINANCE_US_BACKOFF_MAX_SECONDS")
     market_data_incremental_overlap_candles: int = Field(
         default=3,
         alias="MARKET_DATA_INCREMENTAL_OVERLAP_CANDLES",
@@ -39,7 +45,7 @@ class Settings(BaseSettings):
     backtest_stale_after_seconds: int = Field(default=1800, alias="BACKTEST_STALE_AFTER_SECONDS")
     backtest_progress_interval_bars: int = Field(default=500, alias="BACKTEST_PROGRESS_INTERVAL_BARS")
     backtest_stop_check_interval_bars: int = Field(default=100, alias="BACKTEST_STOP_CHECK_INTERVAL_BARS")
-    default_symbols: str = Field(default="BTC-USD,ETH-USD,SOL-USD", alias="DEFAULT_SYMBOLS")
+    default_symbols: str = Field(default="BTC-USDT,ETH-USDT,SOL-USDT", alias="DEFAULT_SYMBOLS")
     default_timeframes: str = Field(default="5m,15m,1h", alias="DEFAULT_TIMEFRAMES")
     allowed_origins: list[str] = Field(default=["*"], alias="ALLOWED_ORIGINS")
 

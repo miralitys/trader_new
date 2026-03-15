@@ -7,6 +7,7 @@ from typing import Any, Optional
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.integrations.coinbase import CoinbaseTimeframe
+from app.utils.exchanges import normalize_exchange_code
 
 
 class BacktestRequest(BaseModel):
@@ -15,7 +16,7 @@ class BacktestRequest(BaseModel):
     timeframe: str
     start_at: datetime
     end_at: datetime
-    exchange_code: str = "coinbase"
+    exchange_code: str = "binance_us"
     initial_capital: Decimal = Field(default=Decimal("10000"), gt=0)
     fee: Decimal = Field(default=Decimal("0.001"), ge=0)
     slippage: Decimal = Field(default=Decimal("0.0005"), ge=0)
@@ -28,13 +29,18 @@ class BacktestRequest(BaseModel):
         CoinbaseTimeframe.from_code(value)
         return value
 
-    @field_validator("strategy_code", "symbol", "exchange_code")
+    @field_validator("strategy_code", "symbol")
     @classmethod
     def validate_non_empty_string(cls, value: str) -> str:
         normalized = value.strip()
         if not normalized:
             raise ValueError("Value must not be empty")
         return normalized
+
+    @field_validator("exchange_code")
+    @classmethod
+    def validate_exchange_code(cls, value: str) -> str:
+        return normalize_exchange_code(value)
 
     @model_validator(mode="after")
     def validate_range(self) -> "BacktestRequest":
@@ -98,7 +104,7 @@ class BacktestResponse(BaseModel):
     strategy_code: str
     symbol: str
     timeframe: str
-    exchange_code: str = "coinbase"
+    exchange_code: str = "binance_us"
     status: str
     initial_capital: Decimal
     final_equity: Decimal
