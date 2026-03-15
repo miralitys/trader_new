@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useDeferredValue, useState } from "react";
+import { useDeferredValue, useEffect, useState } from "react";
 
 import { BacktestForm } from "@/components/forms/backtest-form";
 import { SectionCard } from "@/components/section-card";
@@ -11,7 +11,7 @@ import { LoadingState } from "@/components/ui/loading-state";
 import { MetricCard } from "@/components/ui/metric-card";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { useBacktests, useStopBacktest, useStrategies } from "@/lib/query-hooks";
+import { useBacktests, useDeleteBacktests, useStopBacktest, useStrategies } from "@/lib/query-hooks";
 import { formatCurrency, formatDateTime, formatInteger, formatPercent, getErrorMessage } from "@/lib/utils";
 
 export default function BacktestsPage() {
@@ -20,12 +20,15 @@ export default function BacktestsPage() {
   const [strategyFilter, setStrategyFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [search, setSearch] = useState("");
+  const [selectedRunIds, setSelectedRunIds] = useState<number[]>([]);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const deferredSearch = useDeferredValue(search);
   const stopBacktest = useStopBacktest();
+  const deleteBacktests = useDeleteBacktests();
 
   const strategies = strategiesQuery.data ?? [];
-  const backtests = backtestsQuery.data ?? [];
+  const backtestsData = backtestsQuery.data;
+  const backtests = backtestsData ?? [];
   const normalizedSearch = deferredSearch.trim().toLowerCase();
 
   const filteredBacktests = backtests.filter((backtest) => {
@@ -47,6 +50,14 @@ export default function BacktestsPage() {
     completedRuns.length > 0
       ? completedRuns.reduce((sum, run) => sum + Number(run.total_return_pct), 0) / completedRuns.length
       : 0;
+  const selectedFilteredRunIds = filteredBacktests
+    .map((backtest) => backtest.id)
+    .filter((runId) => selectedRunIds.includes(runId));
+
+  useEffect(() => {
+    const currentBacktests = backtestsData ?? [];
+    setSelectedRunIds((current) => current.filter((runId) => currentBacktests.some((backtest) => backtest.id === runId)));
+  }, [backtestsData]);
 
   if ((strategiesQuery.isLoading || backtestsQuery.isLoading) && !strategiesQuery.data && !backtestsQuery.data) {
     return <LoadingState label="Loading backtests..." />;
@@ -71,6 +82,50 @@ export default function BacktestsPage() {
       setActionMessage(`Backtest #${runId} marked ${result.status}.`);
     } catch (mutationError) {
       setActionMessage(getErrorMessage(mutationError, `Unable to stop backtest #${runId}.`));
+    }
+  }
+
+  function toggleRunSelection(runId: number) {
+    setSelectedRunIds((current) =>
+      current.includes(runId) ? current.filter((value) => value !== runId) : [...current, runId],
+    );
+  }
+
+  async function handleDeleteSelected() {
+    setActionMessage(null);
+    if (!selectedFilteredRunIds.length) {
+      return;
+    }
+
+    const label =
+      selectedFilteredRunIds.length === 1
+        ? `Delete backtest #${selectedFilteredRunIds[0]}?`
+        : `Delete ${selectedFilteredRunIds.length} selected backtests?`;
+    if (!window.confirm(`${label} This removes them from the database.`)) {
+      return;
+    }
+
+    try {
+      const result = await deleteBacktests.mutateAsync({ run_ids: selectedFilteredRunIds });
+      setSelectedRunIds((current) => current.filter((runId) => !result.deleted_run_ids.includes(runId)));
+
+      const parts: string[] = [];
+      if (result.deleted_run_ids.length) {
+        parts.push(`Deleted ${result.deleted_run_ids.length} run${result.deleted_run_ids.length === 1 ? "" : "s"}.`);
+      }
+      if (result.blocked_runs.length) {
+        parts.push(
+          `Skipped active run${result.blocked_runs.length === 1 ? "" : "s"}: ${result.blocked_runs
+            .map((item) => `#${item.run_id}`)
+            .join(", ")}.`,
+        );
+      }
+      if (result.missing_run_ids.length) {
+        parts.push(`Already missing: ${result.missing_run_ids.map((runId) => `#${runId}`).join(", ")}.`);
+      }
+      setActionMessage(parts.join(" ") || "No backtests were deleted.");
+    } catch (mutationError) {
+      setActionMessage(getErrorMessage(mutationError, "Unable to delete selected backtests."));
     }
   }
 
@@ -128,7 +183,19 @@ export default function BacktestsPage() {
             />
           </label>
         </div>
-        {actionMessage ? <p className="mb-4 text-sm text-slate-300">{actionMessage}</p> : null}
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          {actionMessage ? <p className="text-sm text-slate-300">{actionMessage}</p> : <div />}
+          {selectedFilteredRunIds.length ? (
+            <button
+              type="button"
+              onClick={handleDeleteSelected}
+              disabled={deleteBacktests.isPending}
+              className="rounded-xl border border-rose-400/30 bg-rose-500/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-rose-100 transition hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-slate-900 disabled:text-slate-500"
+            >
+              {deleteBacktests.isPending ? "Deleting..." : `Delete (${selectedFilteredRunIds.length})`}
+            </button>
+          ) : null}
+        </div>
 
         <DataTable
           rows={filteredBacktests}
@@ -184,6 +251,28 @@ export default function BacktestsPage() {
               render: (row) => <StatusBadge status={row.status} />,
             },
             {
+              key: "select",
+              title: "",
+              className: "w-14",
+              render: (row) => {
+                const selected = selectedRunIds.includes(row.id);
+                return (
+                  <button
+                    type="button"
+                    onClick={() => toggleRunSelection(row.id)}
+                    aria-label={selected ? `Deselect backtest #${row.id}` : `Select backtest #${row.id}`}
+                    className={`flex h-6 w-6 items-center justify-center rounded-md border text-sm transition ${
+                      selected
+                        ? "border-emerald-300/60 bg-emerald-400/15 text-emerald-100"
+                        : "border-white/15 bg-slate-950/70 text-transparent hover:border-slate-300/40 hover:text-slate-200"
+                    }`}
+                  >
+                    ✓
+                  </button>
+                );
+              },
+            },
+            {
               key: "actions",
               title: "Actions",
               render: (row) =>
@@ -191,7 +280,7 @@ export default function BacktestsPage() {
                   <button
                     type="button"
                     onClick={() => handleStop(row.id)}
-                    disabled={stopBacktest.isPending}
+                    disabled={stopBacktest.isPending || deleteBacktests.isPending}
                     className="rounded-xl border border-rose-400/30 bg-rose-500/10 px-3 py-2 text-xs font-semibold text-rose-100 transition hover:bg-rose-500/20 disabled:cursor-not-allowed disabled:border-white/10 disabled:bg-slate-900 disabled:text-slate-500"
                   >
                     {stopBacktest.isPending ? "Stopping..." : "Stop"}

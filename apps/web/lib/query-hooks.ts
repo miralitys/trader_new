@@ -8,6 +8,7 @@ import {
   getCandleCoverage,
   getCandles,
   getDashboardSummary,
+  deleteBacktests,
   getHealth,
   getLogs,
   getPositions,
@@ -28,6 +29,7 @@ import {
 } from "@/lib/api";
 import type {
   BacktestFilters,
+  BacktestDeleteRequest,
   BacktestRunRequest,
   BacktestStopRequest,
   CandleFilters,
@@ -263,6 +265,24 @@ export function useStopBacktest() {
       ];
       if (backtest.run_id !== null) {
         invalidations.push(queryClient.invalidateQueries({ queryKey: queryKeys.backtest(backtest.run_id) }));
+      }
+      await Promise.all(invalidations);
+    },
+  });
+}
+
+export function useDeleteBacktests() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (payload: BacktestDeleteRequest) => deleteBacktests(payload),
+    onSuccess: async (result) => {
+      const invalidations = [
+        queryClient.invalidateQueries({ queryKey: ["backtests"] }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.dashboard }),
+      ];
+      for (const runId of result.deleted_run_ids) {
+        invalidations.push(queryClient.invalidateQueries({ queryKey: queryKeys.backtest(runId) }));
       }
       await Promise.all(invalidations);
     },

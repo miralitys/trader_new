@@ -55,6 +55,13 @@ class BacktestRepository(BaseRepository):
         stmt = select(BacktestResult).where(BacktestResult.backtest_run_id == backtest_run_id)
         return self.session.scalar(stmt)
 
+    def delete_run(self, run: BacktestRun, result: Optional[BacktestResult] = None) -> None:
+        persisted_result = result if result is not None else self.get_result(run.id)
+        if persisted_result is not None:
+            self.session.delete(persisted_result)
+        self.session.delete(run)
+        self.session.flush()
+
     def list_runs(
         self,
         limit: int = 100,

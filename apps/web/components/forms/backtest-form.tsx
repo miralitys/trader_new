@@ -14,8 +14,18 @@ type BacktestFormProps = {
 const presetSymbols = ["BTC-USDT", "ETH-USDT", "SOL-USDT"] as const;
 const rangePresets = [30, 60, 90, 180] as const;
 
-function buildRangeInputs(days: number) {
-  const end = new Date();
+function resolveRangeAnchor(value?: string) {
+  if (value) {
+    const parsed = new Date(value);
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed;
+    }
+  }
+  return new Date();
+}
+
+function buildRangeInputs(days: number, anchor?: Date) {
+  const end = anchor ?? new Date();
   const start = new Date(end.getTime() - 1000 * 60 * 60 * 24 * days);
   return {
     startAt: toDatetimeLocalInput(start),
@@ -26,12 +36,13 @@ function buildRangeInputs(days: number) {
 export function BacktestForm({ strategies }: BacktestFormProps) {
   const router = useRouter();
   const runBacktest = useRunBacktest();
+  const initialRange = useMemo(() => buildRangeInputs(30), []);
   const [strategyCode, setStrategyCode] = useState(strategies[0]?.code ?? "");
   const [symbol, setSymbol] = useState<string>(presetSymbols[0]);
   const [timeframe, setTimeframe] = useState("5m");
   const [selectedRangeDays, setSelectedRangeDays] = useState<number | null>(30);
-  const [startAt, setStartAt] = useState(buildRangeInputs(30).startAt);
-  const [endAt, setEndAt] = useState(buildRangeInputs(30).endAt);
+  const [startAt, setStartAt] = useState(initialRange.startAt);
+  const [endAt, setEndAt] = useState(initialRange.endAt);
   const [initialCapital, setInitialCapital] = useState("10000");
   const [fee, setFee] = useState("0.001");
   const [slippage, setSlippage] = useState("0.0005");
@@ -43,10 +54,9 @@ export function BacktestForm({ strategies }: BacktestFormProps) {
   const sortedStrategies = useMemo(() => strategies.slice().sort((left, right) => left.name.localeCompare(right.name)), [strategies]);
 
   function applyRangePreset(days: number) {
-    const nextRange = buildRangeInputs(days);
+    const nextRange = buildRangeInputs(days, resolveRangeAnchor(endAt));
     setSelectedRangeDays(days);
     setStartAt(nextRange.startAt);
-    setEndAt(nextRange.endAt);
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -139,13 +149,13 @@ export function BacktestForm({ strategies }: BacktestFormProps) {
         </Field>
 
         <Field label="Quick range">
-          <div className="flex h-11 items-center gap-2 rounded-xl border border-white/10 bg-slate-950/60 px-2">
+          <div className="grid min-h-[44px] grid-cols-4 gap-1.5 rounded-xl border border-white/10 bg-slate-950/60 p-1.5">
             {rangePresets.map((days) => (
               <button
                 key={days}
                 type="button"
                 onClick={() => applyRangePreset(days)}
-                className={`rounded-lg px-3 py-1.5 text-sm font-medium transition ${
+                className={`min-w-0 rounded-lg px-0 py-2 text-sm font-medium transition ${
                   selectedRangeDays === days
                     ? "bg-emerald-400 text-slate-950"
                     : "text-slate-300 hover:bg-white/5 hover:text-white"

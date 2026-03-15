@@ -7,7 +7,13 @@ from fastapi import APIRouter, Depends, Query, status
 from app.api.dependencies import get_backtest_runner_service, get_query_service
 from app.api.errors import BadRequestError, NotFoundError
 from app.schemas.api import BacktestListItemResponse
-from app.schemas.backtest import BacktestRequest, BacktestResponse, BacktestStopRequest
+from app.schemas.backtest import (
+    BacktestDeleteRequest,
+    BacktestDeleteResponse,
+    BacktestRequest,
+    BacktestResponse,
+    BacktestStopRequest,
+)
 from app.services.backtest_runner_service import BacktestRunnerService
 from app.services.query_service import QueryService
 
@@ -59,5 +65,16 @@ def stop_backtest(
         return service.stop_backtest(run_id, request.reason if request is not None else "manual_stop")
     except KeyError as exc:
         raise NotFoundError(str(exc)) from exc
+    except ValueError as exc:
+        raise BadRequestError(str(exc)) from exc
+
+
+@router.post("/delete", response_model=BacktestDeleteResponse, summary="Delete backtest runs")
+def delete_backtests(
+    request: BacktestDeleteRequest,
+    service: BacktestRunnerService = Depends(get_backtest_runner_service),
+) -> BacktestDeleteResponse:
+    try:
+        return service.delete_backtests(request.run_ids)
     except ValueError as exc:
         raise BadRequestError(str(exc)) from exc

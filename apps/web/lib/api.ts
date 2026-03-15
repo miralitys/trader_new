@@ -2,6 +2,8 @@ import type {
   ApiErrorPayload,
   AppLog,
   BacktestFilters,
+  BacktestDeleteRequest,
+  BacktestDeleteResponse,
   BacktestListItem,
   BacktestResponse,
   BacktestRunRequest,
@@ -159,6 +161,13 @@ export function runBacktest(payload: BacktestRunRequest) {
 
 export function stopBacktest(id: number, payload: BacktestStopRequest) {
   return apiRequest<BacktestResponse>(`/api/backtests/${id}/stop`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function deleteBacktests(payload: BacktestDeleteRequest) {
+  return apiRequest<BacktestDeleteResponse>("/api/backtests/delete", {
     method: "POST",
     body: JSON.stringify(payload),
   });

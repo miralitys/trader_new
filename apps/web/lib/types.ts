@@ -137,6 +137,15 @@ export type BacktestTrade = {
   exit_reason: string;
 };
 
+export type BacktestDiagnostics = {
+  pipeline_counters?: Record<string, number>;
+  reject_reasons?: Record<string, number>;
+  reject_reason_details?: Record<string, number>;
+  strategy_specific_counters?: Record<string, number>;
+  strategy_debug?: Record<string, unknown>;
+  [key: string]: unknown;
+};
+
 export type EquityPoint = {
   timestamp: string;
   equity: NumericValue;
@@ -160,6 +169,7 @@ export type BacktestResponse = {
   metrics: BacktestMetrics;
   equity_curve: EquityPoint[];
   trades: BacktestTrade[];
+  diagnostics: BacktestDiagnostics;
   error_text: string | null;
 };
 
@@ -179,6 +189,21 @@ export type BacktestRunRequest = {
 
 export type BacktestStopRequest = {
   reason: string;
+};
+
+export type BacktestDeleteRequest = {
+  run_ids: number[];
+};
+
+export type BacktestDeleteBlockedItem = {
+  run_id: number;
+  reason: string;
+};
+
+export type BacktestDeleteResponse = {
+  deleted_run_ids: number[];
+  blocked_runs: BacktestDeleteBlockedItem[];
+  missing_run_ids: number[];
 };
 
 export type DataSyncRequest = {

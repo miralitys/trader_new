@@ -10,7 +10,13 @@ from app.engines.backtest_engine import BacktestEngine, BacktestStopRequestedErr
 from app.models.enums import BacktestStatus
 from app.repositories.backtest_repository import BacktestRepository
 from app.repositories.candle_repository import CandleRepository
-from app.schemas.backtest import BacktestCandle, BacktestRequest, BacktestResponse
+from app.schemas.backtest import (
+    BacktestCandle,
+    BacktestDeleteBlockedItem,
+    BacktestDeleteResponse,
+    BacktestRequest,
+    BacktestResponse,
+)
 from app.services.query_service import QueryService
 from app.strategies.registry import get_strategy
 from app.utils.time import ensure_utc, utc_now
@@ -236,6 +242,57 @@ class BacktestRunnerService:
             session.close()
 
         return self._load_backtest_response(run_id)
+
+    def delete_backtests(self, run_ids: list[int]) -> BacktestDeleteResponse:
+        self._recover_stale_runs()
+        session = SessionLocal()
+        deleted_run_ids: list[int] = []
+        blocked_runs: list[BacktestDeleteBlockedItem] = []
+        missing_run_ids: list[int] = []
+        try:
+            backtest_repository = BacktestRepository(session)
+            for run_id in run_ids:
+                row = backtest_repository.get_run_with_result(run_id)
+                if row is None:
+                    missing_run_ids.append(run_id)
+                    continue
+
+                run, _strategy, result = row
+                if run.status in {BacktestStatus.RUNNING, BacktestStatus.QUEUED}:
+                    blocked_runs.append(
+                        BacktestDeleteBlockedItem(
+                            run_id=run_id,
+                            reason="active_run_stop_first",
+                        )
+                    )
+                    continue
+
+                backtest_repository.delete_run(run, result=result)
+                deleted_run_ids.append(run_id)
+
+            session.commit()
+            logger.info(
+                "Backtest delete request processed",
+                extra={
+                    "deleted_run_ids": deleted_run_ids,
+                    "blocked_runs": [item.model_dump(mode="json") for item in blocked_runs],
+                    "missing_run_ids": missing_run_ids,
+                },
+            )
+            return BacktestDeleteResponse(
+                deleted_run_ids=deleted_run_ids,
+                blocked_runs=blocked_runs,
+                missing_run_ids=missing_run_ids,
+            )
+        except Exception:
+            session.rollback()
+            logger.exception(
+                "Failed to delete backtests",
+                extra={"requested_run_ids": run_ids},
+            )
+            raise
+        finally:
+            session.close()
 
     def _recover_stale_runs(self) -> None:
         session = SessionLocal()

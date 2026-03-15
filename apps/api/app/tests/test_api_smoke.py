@@ -77,6 +77,15 @@ class FakeBacktestRunnerService:
             error_text=f"manual_stop:{reason}",
         )
 
+    def delete_backtests(self, run_ids: list[int]) -> dict[str, object]:
+        deleted = [run_id for run_id in run_ids if run_id != 9]
+        blocked = [{"run_id": 9, "reason": "active_run_stop_first"}] if 9 in run_ids else []
+        return {
+            "deleted_run_ids": deleted,
+            "blocked_runs": blocked,
+            "missing_run_ids": [],
+        }
+
 
 class FakeQueryService:
     def get_dashboard_summary(self) -> DashboardSummaryResponse:
@@ -184,6 +193,17 @@ def test_backtest_stop_endpoint_returns_failed_report(client: TestClient) -> Non
     assert payload["run_id"] == 9
     assert payload["status"] == "failed"
     assert payload["error_text"] == "manual_stop:manual_stop"
+
+
+def test_backtest_delete_endpoint_returns_bulk_delete_report(client: TestClient) -> None:
+    app.dependency_overrides[get_backtest_runner_service] = lambda: FakeBacktestRunnerService()
+
+    response = client.post("/api/backtests/delete", json={"run_ids": [7, 9]})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["deleted_run_ids"] == [7]
+    assert payload["blocked_runs"] == [{"run_id": 9, "reason": "active_run_stop_first"}]
 
 
 def test_dashboard_summary_endpoint_returns_aggregate_payload(client: TestClient) -> None:

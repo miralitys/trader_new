@@ -59,6 +59,34 @@ class BacktestStopRequest(BaseModel):
     reason: str = "manual_stop"
 
 
+class BacktestDeleteRequest(BaseModel):
+    run_ids: list[int] = Field(default_factory=list)
+
+    @field_validator("run_ids")
+    @classmethod
+    def validate_run_ids(cls, value: list[int]) -> list[int]:
+        normalized: list[int] = []
+        for run_id in value:
+            if run_id <= 0:
+                raise ValueError("run_ids must contain positive integers")
+            if run_id not in normalized:
+                normalized.append(run_id)
+        if not normalized:
+            raise ValueError("At least one run_id is required")
+        return normalized
+
+
+class BacktestDeleteBlockedItem(BaseModel):
+    run_id: int
+    reason: str
+
+
+class BacktestDeleteResponse(BaseModel):
+    deleted_run_ids: list[int] = Field(default_factory=list)
+    blocked_runs: list[BacktestDeleteBlockedItem] = Field(default_factory=list)
+    missing_run_ids: list[int] = Field(default_factory=list)
+
+
 class BacktestCandle(BaseModel):
     open_time: datetime
     open: Decimal
