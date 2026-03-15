@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from app.strategies.base import BaseStrategy
 from app.strategies.breakout_retest import BreakoutRetestStrategy
+from app.strategies.deep_flush_micro_reclaim import DeepFlushMicroReclaimStrategy
 from app.strategies.mean_reversion_hard_stop import MeanReversionHardStopStrategy
 from app.strategies.pullback_to_trend import PullbackToTrendStrategy
 from app.strategies.rsi_micro_bounce import RSIMicroBounceStrategy
@@ -12,6 +13,7 @@ _STRATEGIES: dict[str, BaseStrategy] = {
     strategy.key: strategy
     for strategy in [
         BreakoutRetestStrategy(),
+        DeepFlushMicroReclaimStrategy(),
         PullbackToTrendStrategy(),
         MeanReversionHardStopStrategy(),
         RSIMicroBounceStrategy(),

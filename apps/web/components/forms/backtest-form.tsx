@@ -12,7 +12,7 @@ type BacktestFormProps = {
 };
 
 const presetSymbols = ["BTC-USDT", "ETH-USDT", "SOL-USDT"] as const;
-const rangePresets = [30, 60, 90] as const;
+const rangePresets = [30, 60, 90, 180] as const;
 
 function buildRangeInputs(days: number) {
   const end = new Date();
