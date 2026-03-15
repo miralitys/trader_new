@@ -137,6 +137,17 @@ class BacktestEngine(EngineBase):
                 "breakout_not_valid": 0,
                 "retest_not_reached": 0,
                 "retest_failed": 0,
+                "no_recent_impulse": 0,
+                "trend_too_extended": 0,
+                "impulse_too_weak": 0,
+                "impulse_too_noisy": 0,
+                "pullback_not_detected": 0,
+                "pullback_too_deep": 0,
+                "pullback_broke_structure": 0,
+                "pullback_shape_invalid": 0,
+                "trigger_not_confirmed": 0,
+                "trigger_bar_too_weak": 0,
+                "trigger_close_not_strong_enough": 0,
                 "range_not_tight_enough": 0,
                 "breakout_not_confirmed": 0,
                 "breakout_bar_not_green": 0,
@@ -660,6 +671,28 @@ class BacktestEngine(EngineBase):
             return "retest_not_reached", None
         if reason == "retest_failed":
             return "retest_failed", None
+        if reason == "no_recent_impulse":
+            return "no_recent_impulse", None
+        if reason == "trend_too_extended":
+            return "trend_too_extended", None
+        if reason == "impulse_too_weak":
+            return "impulse_too_weak", None
+        if reason == "impulse_too_noisy":
+            return "impulse_too_noisy", None
+        if reason == "pullback_not_detected":
+            return "pullback_not_detected", None
+        if reason == "pullback_too_deep":
+            return "pullback_too_deep", None
+        if reason == "pullback_broke_structure":
+            return "pullback_broke_structure", None
+        if reason == "pullback_shape_invalid":
+            return "pullback_shape_invalid", None
+        if reason == "trigger_not_confirmed":
+            return "trigger_not_confirmed", None
+        if reason == "trigger_bar_too_weak":
+            return "trigger_bar_too_weak", None
+        if reason == "trigger_close_not_strong_enough":
+            return "trigger_close_not_strong_enough", None
         if reason == "range_not_tight_enough":
             return "range_not_tight_enough", None
         if reason == "breakout_not_confirmed":
