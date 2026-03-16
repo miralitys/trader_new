@@ -56,7 +56,7 @@ Historical backfill:
 
 ```bash
 docker compose exec backend python -m app.scripts.funding_basis_ingest history \
-  --symbols BTC-USDT,ETH-USDT,SOL-USDT \
+  --symbols BTC-USDT,ETH-USDT,SOL-USDT,BNB-USDT,ADA-USDT,ALPINE-USDT,XRP-USDT,1INCH-USDT \
   --perp-venue binance_futures \
   --timeframe 5m \
   --start-at 2026-02-01T00:00:00Z \
@@ -67,7 +67,7 @@ Incremental refresh:
 
 ```bash
 docker compose exec backend python -m app.scripts.funding_basis_ingest incremental \
-  --symbols BTC-USDT,ETH-USDT,SOL-USDT \
+  --symbols BTC-USDT,ETH-USDT,SOL-USDT,BNB-USDT,ADA-USDT,ALPINE-USDT,XRP-USDT,1INCH-USDT \
   --perp-venue binance_futures \
   --timeframe 5m
 ```
@@ -76,7 +76,7 @@ Use OKX SWAP instead of Binance Futures:
 
 ```bash
 docker compose exec backend python -m app.scripts.funding_basis_ingest history \
-  --symbols BTC-USDT,ETH-USDT,SOL-USDT \
+  --symbols BTC-USDT,ETH-USDT,SOL-USDT,BNB-USDT,ADA-USDT,ALPINE-USDT,XRP-USDT,1INCH-USDT \
   --perp-venue okx_swap \
   --timeframe 5m \
   --start-at 2026-02-01T00:00:00Z \
@@ -87,7 +87,7 @@ Force archive mode:
 
 ```bash
 docker compose exec backend python -m app.scripts.funding_basis_ingest history \
-  --symbols BTC-USDT,ETH-USDT,SOL-USDT \
+  --symbols BTC-USDT,ETH-USDT,SOL-USDT,BNB-USDT,ADA-USDT,ALPINE-USDT,XRP-USDT,1INCH-USDT \
   --timeframe 5m \
   --start-at 2026-02-01T00:00:00Z \
   --end-at 2026-03-15T00:00:00Z \
@@ -98,7 +98,7 @@ docker compose exec backend python -m app.scripts.funding_basis_ingest history \
 
 ```bash
 docker compose exec backend python -m app.scripts.funding_basis_report \
-  --symbols BTC-USDT,ETH-USDT,SOL-USDT \
+  --symbols BTC-USDT,ETH-USDT,SOL-USDT,BNB-USDT,ADA-USDT,ALPINE-USDT,XRP-USDT,1INCH-USDT \
   --perp-venue binance_futures \
   --timeframe 5m \
   --start-at 2026-02-01T00:00:00Z \
@@ -125,7 +125,7 @@ The report computes:
 
 ```bash
 docker compose exec backend python -m app.scripts.funding_basis_compare \
-  --symbols BTC-USDT,ETH-USDT,SOL-USDT \
+  --symbols BTC-USDT,ETH-USDT,SOL-USDT,BNB-USDT,ADA-USDT,ALPINE-USDT,XRP-USDT,1INCH-USDT \
   --perp-venues binance_futures,okx_swap \
   --timeframe 5m \
   --start-at 2026-02-01T00:00:00Z \

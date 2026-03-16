@@ -10,7 +10,7 @@ type CandleQueryFormProps = {
   onSubmit: (filters: CandleFilters) => void;
 };
 
-const presetSymbols = ["BTC-USDT", "ETH-USDT", "SOL-USDT"] as const;
+const presetSymbols = ["BTC-USDT", "ETH-USDT", "SOL-USDT", "BNB-USDT", "ADA-USDT", "ALPINE-USDT", "XRP-USDT", "1INCH-USDT"] as const;
 
 export function CandleQueryForm({ onSubmit }: CandleQueryFormProps) {
   const [symbol, setSymbol] = useState<string>(presetSymbols[0]);

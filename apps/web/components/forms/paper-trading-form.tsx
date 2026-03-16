@@ -11,7 +11,7 @@ type PaperTradingFormProps = {
   initialConfig: Record<string, unknown>;
 };
 
-const allowedSymbols = ["BTC-USDT", "ETH-USDT", "SOL-USDT"] as const;
+const allowedSymbols = ["BTC-USDT", "ETH-USDT", "SOL-USDT", "BNB-USDT", "ADA-USDT", "ALPINE-USDT", "XRP-USDT", "1INCH-USDT"] as const;
 
 export function PaperTradingForm({ strategy, initialConfig }: PaperTradingFormProps) {
   const startPaper = useStartStrategyPaper(strategy.code);
@@ -94,7 +94,7 @@ export function PaperTradingForm({ strategy, initialConfig }: PaperTradingFormPr
                 )
               }
               className={inputClassName}
-              placeholder="BTC-USDT, ETH-USDT, SOL-USDT"
+              placeholder="BTC-USDT, ETH-USDT, SOL-USDT, BNB-USDT, ADA-USDT, ALPINE-USDT, XRP-USDT, 1INCH-USDT"
             />
           </Field>
 

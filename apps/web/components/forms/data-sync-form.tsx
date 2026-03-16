@@ -6,7 +6,7 @@ import { DateRangePresets } from "@/components/forms/date-range-presets";
 import { useRunDataSync } from "@/lib/query-hooks";
 import { formatInteger, formatPercent, toDatetimeLocalInput } from "@/lib/utils";
 
-const presetSymbols = ["BTC-USDT", "ETH-USDT", "SOL-USDT"] as const;
+const presetSymbols = ["BTC-USDT", "ETH-USDT", "SOL-USDT", "BNB-USDT", "ADA-USDT", "ALPINE-USDT", "XRP-USDT", "1INCH-USDT"] as const;
 
 export function DataSyncForm() {
   const syncMutation = useRunDataSync();

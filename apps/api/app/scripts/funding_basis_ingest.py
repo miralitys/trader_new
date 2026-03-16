@@ -15,7 +15,7 @@ def parse_args() -> argparse.Namespace:
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     history_parser = subparsers.add_parser("history", help="Load historical data.")
-    history_parser.add_argument("--symbols", default="BTC-USDT,ETH-USDT,SOL-USDT")
+    history_parser.add_argument("--symbols", default="BTC-USDT,ETH-USDT,SOL-USDT,BNB-USDT,ADA-USDT,ALPINE-USDT,XRP-USDT,1INCH-USDT")
     history_parser.add_argument("--timeframe", default="5m")
     history_parser.add_argument("--perp-venue", default="binance_futures", choices=["binance_futures", "okx_swap"])
     history_parser.add_argument("--start-at", required=True)
@@ -23,7 +23,7 @@ def parse_args() -> argparse.Namespace:
     history_parser.add_argument("--prefer-archive", action="store_true")
 
     incremental_parser = subparsers.add_parser("incremental", help="Refresh the latest data incrementally.")
-    incremental_parser.add_argument("--symbols", default="BTC-USDT,ETH-USDT,SOL-USDT")
+    incremental_parser.add_argument("--symbols", default="BTC-USDT,ETH-USDT,SOL-USDT,BNB-USDT,ADA-USDT,ALPINE-USDT,XRP-USDT,1INCH-USDT")
     incremental_parser.add_argument("--timeframe", default="5m")
     incremental_parser.add_argument("--perp-venue", default="binance_futures", choices=["binance_futures", "okx_swap"])
     incremental_parser.add_argument("--end-at")

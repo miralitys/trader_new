@@ -24,3 +24,13 @@ def test_settings_include_funding_basis_defaults() -> None:
     assert settings.funding_basis_archive_base_url == "https://data.binance.vision/data"
     assert settings.funding_basis_archive_fallback_enabled is True
     assert settings.funding_basis_incremental_overlap_bars == 3
+    assert settings.default_symbol_list == [
+        "BTC-USDT",
+        "ETH-USDT",
+        "SOL-USDT",
+        "BNB-USDT",
+        "ADA-USDT",
+        "ALPINE-USDT",
+        "XRP-USDT",
+        "1INCH-USDT",
+    ]
