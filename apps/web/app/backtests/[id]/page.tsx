@@ -39,6 +39,13 @@ export default function BacktestDetailPage() {
   const runtimeWindow = typeof backtest.diagnostics.runtime_window === "object" && backtest.diagnostics.runtime_window !== null
     ? (backtest.diagnostics.runtime_window as Record<string, unknown>)
     : null;
+  const runtimeWindowString = (key: string) => {
+    if (!runtimeWindow) {
+      return undefined;
+    }
+    const value = runtimeWindow[key];
+    return typeof value === "string" ? value : undefined;
+  };
 
   return (
     <div className="flex flex-col gap-6">
@@ -80,16 +87,16 @@ export default function BacktestDetailPage() {
               <MetricCard
                 label="Requested period"
                 value={
-                  runtimeWindow.requested_start_at && runtimeWindow.requested_end_at
-                    ? `${formatDateTime(runtimeWindow.requested_start_at)} -> ${formatDateTime(runtimeWindow.requested_end_at)}`
+                  runtimeWindowString("requested_start_at") && runtimeWindowString("requested_end_at")
+                    ? `${formatDateTime(runtimeWindowString("requested_start_at"))} -> ${formatDateTime(runtimeWindowString("requested_end_at"))}`
                     : "N/A"
                 }
               />
               <MetricCard
                 label="Loaded warmup period"
                 value={
-                  runtimeWindow.loaded_start_at && runtimeWindow.loaded_end_at
-                    ? `${formatDateTime(runtimeWindow.loaded_start_at)} -> ${formatDateTime(runtimeWindow.loaded_end_at)}`
+                  runtimeWindowString("loaded_start_at") && runtimeWindowString("loaded_end_at")
+                    ? `${formatDateTime(runtimeWindowString("loaded_start_at"))} -> ${formatDateTime(runtimeWindowString("loaded_end_at"))}`
                     : "N/A"
                 }
                 hint={
@@ -101,8 +108,8 @@ export default function BacktestDetailPage() {
               <MetricCard
                 label="Effective trading start"
                 value={
-                  runtimeWindow.effective_trading_start_at
-                    ? formatDateTime(runtimeWindow.effective_trading_start_at)
+                  runtimeWindowString("effective_trading_start_at")
+                    ? formatDateTime(runtimeWindowString("effective_trading_start_at"))
                     : "N/A"
                 }
                 hint={
