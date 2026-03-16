@@ -18,6 +18,7 @@ export const metadata: Metadata = {
 const links = [
   { href: "/", label: "Dashboard" },
   { href: "/backtests", label: "Backtests" },
+  { href: "/paper", label: "Paper Plan" },
   { href: "/data", label: "Data" },
   { href: "/logs", label: "Logs" },
 ];
