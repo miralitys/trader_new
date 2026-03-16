@@ -56,6 +56,7 @@ export function CandleQueryForm({ onSubmit }: CandleQueryFormProps) {
             <option value="5m">5m</option>
             <option value="15m">15m</option>
             <option value="1h">1h</option>
+            <option value="4h">4h</option>
           </select>
         </Field>
 

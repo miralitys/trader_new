@@ -13,6 +13,7 @@ class BinanceUSTimeframe(str, Enum):
     FIVE_MINUTES = "5m"
     FIFTEEN_MINUTES = "15m"
     ONE_HOUR = "1h"
+    FOUR_HOURS = "4h"
 
     @classmethod
     def from_code(cls, value: str) -> "BinanceUSTimeframe":
@@ -27,6 +28,7 @@ class BinanceUSTimeframe(str, Enum):
             BinanceUSTimeframe.FIVE_MINUTES: 300,
             BinanceUSTimeframe.FIFTEEN_MINUTES: 900,
             BinanceUSTimeframe.ONE_HOUR: 3600,
+            BinanceUSTimeframe.FOUR_HOURS: 14400,
         }
         return mapping[self]
 
@@ -36,6 +38,7 @@ class BinanceUSTimeframe(str, Enum):
             BinanceUSTimeframe.FIVE_MINUTES: "5m",
             BinanceUSTimeframe.FIFTEEN_MINUTES: "15m",
             BinanceUSTimeframe.ONE_HOUR: "1h",
+            BinanceUSTimeframe.FOUR_HOURS: "4h",
         }
         return mapping[self]
 
@@ -49,6 +52,7 @@ class BinanceUSTimeframe(str, Enum):
             BinanceUSTimeframe.FIVE_MINUTES: "5 Minutes",
             BinanceUSTimeframe.FIFTEEN_MINUTES: "15 Minutes",
             BinanceUSTimeframe.ONE_HOUR: "1 Hour",
+            BinanceUSTimeframe.FOUR_HOURS: "4 Hours",
         }
         return mapping[self]
 

@@ -11,6 +11,7 @@ def test_binance_us_timeframe_mapping() -> None:
     assert BinanceUSTimeframe.from_code("5m").granularity_seconds == 300
     assert BinanceUSTimeframe.from_code("15m").granularity_seconds == 900
     assert BinanceUSTimeframe.from_code("1h").granularity_seconds == 3600
+    assert BinanceUSTimeframe.from_code("4h").granularity_seconds == 14400
 
 
 def test_binance_us_timeframe_windows_chunk_large_ranges() -> None:
@@ -26,4 +27,4 @@ def test_binance_us_timeframe_windows_chunk_large_ranges() -> None:
 
 def test_binance_us_timeframe_rejects_unsupported_values() -> None:
     with pytest.raises(ValueError):
-        BinanceUSTimeframe.from_code("4h")
+        BinanceUSTimeframe.from_code("1d")

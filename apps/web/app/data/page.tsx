@@ -104,7 +104,7 @@ export default function DataPage() {
 
           <label className="grid gap-2">
             <span className="text-[11px] uppercase tracking-[0.2em] text-slate-400">Timeframe</span>
-            <input value={timeframeFilter} onChange={(event) => setTimeframeFilter(event.target.value)} className={inputClassName} placeholder="5m" />
+            <input value={timeframeFilter} onChange={(event) => setTimeframeFilter(event.target.value)} className={inputClassName} placeholder="5m, 1h or 4h" />
           </label>
         </div>
 

@@ -185,6 +185,7 @@ def seed_reference_data() -> None:
         "5m": {"code": "5m", "name": "5 Minutes", "duration_seconds": 300},
         "15m": {"code": "15m", "name": "15 Minutes", "duration_seconds": 900},
         "1h": {"code": "1h", "name": "1 Hour", "duration_seconds": 3600},
+        "4h": {"code": "4h", "name": "4 Hours", "duration_seconds": 14400},
     }
 
     with session_scope() as session:
@@ -201,11 +202,7 @@ def seed_reference_data() -> None:
             session.add(binance_us_exchange)
             session.flush()
 
-        for timeframe_code in settings.default_timeframe_list:
-            timeframe = timeframe_rows.get(timeframe_code)
-            if timeframe is None:
-                continue
-
+        for timeframe in timeframe_rows.values():
             exists = session.scalar(select(Timeframe).where(Timeframe.code == timeframe["code"]))
             if exists is None:
                 session.add(Timeframe(**timeframe, is_active=True))
