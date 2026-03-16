@@ -25,6 +25,12 @@ const presetSymbols = [
   "AVAX-USDT",
   "LINK-USDT",
   "DOGE-USDT",
+  "ICP-USDT",
+  "GALA-USDT",
+  "AXS-USDT",
+  "ONDO-USDT",
+  "IOTA-USDT",
+  "FIL-USDT",
 ] as const;
 const rangePresets = [30, 60, 90, 180] as const;
 
@@ -200,7 +206,7 @@ export function BacktestForm({ strategies }: BacktestFormProps) {
           onChange={(event) => setOverrides(event.target.value)}
           rows={8}
           className={textareaClassName}
-          placeholder='{"symbols":["BTC-USDT","BNB-USDT","LTC-USDT"],"timeframes":["5m"]}'
+          placeholder='{"symbols":["BTC-USDT","ICP-USDT","FIL-USDT"],"timeframes":["5m"]}'
         />
       </Field>
 

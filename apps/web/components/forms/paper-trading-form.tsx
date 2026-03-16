@@ -25,6 +25,12 @@ const allowedSymbols = [
   "AVAX-USDT",
   "LINK-USDT",
   "DOGE-USDT",
+  "ICP-USDT",
+  "GALA-USDT",
+  "AXS-USDT",
+  "ONDO-USDT",
+  "IOTA-USDT",
+  "FIL-USDT",
 ] as const;
 
 export function PaperTradingForm({ strategy, initialConfig }: PaperTradingFormProps) {
@@ -108,7 +114,7 @@ export function PaperTradingForm({ strategy, initialConfig }: PaperTradingFormPr
                 )
               }
               className={inputClassName}
-              placeholder="BTC-USDT, ETH-USDT, SOL-USDT, BNB-USDT, LTC-USDT, BCH-USDT, AVAX-USDT, LINK-USDT, DOGE-USDT"
+              placeholder="BTC-USDT, ETH-USDT, ICP-USDT, GALA-USDT, AXS-USDT, ONDO-USDT, IOTA-USDT, FIL-USDT"
             />
           </Field>
 

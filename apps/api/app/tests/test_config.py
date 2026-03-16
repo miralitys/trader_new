@@ -38,4 +38,10 @@ def test_settings_include_funding_basis_defaults() -> None:
         "AVAX-USDT",
         "LINK-USDT",
         "DOGE-USDT",
+        "ICP-USDT",
+        "GALA-USDT",
+        "AXS-USDT",
+        "ONDO-USDT",
+        "IOTA-USDT",
+        "FIL-USDT",
     ]

@@ -24,6 +24,12 @@ const presetSymbols = [
   "AVAX-USDT",
   "LINK-USDT",
   "DOGE-USDT",
+  "ICP-USDT",
+  "GALA-USDT",
+  "AXS-USDT",
+  "ONDO-USDT",
+  "IOTA-USDT",
+  "FIL-USDT",
 ] as const;
 
 export function CandleQueryForm({ onSubmit }: CandleQueryFormProps) {

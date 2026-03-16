@@ -13,7 +13,7 @@ from app.services.funding_basis_research_service import FundingBasisResearchServ
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Generate FundingBasisCarry research report.")
-    parser.add_argument("--symbols", default="BTC-USDT,ETH-USDT,SOL-USDT,BNB-USDT,ADA-USDT,ALPINE-USDT,XRP-USDT,1INCH-USDT,LTC-USDT,BCH-USDT,AVAX-USDT,LINK-USDT,DOGE-USDT")
+    parser.add_argument("--symbols", default="BTC-USDT,ETH-USDT,SOL-USDT,BNB-USDT,ADA-USDT,ALPINE-USDT,XRP-USDT,1INCH-USDT,LTC-USDT,BCH-USDT,AVAX-USDT,LINK-USDT,DOGE-USDT,ICP-USDT,GALA-USDT,AXS-USDT,ONDO-USDT,IOTA-USDT,FIL-USDT")
     parser.add_argument("--timeframe", default="5m")
     parser.add_argument("--perp-venue", default="binance_futures", choices=["binance_futures", "okx_swap"])
     parser.add_argument("--start-at", required=True)
