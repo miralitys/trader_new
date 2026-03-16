@@ -9,6 +9,144 @@ Trader MVP is a locally runnable scaffold for algorithmic trading research on Bi
 
 The system is intentionally LONG-only and SPOT-only. Live trading is not implemented.
 
+## FundingBasisCarry research module
+
+The backend now includes a research-first data layer for `FundingBasisCarry v1`. This is not wired into the live or paper trading engines. It is a standalone research stack for market-neutral carry analysis using:
+
+- Binance Spot for spot price history
+- Binance Futures USD-M for perp mark/index price history and funding rates
+- OKX SWAP as an alternative perp venue for funding and basis research
+- Binance public archive fallback from `data.binance.vision` when direct REST access is blocked or unreliable
+
+### Stored research tables
+
+- `spot_prices`
+- `perp_prices`
+- `funding_rates`
+- `fee_schedules`
+
+### Snapshot alignment rule
+
+Funding observations are aligned to the nearest available spot and perp snapshot within a configurable maximum window.
+
+- exact timestamp match is preferred when present
+- otherwise the nearest snapshot by absolute time difference is used
+- if no snapshot exists inside `max_snapshot_alignment_seconds`, that funding observation is excluded from the report
+
+This rule is intentionally explicit so missing or sparse data remains visible in research output.
+
+### Archive fallback behavior
+
+The ingestion layer now supports automatic archive fallback for research ingestion.
+
+- default mode is `auto`: try Binance REST first, then fall back to archive files if REST fails
+- you can force archive mode with `--prefer-archive`
+- archive fallback currently applies to the Binance venue path only
+- archive spot/perp price history can be loaded from monthly and daily zip files
+- funding archive fallback currently relies on monthly funding archives
+
+Important limitation:
+
+- if REST is blocked and the current month funding archive has not been published yet, funding data may lag the current month
+- the ingestion result includes `spot_source`, `perp_source`, `funding_source`, and `notes` so partial or stale archive behavior stays visible
+
+### Funding basis ingestion
+
+Historical backfill:
+
+```bash
+docker compose exec backend python -m app.scripts.funding_basis_ingest history \
+  --symbols BTC-USDT,ETH-USDT,SOL-USDT \
+  --perp-venue binance_futures \
+  --timeframe 5m \
+  --start-at 2026-02-01T00:00:00Z \
+  --end-at 2026-03-15T00:00:00Z
+```
+
+Incremental refresh:
+
+```bash
+docker compose exec backend python -m app.scripts.funding_basis_ingest incremental \
+  --symbols BTC-USDT,ETH-USDT,SOL-USDT \
+  --perp-venue binance_futures \
+  --timeframe 5m
+```
+
+Use OKX SWAP instead of Binance Futures:
+
+```bash
+docker compose exec backend python -m app.scripts.funding_basis_ingest history \
+  --symbols BTC-USDT,ETH-USDT,SOL-USDT \
+  --perp-venue okx_swap \
+  --timeframe 5m \
+  --start-at 2026-02-01T00:00:00Z \
+  --end-at 2026-03-15T00:00:00Z
+```
+
+Force archive mode:
+
+```bash
+docker compose exec backend python -m app.scripts.funding_basis_ingest history \
+  --symbols BTC-USDT,ETH-USDT,SOL-USDT \
+  --timeframe 5m \
+  --start-at 2026-02-01T00:00:00Z \
+  --end-at 2026-03-15T00:00:00Z \
+  --prefer-archive
+```
+
+### Funding basis research report
+
+```bash
+docker compose exec backend python -m app.scripts.funding_basis_report \
+  --symbols BTC-USDT,ETH-USDT,SOL-USDT \
+  --perp-venue binance_futures \
+  --timeframe 5m \
+  --start-at 2026-02-01T00:00:00Z \
+  --end-at 2026-03-15T00:00:00Z \
+  --min-funding-rate 0.0001 \
+  --min-basis-pct 0.0005 \
+  --notional-usd 10000 \
+  --spot-fee-pct 0.001 \
+  --perp-fee-pct 0.0005 \
+  --slippage-pct 0.0003 \
+  --max-snapshot-alignment-seconds 600
+```
+
+The report computes:
+
+- aligned spot reference price
+- aligned perp reference price
+- `basis_pct = (perp - spot) / spot`
+- expected gross funding carry for fixed notional
+- simplified entry/exit fees and slippage
+- expected net carry after trading friction
+
+### Funding basis venue comparison
+
+```bash
+docker compose exec backend python -m app.scripts.funding_basis_compare \
+  --symbols BTC-USDT,ETH-USDT,SOL-USDT \
+  --perp-venues binance_futures,okx_swap \
+  --timeframe 5m \
+  --start-at 2026-02-01T00:00:00Z \
+  --end-at 2026-03-15T00:00:00Z \
+  --min-funding-rate 0.0001 \
+  --min-basis-pct 0.0005 \
+  --notional-usd 10000 \
+  --spot-fee-pct 0.001 \
+  --perp-fee-pct 0.0005 \
+  --slippage-pct 0.0003 \
+  --max-snapshot-alignment-seconds 600
+```
+
+The comparison report returns:
+
+- one full research report per perp venue
+- per-symbol comparison of `best_net_carry_venue`
+- per-symbol comparison of `best_funding_rate_venue`
+- per-symbol comparison of `best_basis_venue`
+- `viable_venues` for each symbol under the current screening config
+
 ## Stack
 
 - Frontend: Next.js, TypeScript, App Router, Tailwind CSS, React Query, Recharts

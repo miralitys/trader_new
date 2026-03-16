@@ -1,6 +1,7 @@
 """Centralized model registry for SQLAlchemy metadata and Alembic imports."""
 
 from app.models.backtest import BacktestResult, BacktestRun
+from app.models.funding_basis import FeeSchedule, FundingRate, PerpPrice, SpotPrice
 from app.models.market_data import Candle
 from app.models.paper import PaperAccount
 from app.models.reference import Exchange, Strategy, Symbol, Timeframe
@@ -13,10 +14,14 @@ __all__ = [
     "BacktestRun",
     "Candle",
     "Exchange",
+    "FeeSchedule",
+    "FundingRate",
     "Order",
     "PaperAccount",
+    "PerpPrice",
     "Position",
     "Signal",
+    "SpotPrice",
     "Strategy",
     "StrategyConfig",
     "StrategyRun",
