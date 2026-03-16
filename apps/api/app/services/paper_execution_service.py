@@ -272,7 +272,7 @@ class PaperExecutionService:
                             "Paper entry skipped",
                             extra={
                                 "run_id": run.id,
-                                "strategy_code": strategy.code,
+                                "strategy_code": strategy.key,
                                 "symbol": symbol,
                                 "timeframe": timeframe,
                                 "reason_skipped": result.signal_event.payload_json.get("metadata", {}).get("reason_skipped"),
@@ -319,7 +319,7 @@ class PaperExecutionService:
                         "Paper position opened",
                         extra={
                             "run_id": run.id,
-                            "strategy_code": strategy.code,
+                            "strategy_code": strategy.key,
                             "symbol": symbol,
                             "qty": str(next_position.qty),
                             "entry_price": str(next_position.entry_price),
@@ -350,7 +350,7 @@ class PaperExecutionService:
                         "Paper trade closed",
                         extra={
                             "run_id": run.id,
-                            "strategy_code": strategy.code,
+                            "strategy_code": strategy.key,
                             "symbol": symbol,
                             "pnl": str(result.trade_event.pnl),
                             "exit_reason": result.trade_event.metadata_json.get("exit_reason"),
