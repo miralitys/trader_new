@@ -17,7 +17,7 @@ from app.schemas.backtest import (
     EquityPoint,
 )
 from app.strategies.base import BaseStrategy, StrategyContext
-from app.utils.time import utc_now
+from app.utils.time import ensure_utc, utc_now
 
 ZERO = Decimal("0")
 ONE = Decimal("1")
@@ -103,6 +103,7 @@ class BacktestEngine(EngineBase):
         progress_callback: Optional[Callable[[int, int, datetime], None]] = None,
         stop_check_interval_bars: int = 0,
         should_abort: Optional[Callable[[int, int, datetime], bool]] = None,
+        preroll_days: int = 0,
     ) -> BacktestResponse:
         if not strategy.long_only or not strategy.spot_only:
             raise ValueError("BacktestEngine currently supports LONG-only SPOT-only strategies only")
@@ -111,6 +112,13 @@ class BacktestEngine(EngineBase):
         if not ordered_candles:
             raise ValueError("BacktestEngine requires at least one candle")
         ordered_closes = [Decimal(str(candle.close)) for candle in ordered_candles]
+        requested_start_at = ensure_utc(request.start_at)
+        requested_end_at = ensure_utc(request.end_at)
+        first_trading_candle_at = next(
+            (candle.open_time for candle in ordered_candles if candle.open_time >= requested_start_at),
+            None,
+        )
+        trading_candle_count = sum(1 for candle in ordered_candles if candle.open_time >= requested_start_at)
 
         config_payload = strategy.default_config()
         config_payload.update(request.strategy_config_override)
@@ -148,6 +156,9 @@ class BacktestEngine(EngineBase):
                 "trigger_not_confirmed": 0,
                 "trigger_bar_too_weak": 0,
                 "trigger_close_not_strong_enough": 0,
+                "oversold_not_detected": 0,
+                "oversold_not_fresh": 0,
+                "stretch_not_large_enough": 0,
                 "range_not_tight_enough": 0,
                 "breakout_not_confirmed": 0,
                 "breakout_bar_not_green": 0,
@@ -200,6 +211,18 @@ class BacktestEngine(EngineBase):
             },
             "strategy_debug": {
                 "strategy_key": strategy.key,
+            },
+            "runtime_window": {
+                "requested_start_at": requested_start_at.isoformat(),
+                "requested_end_at": requested_end_at.isoformat(),
+                "loaded_start_at": ordered_candles[0].open_time.isoformat(),
+                "loaded_end_at": ordered_candles[-1].open_time.isoformat(),
+                "effective_trading_start_at": (
+                    first_trading_candle_at.isoformat() if first_trading_candle_at is not None else None
+                ),
+                "preroll_days": int(preroll_days),
+                "loaded_candle_count": len(ordered_candles),
+                "trading_candle_count": trading_candle_count,
             },
         }
         one_hour_history: list[BacktestCandle] = []
@@ -364,6 +387,11 @@ class BacktestEngine(EngineBase):
                     "regime_rsi_1h": current_one_hour_rsi,
                     "regime_closes_tail": tuple(one_hour_closes[-regime_tail_size:]) if regime_tail_size > 0 else tuple(),
                 }
+            if candle.open_time < requested_start_at:
+                if progress_callback is not None and progress_interval_bars > 0:
+                    if processed_bars % progress_interval_bars == 0 or processed_bars == total_bars:
+                        progress_callback(processed_bars, total_bars, candle.open_time)
+                continue
             signal = strategy.generate_signal(
                 StrategyContext(
                     symbol=request.symbol,
@@ -693,6 +721,12 @@ class BacktestEngine(EngineBase):
             return "trigger_bar_too_weak", None
         if reason == "trigger_close_not_strong_enough":
             return "trigger_close_not_strong_enough", None
+        if reason == "oversold_not_detected":
+            return "oversold_not_detected", None
+        if reason == "oversold_not_fresh":
+            return "oversold_not_fresh", None
+        if reason == "stretch_not_large_enough":
+            return "stretch_not_large_enough", None
         if reason == "range_not_tight_enough":
             return "range_not_tight_enough", None
         if reason == "breakout_not_confirmed":

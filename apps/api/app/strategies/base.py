@@ -65,6 +65,13 @@ class BaseStrategy:
     def parse_config(self, config: dict[str, Any] | None = None) -> BaseStrategyConfig:
         return self.config_model(**(config or {}))
 
+    def required_preroll_days(
+        self,
+        timeframe: str,
+        strategy_config: BaseStrategyConfig | None = None,
+    ) -> int:
+        return 0
+
     def generate_signal(self, context: StrategyContext) -> StrategySignal:
         return StrategySignal(reason=f"{self.key}_signal_not_implemented")
 

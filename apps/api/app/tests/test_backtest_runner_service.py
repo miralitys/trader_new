@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from types import SimpleNamespace
 
@@ -57,6 +57,19 @@ class PausedFakeStrategy(FakeStrategy):
     key = "paused_fake_strategy"
     name = "PausedFakeStrategy"
     status = "paused"
+
+
+class PrerollFakeStrategy(FakeStrategy):
+    key = "preroll_fake_strategy"
+    name = "PrerollFakeStrategy"
+
+    def required_preroll_days(
+        self,
+        timeframe: str,
+        strategy_config: BaseStrategyConfig | None = None,
+    ) -> int:
+        assert timeframe == "5m"
+        return 7
 
 
 class FakeBacktestRepository:
@@ -134,8 +147,14 @@ class FakeBacktestRepository:
 
 
 class FakeCandleRepository:
+    last_list_call: dict[str, object] | None = None
+
     def __init__(self, session: FakeSession) -> None:
         self.session = session
+
+    @classmethod
+    def reset(cls) -> None:
+        cls.last_list_call = None
 
     def list_candles(
         self,
@@ -145,6 +164,13 @@ class FakeCandleRepository:
         start_at: datetime,
         end_at: datetime,
     ) -> list[BacktestCandle]:
+        FakeCandleRepository.last_list_call = {
+            "exchange_code": exchange_code,
+            "symbol_code": symbol_code,
+            "timeframe": timeframe,
+            "start_at": start_at,
+            "end_at": end_at,
+        }
         return [
             BacktestCandle(
                 open_time=start_at,
@@ -153,7 +179,15 @@ class FakeCandleRepository:
                 low=Decimal("99"),
                 close=Decimal("100"),
                 volume=Decimal("1"),
-            )
+            ),
+            BacktestCandle(
+                open_time=end_at,
+                open=Decimal("100"),
+                high=Decimal("101"),
+                low=Decimal("99"),
+                close=Decimal("100"),
+                volume=Decimal("1"),
+            ),
         ]
 
 
@@ -207,6 +241,7 @@ def _request() -> BacktestRequest:
 def test_backtest_runner_marks_failed_when_engine_raises(monkeypatch: pytest.MonkeyPatch) -> None:
     session_factory = SessionFactory()
     FakeBacktestRepository.reset()
+    FakeCandleRepository.reset()
 
     monkeypatch.setattr("app.services.backtest_runner_service.SessionLocal", session_factory)
     monkeypatch.setattr("app.services.backtest_runner_service.BacktestRepository", FakeBacktestRepository)
@@ -238,6 +273,7 @@ def test_backtest_runner_rejects_unavailable_strategy(
 ) -> None:
     session_factory = SessionFactory()
     FakeBacktestRepository.reset()
+    FakeCandleRepository.reset()
 
     monkeypatch.setattr("app.services.backtest_runner_service.SessionLocal", session_factory)
     monkeypatch.setattr("app.services.backtest_runner_service.BacktestRepository", FakeBacktestRepository)
@@ -259,6 +295,7 @@ def test_backtest_runner_marks_failed_when_result_persistence_fails(monkeypatch:
     session_factory = SessionFactory()
     FakeBacktestRepository.reset()
     FakeBacktestRepository.save_result_exception = RuntimeError("persist failed")
+    FakeCandleRepository.reset()
 
     monkeypatch.setattr("app.services.backtest_runner_service.SessionLocal", session_factory)
     monkeypatch.setattr("app.services.backtest_runner_service.BacktestRepository", FakeBacktestRepository)
@@ -426,6 +463,7 @@ def test_backtest_runner_recovers_stale_runs_before_starting_new_one(monkeypatch
     session_factory = SessionFactory()
     FakeBacktestRepository.reset()
     FakeBacktestRepository.recovered_runs = [{"run_id": 5, "status": "failed", "reason": "stale_run_missing_result"}]
+    FakeCandleRepository.reset()
 
     monkeypatch.setattr("app.services.backtest_runner_service.SessionLocal", session_factory)
     monkeypatch.setattr("app.services.backtest_runner_service.BacktestRepository", FakeBacktestRepository)
@@ -443,6 +481,7 @@ def test_backtest_runner_recovers_stale_runs_before_starting_new_one(monkeypatch
 def test_backtest_runner_returns_failed_response_when_stop_is_requested(monkeypatch: pytest.MonkeyPatch) -> None:
     session_factory = SessionFactory()
     FakeBacktestRepository.reset()
+    FakeCandleRepository.reset()
 
     monkeypatch.setattr("app.services.backtest_runner_service.SessionLocal", session_factory)
     monkeypatch.setattr("app.services.backtest_runner_service.BacktestRepository", FakeBacktestRepository)
@@ -478,6 +517,27 @@ def test_backtest_runner_returns_failed_response_when_stop_is_requested(monkeypa
     assert report.error_text == "manual_stop_requested"
     assert FakeBacktestRepository.current_run is not None
     assert FakeBacktestRepository.current_run.status == BacktestStatus.FAILED
+
+
+def test_backtest_runner_loads_preroll_candles_before_requested_start(monkeypatch: pytest.MonkeyPatch) -> None:
+    session_factory = SessionFactory()
+    FakeBacktestRepository.reset()
+    FakeCandleRepository.reset()
+
+    monkeypatch.setattr("app.services.backtest_runner_service.SessionLocal", session_factory)
+    monkeypatch.setattr("app.services.backtest_runner_service.BacktestRepository", FakeBacktestRepository)
+    monkeypatch.setattr("app.services.backtest_runner_service.CandleRepository", FakeCandleRepository)
+    monkeypatch.setattr("app.services.backtest_runner_service.get_strategy", lambda _code: PrerollFakeStrategy())
+
+    service = BacktestRunnerService(engine=StaticReportEngine())
+    request = _request().model_copy(update={"strategy_code": "preroll_fake_strategy"})
+
+    report = service.run_backtest(request)
+
+    assert report.status == "completed"
+    assert FakeCandleRepository.last_list_call is not None
+    assert FakeCandleRepository.last_list_call["start_at"] == request.start_at - timedelta(days=7)
+    assert FakeCandleRepository.last_list_call["end_at"] == request.end_at
 
 
 def test_backtest_runner_stop_backtest_marks_running_run_failed(monkeypatch: pytest.MonkeyPatch) -> None:

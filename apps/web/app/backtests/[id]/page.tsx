@@ -36,6 +36,9 @@ export default function BacktestDetailPage() {
   const rejectReasonDetails = backtest.diagnostics.reject_reason_details ?? {};
   const strategySpecificCounters = backtest.diagnostics.strategy_specific_counters ?? {};
   const strategyDebug = backtest.diagnostics.strategy_debug ?? {};
+  const runtimeWindow = typeof backtest.diagnostics.runtime_window === "object" && backtest.diagnostics.runtime_window !== null
+    ? (backtest.diagnostics.runtime_window as Record<string, unknown>)
+    : null;
 
   return (
     <div className="flex flex-col gap-6">
@@ -72,6 +75,44 @@ export default function BacktestDetailPage() {
             <MetricCard label="Completed" value={backtest.completed_at ? formatDateTime(backtest.completed_at) : "Still running"} />
             <MetricCard label="Exchange" value={backtest.exchange_code} />
           </div>
+          {runtimeWindow ? (
+            <div className="mt-5 grid gap-4 md:grid-cols-3">
+              <MetricCard
+                label="Requested period"
+                value={
+                  runtimeWindow.requested_start_at && runtimeWindow.requested_end_at
+                    ? `${formatDateTime(runtimeWindow.requested_start_at)} -> ${formatDateTime(runtimeWindow.requested_end_at)}`
+                    : "N/A"
+                }
+              />
+              <MetricCard
+                label="Loaded warmup period"
+                value={
+                  runtimeWindow.loaded_start_at && runtimeWindow.loaded_end_at
+                    ? `${formatDateTime(runtimeWindow.loaded_start_at)} -> ${formatDateTime(runtimeWindow.loaded_end_at)}`
+                    : "N/A"
+                }
+                hint={
+                  typeof runtimeWindow.preroll_days === "number"
+                    ? `${formatInteger(runtimeWindow.preroll_days)}d preroll`
+                    : undefined
+                }
+              />
+              <MetricCard
+                label="Effective trading start"
+                value={
+                  runtimeWindow.effective_trading_start_at
+                    ? formatDateTime(runtimeWindow.effective_trading_start_at)
+                    : "N/A"
+                }
+                hint={
+                  typeof runtimeWindow.trading_candle_count === "number"
+                    ? `${formatInteger(runtimeWindow.trading_candle_count)} trading candles`
+                    : undefined
+                }
+              />
+            </div>
+          ) : null}
           <div className="mt-5 rounded-2xl border border-white/8 bg-slate-950/50 p-4">
             <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">Params</p>
             <pre className="mt-3 overflow-x-auto text-xs text-slate-300">{prettyJson(backtest.params)}</pre>

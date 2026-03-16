@@ -19,18 +19,22 @@ def test_strategy_registry_contains_research_and_scaffold_strategies() -> None:
         "pullback_in_trend",
         "pullback_in_trend_v2",
         "pullback_to_trend",
+        "rsi_micro_bounce_v2",
+        "trend_reclaim_72h",
         "trend_retrace_70",
     }
 
 
 def test_strategy_descriptors_are_serializable() -> None:
     descriptors = {item["key"]: item for item in strategy_descriptors()}
-    assert len(descriptors) == 6
+    assert len(descriptors) == 8
     assert descriptors["breakout_continuation"]["status"] == "archived"
     assert descriptors["breakout_retest"]["status"] == "implemented"
     assert descriptors["pullback_in_trend"]["status"] == "implemented"
     assert descriptors["pullback_in_trend_v2"]["status"] == "paused"
     assert descriptors["pullback_to_trend"]["status"] == "scaffold"
+    assert descriptors["rsi_micro_bounce_v2"]["status"] == "implemented"
+    assert descriptors["trend_reclaim_72h"]["status"] == "implemented"
     assert descriptors["trend_retrace_70"]["status"] == "scaffold"
 
 
@@ -39,6 +43,8 @@ def test_interface_visible_strategies_match_supported_product_strategies() -> No
         "breakout_retest",
         "pullback_in_trend",
         "pullback_to_trend",
+        "rsi_micro_bounce_v2",
+        "trend_reclaim_72h",
         "trend_retrace_70",
     }
 

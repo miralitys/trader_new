@@ -46,6 +46,13 @@ class BacktestRunnerService:
             strategy_status = getattr(strategy, "status", "")
             if strategy_status in {"archived", "paused"}:
                 raise ValueError(f"Strategy {request.strategy_code} is {strategy_status}")
+            strategy_config = strategy.parse_config(
+                {
+                    **strategy.default_config(),
+                    **request.strategy_config_override,
+                    "position_size_pct": float(request.position_size_pct),
+                }
+            )
             strategy_row = backtest_repository.ensure_strategy(
                 code=strategy.key,
                 name=strategy.name,
@@ -74,14 +81,29 @@ class BacktestRunnerService:
                 },
             )
 
+            requested_start_at = ensure_utc(request.start_at)
+            requested_end_at = ensure_utc(request.end_at)
+            preroll_days_fn = getattr(strategy, "required_preroll_days", None)
+            preroll_days = (
+                max(0, int(preroll_days_fn(request.timeframe, strategy_config)))
+                if callable(preroll_days_fn)
+                else 0
+            )
+            load_start_at = requested_start_at - timedelta(days=preroll_days)
             candles = candle_repository.list_candles(
                 exchange_code=request.exchange_code,
                 symbol_code=request.symbol,
                 timeframe=request.timeframe,
-                start_at=ensure_utc(request.start_at),
-                end_at=ensure_utc(request.end_at),
+                start_at=load_start_at,
+                end_at=requested_end_at,
             )
             if not candles:
+                raise ValueError(
+                    f"No candles found for {request.symbol} {request.timeframe} "
+                    f"between {load_start_at.isoformat()} and {request.end_at.isoformat()}"
+                )
+            requested_candle_count = sum(1 for candle in candles if candle.open_time >= requested_start_at)
+            if requested_candle_count == 0:
                 raise ValueError(
                     f"No candles found for {request.symbol} {request.timeframe} "
                     f"between {request.start_at.isoformat()} and {request.end_at.isoformat()}"
@@ -91,6 +113,8 @@ class BacktestRunnerService:
                 extra={
                     "run_id": run.id,
                     "candles_count": len(candles),
+                    "requested_candles_count": requested_candle_count,
+                    "preroll_days": preroll_days,
                     "first_candle_at": candles[0].open_time.isoformat(),
                     "last_candle_at": candles[-1].open_time.isoformat(),
                 },
@@ -127,6 +151,7 @@ class BacktestRunnerService:
                     total_bars=total,
                     candle_time=candle_time,
                 ),
+                preroll_days=preroll_days,
             )
             report = report.model_copy(update={"run_id": run.id})
 

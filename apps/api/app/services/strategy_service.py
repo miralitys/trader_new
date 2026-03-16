@@ -25,6 +25,8 @@ INTERFACE_VISIBLE_STRATEGY_CODES = frozenset(
         "breakout_retest",
         "pullback_in_trend",
         "pullback_to_trend",
+        "rsi_micro_bounce_v2",
+        "trend_reclaim_72h",
         "trend_retrace_70",
     }
 )

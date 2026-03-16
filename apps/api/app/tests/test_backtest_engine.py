@@ -230,6 +230,25 @@ class TelemetryStrategy(BaseStrategy):
         return StrategySignal(action="hold", reason="hold")
 
 
+class RequestedWindowOnlyStrategy(BaseStrategy):
+    key = "requested_window_only_strategy"
+    name = "RequestedWindowOnlyStrategy"
+    description = "Trades only when the engine reaches the requested trading window."
+    config_model = BaseStrategyConfig
+
+    def __init__(self, entry_time: datetime, exit_time: datetime) -> None:
+        self.entry_time = entry_time
+        self.exit_time = exit_time
+
+    def generate_signal(self, context: StrategyContext) -> StrategySignal:
+        has_position = context.metadata["has_position"]
+        if context.timestamp == self.entry_time and not has_position:
+            return StrategySignal(action="enter", reason="requested_window_entry")
+        if context.timestamp == self.exit_time and has_position:
+            return StrategySignal(action="exit", reason="requested_window_exit")
+        return StrategySignal(action="hold", reason="hold")
+
+
 def _candle(ts: datetime, price: str) -> BacktestCandle:
     decimal_price = Decimal(price)
     return BacktestCandle(
@@ -367,6 +386,48 @@ def test_backtest_engine_limits_history_window_for_strategies_with_declared_requ
     assert strategy.max_one_hour_history_seen <= 1
 
 
+def test_backtest_engine_only_trades_after_requested_start_when_preroll_is_loaded() -> None:
+    engine = BacktestEngine()
+    requested_start = datetime(2026, 1, 1, 0, 10, tzinfo=timezone.utc)
+    candles = [
+        _candle(datetime(2026, 1, 1, 0, 0, tzinfo=timezone.utc), "100"),
+        _candle(datetime(2026, 1, 1, 0, 5, tzinfo=timezone.utc), "101"),
+        _candle(datetime(2026, 1, 1, 0, 10, tzinfo=timezone.utc), "102"),
+        _candle(datetime(2026, 1, 1, 0, 15, tzinfo=timezone.utc), "103"),
+    ]
+    request = _request("requested_window_only_strategy").model_copy(
+        update={
+            "start_at": requested_start,
+            "end_at": datetime(2026, 1, 1, 0, 15, tzinfo=timezone.utc),
+        }
+    )
+
+    report = engine.run(
+        request=request,
+        strategy=RequestedWindowOnlyStrategy(
+            entry_time=datetime(2026, 1, 1, 0, 10, tzinfo=timezone.utc),
+            exit_time=datetime(2026, 1, 1, 0, 15, tzinfo=timezone.utc),
+        ),
+        candles=candles,
+        preroll_days=30,
+    )
+
+    assert report.metrics.total_trades == 1
+    assert len(report.equity_curve) == 2
+    assert report.equity_curve[0].timestamp == requested_start
+    assert report.trades[0].entry_time == requested_start
+    assert report.diagnostics["runtime_window"] == {
+        "requested_start_at": "2026-01-01T00:10:00+00:00",
+        "requested_end_at": "2026-01-01T00:15:00+00:00",
+        "loaded_start_at": "2026-01-01T00:00:00+00:00",
+        "loaded_end_at": "2026-01-01T00:15:00+00:00",
+        "effective_trading_start_at": "2026-01-01T00:10:00+00:00",
+        "preroll_days": 30,
+        "loaded_candle_count": 4,
+        "trading_candle_count": 2,
+    }
+
+
 def test_backtest_engine_emits_progress_markers() -> None:
     engine = BacktestEngine()
     candles = [
@@ -435,6 +496,9 @@ def test_backtest_engine_aggregates_entry_hold_reason_diagnostics() -> None:
         "trigger_not_confirmed": 0,
         "trigger_bar_too_weak": 0,
         "trigger_close_not_strong_enough": 0,
+        "oversold_not_detected": 0,
+        "oversold_not_fresh": 0,
+        "stretch_not_large_enough": 0,
         "range_not_tight_enough": 1,
         "breakout_not_confirmed": 1,
         "breakout_bar_not_green": 1,
