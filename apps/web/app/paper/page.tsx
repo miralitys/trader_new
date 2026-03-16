@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { PaperQuickLaunch } from "@/components/forms/paper-quick-launch";
 import { SectionCard } from "@/components/section-card";
 import { MetricCard } from "@/components/ui/metric-card";
 import { PageHeader } from "@/components/ui/page-header";
@@ -190,6 +191,10 @@ export default function PaperPage() {
         <MetricCard label="Watchlist" value="1" hint="ADA" tone="warning" />
         <MetricCard label="Dropped markets" value={excludedSymbols.length} hint="Not for paper now" tone="danger" />
       </section>
+
+      <SectionCard title="One-click Controls" eyebrow="Virtual money live run">
+        <PaperQuickLaunch />
+      </SectionCard>
 
       <SectionCard
         title="Paper Rotation"
