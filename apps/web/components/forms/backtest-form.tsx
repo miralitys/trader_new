@@ -5,7 +5,7 @@ import { FormEvent, useMemo, useState, startTransition } from "react";
 
 import { useRunBacktest } from "@/lib/query-hooks";
 import type { StrategySummary } from "@/lib/types";
-import { compactList, parseJsonInput, toDatetimeLocalInput } from "@/lib/utils";
+import { compactList, getErrorMessage, parseJsonInput, toDatetimeLocalInput } from "@/lib/utils";
 
 type BacktestFormProps = {
   strategies: StrategySummary[];
@@ -85,7 +85,7 @@ export function BacktestForm({ strategies }: BacktestFormProps) {
         });
       }
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Unable to run backtest.");
+      setMessage(getErrorMessage(error, "Unable to run backtest."));
     }
   }
 

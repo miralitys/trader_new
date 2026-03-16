@@ -34,6 +34,7 @@ import type {
   Trade,
   TradeFilters,
 } from "@/lib/types";
+import { formatApiErrorDetail } from "@/lib/utils";
 
 const fallbackApiBaseUrl = "http://localhost:8000";
 export const publicApiBaseUrl = (process.env.NEXT_PUBLIC_API_URL ?? fallbackApiBaseUrl).replace(/\/$/, "");
@@ -72,7 +73,8 @@ async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
       payload = null;
     }
 
-    throw new Error(payload?.detail ?? `API request failed: ${response.status}`);
+    const message = formatApiErrorDetail(payload?.detail ?? payload) ?? `API request failed: ${response.status}`;
+    throw new Error(message);
   }
 
   if (response.status === 204) {

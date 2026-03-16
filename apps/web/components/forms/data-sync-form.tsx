@@ -4,7 +4,7 @@ import { FormEvent, useState } from "react";
 
 import { DateRangePresets } from "@/components/forms/date-range-presets";
 import { useRunDataSync } from "@/lib/query-hooks";
-import { formatInteger, formatPercent, toDatetimeLocalInput } from "@/lib/utils";
+import { formatInteger, formatPercent, getErrorMessage, toDatetimeLocalInput } from "@/lib/utils";
 
 const presetSymbols = ["BTC-USDT", "ETH-USDT", "SOL-USDT", "BNB-USDT", "ADA-USDT", "ALPINE-USDT", "XRP-USDT", "1INCH-USDT"] as const;
 
@@ -44,7 +44,7 @@ export function DataSyncForm() {
         `Sync job #${result.job_id} finished with status ${result.status}. Inserted ${formatInteger(result.inserted_rows)} new candles.${coverageMessage}`,
       );
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Unable to run data sync.");
+      setMessage(getErrorMessage(error, "Unable to run data sync."));
     }
   }
 

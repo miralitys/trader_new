@@ -115,10 +115,54 @@ export function compactList(values: unknown): string[] {
   return [];
 }
 
-export function getErrorMessage(error: unknown, fallback = "Something went wrong.") {
-  if (error instanceof Error) {
-    return error.message;
+export function formatApiErrorDetail(detail: unknown): string | null {
+  if (typeof detail === "string") {
+    const normalized = detail.trim();
+    return normalized || null;
   }
 
-  return fallback;
+  if (Array.isArray(detail)) {
+    const messages = detail
+      .map((item) => formatApiErrorDetail(item))
+      .filter((item): item is string => Boolean(item));
+    return messages.length ? messages.join(" | ") : null;
+  }
+
+  if (detail && typeof detail === "object") {
+    const payload = detail as Record<string, unknown>;
+
+    if (typeof payload.msg === "string") {
+      const location = Array.isArray(payload.loc)
+        ? payload.loc
+            .filter((item): item is string | number => typeof item === "string" || typeof item === "number")
+            .map(String)
+            .filter((item) => item !== "body" && item !== "query")
+            .join(".")
+        : "";
+      return location ? `${location}: ${payload.msg}` : payload.msg;
+    }
+
+    if ("detail" in payload) {
+      return formatApiErrorDetail(payload.detail);
+    }
+
+    try {
+      return JSON.stringify(detail);
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
+}
+
+export function getErrorMessage(error: unknown, fallback = "Something went wrong.") {
+  if (error instanceof Error) {
+    const normalized = error.message.trim();
+    if (normalized && !normalized.includes("[object Object]")) {
+      return normalized;
+    }
+  }
+
+  return formatApiErrorDetail(error) ?? fallback;
 }

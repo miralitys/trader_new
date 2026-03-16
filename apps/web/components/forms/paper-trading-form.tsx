@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useState } from "react";
 
 import { useStartStrategyPaper, useStopStrategyPaper } from "@/lib/query-hooks";
 import type { StrategySummary } from "@/lib/types";
-import { compactList, parseJsonInput, prettyJson } from "@/lib/utils";
+import { compactList, getErrorMessage, parseJsonInput, prettyJson } from "@/lib/utils";
 
 type PaperTradingFormProps = {
   strategy: StrategySummary;
@@ -62,7 +62,7 @@ export function PaperTradingForm({ strategy, initialConfig }: PaperTradingFormPr
 
       setMessage(`Paper run #${result.run_id} is ${result.status}.`);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Unable to start paper trading.");
+      setMessage(getErrorMessage(error, "Unable to start paper trading."));
     }
   }
 
@@ -75,7 +75,7 @@ export function PaperTradingForm({ strategy, initialConfig }: PaperTradingFormPr
       });
       setMessage(`Paper run stopped with status ${result.status}.`);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Unable to stop paper trading.");
+      setMessage(getErrorMessage(error, "Unable to stop paper trading."));
     }
   }
 

@@ -415,5 +415,5 @@ export type LogFilters = {
 };
 
 export type ApiErrorPayload = {
-  detail: string;
+  detail?: unknown;
 };

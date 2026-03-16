@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 
 import { useUpdateStrategyConfig } from "@/lib/query-hooks";
-import { prettyJson, parseJsonInput } from "@/lib/utils";
+import { getErrorMessage, parseJsonInput, prettyJson } from "@/lib/utils";
 
 type StrategyConfigFormProps = {
   strategyCode: string;
@@ -29,7 +29,7 @@ export function StrategyConfigForm({ strategyCode, initialConfig }: StrategyConf
       });
       setMessage("Strategy config saved.");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Unable to save config.");
+      setMessage(getErrorMessage(error, "Unable to save config."));
     }
   }
 
