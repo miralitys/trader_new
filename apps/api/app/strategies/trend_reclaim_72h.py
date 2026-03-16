@@ -26,7 +26,8 @@ class TrendReclaim72hConfig(BaseStrategyConfig):
 
     regime_filter_enabled: bool = True
     regime_ema_period_4h: int = Field(default=200, ge=2)
-    require_close_above_ema200_4h: bool = True
+    require_close_above_ema200_4h: bool = False
+    require_non_negative_ema200_slope_4h: bool = False
     min_ema200_slope_4h: float = Field(default=0.0)
     require_atr_band_4h: bool = True
     min_atr_pct_4h: float = Field(default=0.003, ge=0)
@@ -468,7 +469,10 @@ class TrendReclaim72hStrategy(PullbackInTrendV2Strategy):
             return "close_below_ema200_4h"
 
         ema_slope = self._ratio(current_ema200_4h - previous_ema200_4h, previous_ema200_4h)
-        if ema_slope < self._decimal(config.min_ema200_slope_4h):
+        if (
+            config.require_non_negative_ema200_slope_4h
+            and ema_slope < self._decimal(config.min_ema200_slope_4h)
+        ):
             return "ema200_slope_below_threshold_4h"
 
         if config.require_atr_band_4h:

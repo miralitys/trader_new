@@ -32,6 +32,8 @@ def _entry_config(**overrides: object) -> TrendReclaim72hConfig:
     payload: dict[str, object] = {
         "required_preroll_days": 0,
         "regime_ema_period_4h": 3,
+        "require_close_above_ema200_4h": True,
+        "require_non_negative_ema200_slope_4h": True,
         "trend_extension_ema_period_4h": 2,
         "require_atr_band_4h": False,
         "require_not_overextended": False,
@@ -147,6 +149,31 @@ def test_trend_reclaim_72h_rejects_when_regime_is_below_4h_ema() -> None:
     assert signal.action == "hold"
     assert signal.reason == "regime_blocked"
     assert signal.metadata["skip_reason_detail"] == "close_below_ema200_4h"
+
+
+def test_trend_reclaim_72h_can_skip_ema_slope_gate() -> None:
+    strategy = TrendReclaim72hStrategy()
+    history = _entry_history()
+    history[0] = _candle(history[0].open_time, "130.0", "131.0", "129.0", "130.0")
+    history[1] = _candle(history[1].open_time, "130.0", "130.5", "128.5", "129.0")
+    history[2] = _candle(history[2].open_time, "129.0", "129.5", "127.5", "128.0")
+    history[3] = _candle(history[3].open_time, "128.0", "128.5", "126.5", "127.0")
+    config = _entry_config(
+        require_close_above_ema200_4h=False,
+        require_non_negative_ema200_slope_4h=False,
+    )
+
+    signal = strategy.generate_signal(
+        StrategyContext(
+            symbol="BTC-USDT",
+            timeframe="1h",
+            timestamp=history[-1].open_time,
+            mode="backtest",
+            metadata={"history": history, "config": config, "has_position": False},
+        )
+    )
+
+    assert signal.reason != "regime_blocked"
 
 
 def test_trend_reclaim_72h_rejects_trigger_without_strong_close() -> None:
