@@ -103,7 +103,7 @@ export default function DataPage() {
               value={symbolFilter}
               onChange={(event) => setSymbolFilter(event.target.value)}
               className={inputClassName}
-              placeholder="BTC-USDT, BNB-USDT, ADA-USDT or XRP-USDT"
+              placeholder="BTC-USDT, BNB-USDT, LTC-USDT, LINK-USDT or DOGE-USDT"
             />
           </label>
 

@@ -13,7 +13,7 @@ from app.services.funding_basis_comparison_service import FundingBasisComparison
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Compare FundingBasisCarry research across perp venues.")
-    parser.add_argument("--symbols", default="BTC-USDT,ETH-USDT,SOL-USDT,BNB-USDT,ADA-USDT,ALPINE-USDT,XRP-USDT,1INCH-USDT")
+    parser.add_argument("--symbols", default="BTC-USDT,ETH-USDT,SOL-USDT,BNB-USDT,ADA-USDT,ALPINE-USDT,XRP-USDT,1INCH-USDT,LTC-USDT,BCH-USDT,AVAX-USDT,LINK-USDT,DOGE-USDT")
     parser.add_argument("--timeframe", default="5m")
     parser.add_argument("--perp-venues", default="binance_futures,okx_swap")
     parser.add_argument("--start-at", required=True)

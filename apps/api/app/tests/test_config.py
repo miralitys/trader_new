@@ -33,4 +33,9 @@ def test_settings_include_funding_basis_defaults() -> None:
         "ALPINE-USDT",
         "XRP-USDT",
         "1INCH-USDT",
+        "LTC-USDT",
+        "BCH-USDT",
+        "AVAX-USDT",
+        "LINK-USDT",
+        "DOGE-USDT",
     ]
