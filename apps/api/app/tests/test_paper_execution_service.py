@@ -166,6 +166,119 @@ def test_start_run_requests_account_reset(monkeypatch: pytest.MonkeyPatch) -> No
     assert session.closed is True
 
 
+def test_start_run_can_seed_watermarks_from_latest_candle(monkeypatch: pytest.MonkeyPatch) -> None:
+    session = DummySession()
+    latest_btc = datetime(2026, 3, 16, 12, 0, tzinfo=timezone.utc)
+    latest_eth = datetime(2026, 3, 16, 11, 0, tzinfo=timezone.utc)
+    created_metadata: dict[str, object] = {}
+
+    class FakeStrategyRunRepository:
+        def __init__(self, current_session: DummySession) -> None:
+            assert current_session is session
+
+        def ensure_strategy(self, code: str, name: str, description: str):
+            return SimpleNamespace(id=7, code=code, name=name, description=description)
+
+        def get_active_paper_run_for_strategy(self, strategy_id: int):
+            assert strategy_id == 7
+            return None
+
+        def create_paper_run(
+            self,
+            strategy_id: int,
+            symbols: list[str],
+            timeframes: list[str],
+            metadata_json: dict[str, object],
+        ):
+            created_metadata.update(metadata_json)
+            return SimpleNamespace(
+                id=12,
+                strategy_id=strategy_id,
+                status=StrategyRunStatus.CREATED,
+                symbols_json=symbols,
+                timeframes_json=timeframes,
+                metadata_json=metadata_json,
+                last_processed_candle_at=None,
+            )
+
+        def mark_running(self, run, started_at):
+            run.status = StrategyRunStatus.RUNNING
+            run.started_at = started_at
+            return run
+
+    class FakePaperAccountRepository:
+        def __init__(self, current_session: DummySession) -> None:
+            assert current_session is session
+
+        def ensure_account(
+            self,
+            strategy_id: int,
+            balance: Decimal,
+            currency: str = "USD",
+            reset_existing: bool = False,
+        ):
+            return SimpleNamespace(balance=balance, currency=currency)
+
+    class FakeCandleRepository:
+        def __init__(self, current_session: DummySession) -> None:
+            assert current_session is session
+
+        def list_recent_candles(
+            self,
+            exchange_code: str,
+            symbol_code: str,
+            timeframe: str,
+            end_at,
+            limit: int,
+        ):
+            assert exchange_code == "binance_us"
+            assert timeframe == "1h"
+            assert end_at is None
+            assert limit == 1
+            if symbol_code == "BTC-USDT":
+                return [SimpleNamespace(open_time=latest_btc)]
+            if symbol_code == "ETH-USDT":
+                return [SimpleNamespace(open_time=latest_eth)]
+            return []
+
+    monkeypatch.setattr("app.services.paper_execution_service.SessionLocal", lambda: session)
+    monkeypatch.setattr(
+        "app.services.paper_execution_service.StrategyRunRepository",
+        FakeStrategyRunRepository,
+    )
+    monkeypatch.setattr(
+        "app.services.paper_execution_service.PaperAccountRepository",
+        FakePaperAccountRepository,
+    )
+    monkeypatch.setattr(
+        "app.services.paper_execution_service.CandleRepository",
+        FakeCandleRepository,
+    )
+    monkeypatch.setattr(
+        "app.services.paper_execution_service.get_strategy",
+        lambda code: FakeStrategy(code, "TestStrategy", "Test strategy"),
+    )
+
+    service = PaperExecutionService()
+    response = service.start_run(
+        PaperRunStartRequest(
+            strategy_code="trend_reclaim_72h",
+            symbols=["BTC-USDT", "ETH-USDT"],
+            timeframes=["1h"],
+            start_from_latest=True,
+        )
+    )
+
+    assert response.run_id == 12
+    assert response.last_processed_candle_at == latest_btc
+    assert created_metadata["start_from_latest"] is True
+    assert created_metadata["paper_start_mode"] == "latest_only"
+    assert created_metadata["last_processed_by_stream"] == {
+        "BTC-USDT|1h": latest_btc.isoformat().replace("+00:00", "Z"),
+        "ETH-USDT|1h": latest_eth.isoformat().replace("+00:00", "Z"),
+    }
+
+
 def test_process_active_runs_continues_after_single_run_failure(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

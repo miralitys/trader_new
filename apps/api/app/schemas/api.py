@@ -22,6 +22,7 @@ class StrategyPaperStartRequest(APIModel):
     symbols: list[str]
     timeframes: list[str]
     exchange_code: str = "binance_us"
+    start_from_latest: bool = False
     initial_balance: Decimal = Field(default=Decimal("10000"), gt=0)
     currency: str = "USD"
     fee: Decimal = Field(default=Decimal("0.001"), ge=0)

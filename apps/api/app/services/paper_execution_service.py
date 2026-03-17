@@ -48,6 +48,7 @@ class PaperExecutionService:
             )
             strategy_run_repository = StrategyRunRepository(session)
             paper_account_repository = PaperAccountRepository(session)
+            candle_repository = CandleRepository(session)
 
             strategy_row = strategy_run_repository.ensure_strategy(
                 code=strategy.key,
@@ -64,12 +65,36 @@ class PaperExecutionService:
                 currency=request.currency,
                 reset_existing=True,
             )
+            watermarks: dict[str, str] = {}
+            latest_processed_candle_at: datetime | None = None
+            if request.start_from_latest:
+                for symbol in request.symbols:
+                    for timeframe in request.timeframes:
+                        latest_candles = candle_repository.list_recent_candles(
+                            exchange_code=request.exchange_code,
+                            symbol_code=symbol,
+                            timeframe=timeframe,
+                            end_at=None,
+                            limit=1,
+                        )
+                        if not latest_candles:
+                            continue
+                        latest_open_time = latest_candles[0].open_time
+                        watermarks[f"{symbol}|{timeframe}"] = to_iso8601(latest_open_time)
+                        if (
+                            latest_processed_candle_at is None
+                            or latest_open_time > latest_processed_candle_at
+                        ):
+                            latest_processed_candle_at = latest_open_time
+
             metadata_json = {
                 "exchange_code": request.exchange_code,
                 "fee": str(request.fee),
                 "slippage": str(request.slippage),
+                "start_from_latest": request.start_from_latest,
+                "paper_start_mode": "latest_only" if request.start_from_latest else "replay_from_history",
                 "strategy_config_override": effective_config.model_dump(),
-                "last_processed_by_stream": {},
+                "last_processed_by_stream": watermarks,
                 "open_positions_runtime": {},
                 **request.metadata,
             }
@@ -79,6 +104,8 @@ class PaperExecutionService:
                 timeframes=request.timeframes,
                 metadata_json=metadata_json,
             )
+            if latest_processed_candle_at is not None:
+                run.last_processed_candle_at = latest_processed_candle_at
             strategy_run_repository.mark_running(run, started_at=utc_now())
             session.commit()
 

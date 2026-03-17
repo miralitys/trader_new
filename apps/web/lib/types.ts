@@ -44,6 +44,7 @@ export type StrategyPaperStartRequest = {
   symbols: string[];
   timeframes: string[];
   exchange_code: string;
+  start_from_latest: boolean;
   initial_balance: NumericValue;
   currency: string;
   fee: NumericValue;

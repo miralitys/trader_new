@@ -42,6 +42,7 @@ export function PaperTradingForm({ strategy, initialConfig }: PaperTradingFormPr
   const [currency, setCurrency] = useState("USD");
   const [fee, setFee] = useState("0.001");
   const [slippage, setSlippage] = useState("0.0005");
+  const [startFromLatest, setStartFromLatest] = useState(true);
   const [overrideText, setOverrideText] = useState("{}");
   const [stopReason, setStopReason] = useState("manual_stop");
   const [message, setMessage] = useState<string | null>(null);
@@ -76,6 +77,7 @@ export function PaperTradingForm({ strategy, initialConfig }: PaperTradingFormPr
         currency,
         fee,
         slippage,
+        start_from_latest: startFromLatest,
         strategy_config_override: parseJsonInput(overrideText, {}),
         metadata: {},
       });
@@ -143,6 +145,21 @@ export function PaperTradingForm({ strategy, initialConfig }: PaperTradingFormPr
             <input value={slippage} onChange={(event) => setSlippage(event.target.value)} className={inputClassName} />
           </Field>
         </div>
+
+        <label className="flex items-start gap-3 rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-3 text-sm text-slate-300">
+          <input
+            type="checkbox"
+            checked={startFromLatest}
+            onChange={(event) => setStartFromLatest(event.target.checked)}
+            className="mt-0.5 h-4 w-4 rounded border-white/20 bg-slate-950 text-emerald-400 focus:ring-emerald-400"
+          />
+          <span>
+            <span className="block font-medium text-white">Start from latest candle</span>
+            <span className="mt-1 block text-slate-400">
+              Если включено, paper не будет переигрывать старую историю из базы и начнет ждать только новые свечи.
+            </span>
+          </span>
+        </label>
 
         <label className="grid gap-2">
           <span className="text-[11px] uppercase tracking-[0.2em] text-slate-400">Paper runtime config override JSON</span>

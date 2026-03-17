@@ -12,6 +12,7 @@ const launchConfig: StrategyPaperStartRequest = {
   symbols: ["BTC-USDT", "AVAX-USDT", "ETH-USDT", "SOL-USDT"],
   timeframes: ["1h"],
   exchange_code: "binance_us",
+  start_from_latest: true,
   initial_balance: "10000",
   currency: "USD",
   fee: "0.001",
@@ -92,7 +93,9 @@ export function PaperQuickLaunch() {
         <h3 className="mt-2 text-xl font-semibold text-white">BTC + AVAX + ETH + SOL</h3>
         <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-300">
           Один paper run для четырех рынков с уже выбранным рабочим конфигом. Кнопка запускает виртуальную торговлю, а кнопка
-          остановки завершает текущий активный run. После перехода на другую страницу статус сохранится, потому что он живет в backend.
+          остановки завершает текущий активный run. Этот quick launch стартует от последней доступной свечи, поэтому paper будет ждать
+          новые сигналы по текущему рынку, а не переигрывать всю старую историю. После перехода на другую страницу статус сохранится,
+          потому что он живет в backend.
         </p>
 
         <div className="mt-5 flex flex-wrap items-center gap-3">

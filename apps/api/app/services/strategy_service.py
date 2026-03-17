@@ -163,6 +163,7 @@ class StrategyService:
                     symbols=request.symbols,
                     timeframes=request.timeframes,
                     exchange_code=request.exchange_code,
+                    start_from_latest=request.start_from_latest,
                     initial_balance=request.initial_balance,
                     currency=request.currency,
                     fee=request.fee,
