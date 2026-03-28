@@ -9,12 +9,23 @@ from __future__ import annotations
 
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
 
 
 revision = "20260328_0003"
 down_revision = "20260315_0002"
 branch_labels = None
 depends_on = None
+
+
+sync_job_status_enum = postgresql.ENUM(
+    "queued",
+    "running",
+    "completed",
+    "failed",
+    name="sync_job_status_enum",
+    create_type=False,
+)
 
 
 def upgrade() -> None:
@@ -67,7 +78,7 @@ def upgrade() -> None:
         sa.Column("lookback_days", sa.Integer(), nullable=False, server_default="730"),
         sa.Column("start_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("end_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("status", sa.Enum("queued", "running", "completed", "failed", name="sync_job_status_enum", create_type=False), nullable=False, server_default="queued"),
+        sa.Column("status", sync_job_status_enum, nullable=False, server_default="queued"),
         sa.Column("source_candle_count", sa.Integer(), nullable=False, server_default="0"),
         sa.Column("feature_rows_upserted", sa.Integer(), nullable=False, server_default="0"),
         sa.Column("computed_start_at", sa.DateTime(timezone=True), nullable=True),
