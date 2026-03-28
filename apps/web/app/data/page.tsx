@@ -4,6 +4,7 @@ import { useState } from "react";
 
 import { CandleQueryForm } from "@/components/forms/candle-query-form";
 import { DataSyncForm } from "@/components/forms/data-sync-form";
+import { DataValidationForm } from "@/components/forms/data-validation-form";
 import { SectionCard } from "@/components/section-card";
 import { DataTable } from "@/components/tables/data-table";
 import { ErrorState } from "@/components/ui/error-state";
@@ -82,6 +83,10 @@ export default function DataPage() {
 
       <SectionCard title="Run data sync" eyebrow="Manual and incremental ingestion">
         <DataSyncForm />
+      </SectionCard>
+
+      <SectionCard title="Offline validation report" eyebrow="Dataset quality and coverage audit">
+        <DataValidationForm />
       </SectionCard>
 
       <SectionCard title="Sync jobs status" eyebrow="Recent ingestion history">

@@ -7,6 +7,8 @@ from sqlalchemy.orm import Session
 
 from app.core.config import Settings, get_settings
 from app.db.session import get_db_session
+from app.services.data_validation_service import DataValidationService
+from app.services.feature_layer_service import FeatureLayerService
 from app.services.health import HealthService
 from app.services.market_data_service import MarketDataService
 from app.services.pattern_research_service import PatternResearchService
@@ -41,8 +43,22 @@ def get_pattern_research_service(db: Session = Depends(get_db_dependency)) -> Pa
     return PatternResearchService(session=db)
 
 
+def get_data_validation_service(db: Session = Depends(get_db_dependency)) -> Generator[DataValidationService, None, None]:
+    service = DataValidationService(session=db)
+    try:
+        yield service
+    finally:
+        service.close()
+
+
+def get_feature_layer_service(db: Session = Depends(get_db_dependency)) -> FeatureLayerService:
+    return FeatureLayerService(session=db)
+
+
 __all__ = [
+    "get_data_validation_service",
     "get_db_dependency",
+    "get_feature_layer_service",
     "get_health_service",
     "get_market_data_service",
     "get_pattern_research_service",

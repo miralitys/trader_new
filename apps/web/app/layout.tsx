@@ -18,6 +18,7 @@ export const metadata: Metadata = {
 const links = [
   { href: "/", label: "Research" },
   { href: "/data", label: "Data" },
+  { href: "/features", label: "Feature Layer" },
   { href: "/logs", label: "Logs" },
 ];
 

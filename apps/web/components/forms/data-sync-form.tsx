@@ -3,33 +3,12 @@
 import { FormEvent, useMemo, useState } from "react";
 
 import { DateRangePresets } from "@/components/forms/date-range-presets";
+import { longDayPresets, presetSymbols } from "@/lib/preset-symbols";
 import { useRunDataSync } from "@/lib/query-hooks";
 import { formatInteger, formatPercent, getErrorMessage, toDatetimeLocalInput } from "@/lib/utils";
 
-const presetSymbols = [
-  "BTC-USDT",
-  "ETH-USDT",
-  "SOL-USDT",
-  "BNB-USDT",
-  "ADA-USDT",
-  "ALPINE-USDT",
-  "XRP-USDT",
-  "1INCH-USDT",
-  "LTC-USDT",
-  "BCH-USDT",
-  "AVAX-USDT",
-  "LINK-USDT",
-  "DOGE-USDT",
-  "ICP-USDT",
-  "GALA-USDT",
-  "AXS-USDT",
-  "ONDO-USDT",
-  "IOTA-USDT",
-  "FIL-USDT",
-] as const;
-
 const batchTimeframes = ["4h", "1h", "15m", "5m", "1m"] as const;
-const batchDayPresets = [30, 60, 90, 180, 365, 720] as const;
+const batchDayPresets = longDayPresets;
 const candlesPerDayByTimeframe: Record<(typeof batchTimeframes)[number], number> = {
   "4h": 6,
   "1h": 24,

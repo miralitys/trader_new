@@ -28,6 +28,27 @@ class SyncJob(AppModel, TimestampMixin):
     error_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
 
+class FeatureRun(AppModel, TimestampMixin):
+    __tablename__ = "feature_runs"
+
+    exchange: Mapped[str] = mapped_column(Text, nullable=False)
+    symbol: Mapped[str] = mapped_column(Text, nullable=False)
+    timeframe: Mapped[str] = mapped_column(Text, nullable=False)
+    lookback_days: Mapped[int] = mapped_column(Integer, nullable=False, default=730)
+    start_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    end_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    status: Mapped[SyncJobStatus] = mapped_column(
+        pg_enum(SyncJobStatus, "sync_job_status_enum"),
+        nullable=False,
+        default=SyncJobStatus.QUEUED,
+    )
+    source_candle_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    feature_rows_upserted: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    computed_start_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    computed_end_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    error_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+
 class AppLog(AppModel, CreatedAtMixin):
     __tablename__ = "app_logs"
 

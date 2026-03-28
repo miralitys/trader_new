@@ -5,15 +5,22 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   getCandleCoverage,
   getCandles,
+  getFeatureCoverage,
+  getFeatureRuns,
   getHealth,
   getLogs,
   getResearchSummary,
+  runDataValidation,
   getSyncJobs,
   runDataSync,
+  runFeatureLayer,
 } from "@/lib/api";
 import type {
   CandleFilters,
+  DataValidationRequest,
   DataSyncRequest,
+  FeatureRunFilters,
+  FeatureRunRequest,
   LogFilters,
   SyncJobFilters,
 } from "@/lib/types";
@@ -24,6 +31,8 @@ export const queryKeys = {
   syncJobs: (filters: SyncJobFilters) => ["sync-jobs", filters] as const,
   candles: (filters: CandleFilters | null) => ["candles", filters] as const,
   candleCoverage: (filters: CandleFilters | null) => ["candles", "coverage", filters] as const,
+  featureRuns: (filters: FeatureRunFilters) => ["feature-runs", filters] as const,
+  featureCoverage: ["feature-coverage"] as const,
   logs: (filters: LogFilters) => ["logs", filters] as const,
 };
 
@@ -72,6 +81,22 @@ export function useLogs(filters: LogFilters = {}, enabled = true) {
   });
 }
 
+export function useFeatureRuns(filters: FeatureRunFilters = {}, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.featureRuns(filters),
+    queryFn: () => getFeatureRuns(filters),
+    enabled,
+  });
+}
+
+export function useFeatureCoverage(enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.featureCoverage,
+    queryFn: () => getFeatureCoverage(),
+    enabled,
+  });
+}
+
 export function useRunDataSync() {
   const queryClient = useQueryClient();
 
@@ -83,6 +108,26 @@ export function useRunDataSync() {
         queryClient.invalidateQueries({ queryKey: queryKeys.research }),
         queryClient.invalidateQueries({ queryKey: ["candles"] }),
         queryClient.invalidateQueries({ queryKey: ["candles", "coverage"] }),
+      ]);
+    },
+  });
+}
+
+export function useRunDataValidation() {
+  return useMutation({
+    mutationFn: (payload: DataValidationRequest) => runDataValidation(payload),
+  });
+}
+
+export function useRunFeatureLayer() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (payload: FeatureRunRequest) => runFeatureLayer(payload),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.featureRuns({}) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.featureCoverage }),
       ]);
     },
   });

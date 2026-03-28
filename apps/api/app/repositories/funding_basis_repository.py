@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
-from typing import Iterable, Optional
+from typing import Iterable, Optional, Sequence
 
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
@@ -57,6 +57,10 @@ class FeeScheduleRow:
 
 
 class FundingBasisRepository(BaseRepository):
+    SPOT_UPSERT_CHUNK_SIZE = 1000
+    PERP_UPSERT_CHUNK_SIZE = 1000
+    FUNDING_UPSERT_CHUNK_SIZE = 2000
+
     def upsert_spot_prices(self, rows: Iterable[SpotPriceRow]) -> int:
         payload = [
             {
@@ -73,18 +77,7 @@ class FundingBasisRepository(BaseRepository):
         ]
         if not payload:
             return 0
-        stmt = insert(SpotPrice).values(payload)
-        stmt = stmt.on_conflict_do_update(
-            index_elements=["exchange", "symbol", "ts"],
-            set_={
-                "bid": stmt.excluded.bid,
-                "ask": stmt.excluded.ask,
-                "mid": stmt.excluded.mid,
-                "close": stmt.excluded.close,
-                "volume": stmt.excluded.volume,
-            },
-        ).returning(SpotPrice.id)
-        return len(list(self.session.execute(stmt).scalars()))
+        return self._upsert_spot_price_payload(payload)
 
     def upsert_perp_prices(self, rows: Iterable[PerpPriceRow]) -> int:
         payload = [
@@ -104,20 +97,7 @@ class FundingBasisRepository(BaseRepository):
         ]
         if not payload:
             return 0
-        stmt = insert(PerpPrice).values(payload)
-        stmt = stmt.on_conflict_do_update(
-            index_elements=["exchange", "symbol", "ts"],
-            set_={
-                "mark_price": stmt.excluded.mark_price,
-                "index_price": stmt.excluded.index_price,
-                "bid": stmt.excluded.bid,
-                "ask": stmt.excluded.ask,
-                "mid": stmt.excluded.mid,
-                "open_interest": stmt.excluded.open_interest,
-                "volume": stmt.excluded.volume,
-            },
-        ).returning(PerpPrice.id)
-        return len(list(self.session.execute(stmt).scalars()))
+        return self._upsert_perp_price_payload(payload)
 
     def upsert_funding_rates(self, rows: Iterable[FundingRateRow]) -> int:
         payload = [
@@ -132,15 +112,7 @@ class FundingBasisRepository(BaseRepository):
         ]
         if not payload:
             return 0
-        stmt = insert(FundingRate).values(payload)
-        stmt = stmt.on_conflict_do_update(
-            index_elements=["exchange", "symbol", "funding_time"],
-            set_={
-                "funding_rate": stmt.excluded.funding_rate,
-                "realized_funding_rate": stmt.excluded.realized_funding_rate,
-            },
-        ).returning(FundingRate.id)
-        return len(list(self.session.execute(stmt).scalars()))
+        return self._upsert_funding_rate_payload(payload)
 
     def upsert_fee_schedules(self, rows: Iterable[FeeScheduleRow]) -> int:
         payload = [
@@ -164,6 +136,64 @@ class FundingBasisRepository(BaseRepository):
             },
         ).returning(FeeSchedule.id)
         return len(list(self.session.execute(stmt).scalars()))
+
+    def _upsert_spot_price_payload(self, payload: Sequence[dict[str, object]]) -> int:
+        total = 0
+        for chunk in self._chunk_payload(payload, self.SPOT_UPSERT_CHUNK_SIZE):
+            stmt = insert(SpotPrice).values(list(chunk))
+            stmt = stmt.on_conflict_do_update(
+                index_elements=["exchange", "symbol", "ts"],
+                set_={
+                    "bid": stmt.excluded.bid,
+                    "ask": stmt.excluded.ask,
+                    "mid": stmt.excluded.mid,
+                    "close": stmt.excluded.close,
+                    "volume": stmt.excluded.volume,
+                },
+            ).returning(SpotPrice.id)
+            total += len(list(self.session.execute(stmt).scalars()))
+        return total
+
+    def _upsert_perp_price_payload(self, payload: Sequence[dict[str, object]]) -> int:
+        total = 0
+        for chunk in self._chunk_payload(payload, self.PERP_UPSERT_CHUNK_SIZE):
+            stmt = insert(PerpPrice).values(list(chunk))
+            stmt = stmt.on_conflict_do_update(
+                index_elements=["exchange", "symbol", "ts"],
+                set_={
+                    "mark_price": stmt.excluded.mark_price,
+                    "index_price": stmt.excluded.index_price,
+                    "bid": stmt.excluded.bid,
+                    "ask": stmt.excluded.ask,
+                    "mid": stmt.excluded.mid,
+                    "open_interest": stmt.excluded.open_interest,
+                    "volume": stmt.excluded.volume,
+                },
+            ).returning(PerpPrice.id)
+            total += len(list(self.session.execute(stmt).scalars()))
+        return total
+
+    def _upsert_funding_rate_payload(self, payload: Sequence[dict[str, object]]) -> int:
+        total = 0
+        for chunk in self._chunk_payload(payload, self.FUNDING_UPSERT_CHUNK_SIZE):
+            stmt = insert(FundingRate).values(list(chunk))
+            stmt = stmt.on_conflict_do_update(
+                index_elements=["exchange", "symbol", "funding_time"],
+                set_={
+                    "funding_rate": stmt.excluded.funding_rate,
+                    "realized_funding_rate": stmt.excluded.realized_funding_rate,
+                },
+            ).returning(FundingRate.id)
+            total += len(list(self.session.execute(stmt).scalars()))
+        return total
+
+    @staticmethod
+    def _chunk_payload(
+        payload: Sequence[dict[str, object]],
+        chunk_size: int,
+    ) -> Iterable[Sequence[dict[str, object]]]:
+        for index in range(0, len(payload), chunk_size):
+            yield payload[index : index + chunk_size]
 
     def get_last_spot_ts(self, exchange: str, symbol: str) -> Optional[datetime]:
         stmt = (

@@ -3,34 +3,13 @@
 import { FormEvent, useState } from "react";
 
 import { DateRangePresets } from "@/components/forms/date-range-presets";
+import { presetSymbols } from "@/lib/preset-symbols";
 import type { CandleFilters } from "@/lib/types";
 import { toDatetimeLocalInput } from "@/lib/utils";
 
 type CandleQueryFormProps = {
   onSubmit: (filters: CandleFilters) => void;
 };
-
-const presetSymbols = [
-  "BTC-USDT",
-  "ETH-USDT",
-  "SOL-USDT",
-  "BNB-USDT",
-  "ADA-USDT",
-  "ALPINE-USDT",
-  "XRP-USDT",
-  "1INCH-USDT",
-  "LTC-USDT",
-  "BCH-USDT",
-  "AVAX-USDT",
-  "LINK-USDT",
-  "DOGE-USDT",
-  "ICP-USDT",
-  "GALA-USDT",
-  "AXS-USDT",
-  "ONDO-USDT",
-  "IOTA-USDT",
-  "FIL-USDT",
-] as const;
 
 export function CandleQueryForm({ onSubmit }: CandleQueryFormProps) {
   const [symbol, setSymbol] = useState<string>(presetSymbols[0]);

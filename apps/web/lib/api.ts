@@ -4,6 +4,12 @@ import type {
   Candle,
   CandleCoverage,
   CandleFilters,
+  FeatureCoverage,
+  FeatureRun,
+  FeatureRunFilters,
+  FeatureRunRequest,
+  DataValidationReport,
+  DataValidationRequest,
   DataSyncRequest,
   DataSyncResponse,
   HealthResponse,
@@ -119,6 +125,38 @@ export function getLogs(filters: LogFilters = {}) {
       scope: filters.scope,
       level: filters.level,
       limit: filters.limit,
+    })}`,
+  );
+}
+
+export function runDataValidation(payload: DataValidationRequest) {
+  return apiRequest<DataValidationReport>("/api/data/validation-report", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function runFeatureLayer(payload: FeatureRunRequest) {
+  return apiRequest<FeatureRun>("/api/features/run", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getFeatureRuns(filters: FeatureRunFilters = {}) {
+  return apiRequest<FeatureRun[]>(
+    `/api/features/runs${buildQueryString({
+      symbol: filters.symbol,
+      timeframe: filters.timeframe,
+      limit: filters.limit,
+    })}`,
+  );
+}
+
+export function getFeatureCoverage(exchangeCode = "binance_us") {
+  return apiRequest<FeatureCoverage[]>(
+    `/api/features/coverage${buildQueryString({
+      exchange_code: exchangeCode,
     })}`,
   );
 }

@@ -167,6 +167,187 @@ class DataSyncRequest(APIModel):
         return self
 
 
+class DataValidationRequest(APIModel):
+    exchange_code: str = "binance_us"
+    symbols: list[str] = Field(default_factory=list)
+    timeframes: list[str] = Field(default_factory=list)
+    lookback_days: int = Field(default=730, ge=1, le=3650)
+    sample_limit: int = Field(default=5, ge=1, le=20)
+    perform_resync: bool = False
+    resync_days: int = Field(default=14, ge=1, le=180)
+
+    @field_validator("exchange_code")
+    @classmethod
+    def validate_exchange_code(cls, value: str) -> str:
+        return normalize_exchange_code(value)
+
+    @field_validator("symbols")
+    @classmethod
+    def validate_symbols(cls, value: list[str]) -> list[str]:
+        normalized = compact_supported_symbols(value)
+        if not normalized:
+            raise ValueError("At least one symbol is required")
+        return normalized
+
+    @field_validator("timeframes")
+    @classmethod
+    def validate_timeframes(cls, value: list[str]) -> list[str]:
+        normalized = [timeframe.strip() for timeframe in value if timeframe.strip()]
+        if not normalized:
+            raise ValueError("At least one timeframe is required")
+        for timeframe in normalized:
+            BinanceUSTimeframe.from_code(timeframe)
+        return normalized
+
+
+class ValidationIssueResponse(APIModel):
+    severity: str
+    code: str
+    message: str
+
+
+class DuplicateSampleResponse(APIModel):
+    open_time: datetime
+    row_count: int
+
+
+class DuplicateSummaryResponse(APIModel):
+    duplicate_count: int
+    duplicate_bucket_count: int
+    sample_duplicates: list[DuplicateSampleResponse] = Field(default_factory=list)
+
+
+class TimestampAlignmentSummaryResponse(APIModel):
+    invalid_timestamp_count: int
+    sample_invalid_timestamps: list[datetime] = Field(default_factory=list)
+
+
+class GapSummaryResponse(APIModel):
+    missing_candle_count: int
+    sample_missing_timestamps: list[datetime] = Field(default_factory=list)
+
+
+class StoredRangeSummaryResponse(APIModel):
+    first_candle: Optional[datetime] = None
+    last_candle: Optional[datetime] = None
+    candle_count: int = 0
+    expected_candle_count: int = 0
+    completion_pct: Decimal = Decimal("0")
+
+
+class DataValidationResultResponse(APIModel):
+    exchange_code: str
+    symbol: str
+    timeframe: str
+    stored_range: StoredRangeSummaryResponse
+    validation_window: CandleCoverageResponse
+    duplicates: DuplicateSummaryResponse
+    timestamp_alignment: TimestampAlignmentSummaryResponse
+    gaps: GapSummaryResponse
+    issues: list[ValidationIssueResponse] = Field(default_factory=list)
+    verdict: str
+
+
+class DataValidationSymbolSummaryResponse(APIModel):
+    symbol: str
+    worst_completion_pct: Decimal = Decimal("0")
+    total_gap_count: int = 0
+    total_duplicate_count: int = 0
+    invalid_timestamp_count: int = 0
+    failing_series_count: int = 0
+
+
+class DataValidationTimeframeSummaryResponse(APIModel):
+    timeframe: str
+    avg_completion_pct: Decimal = Decimal("0")
+    total_gap_count: int = 0
+    failing_series_count: int = 0
+
+
+class DataValidationOneMinuteSummaryResponse(APIModel):
+    symbol: str
+    completion_pct: Decimal = Decimal("0")
+    gap_vs_best_timeframe_pct: Decimal = Decimal("0")
+    gap_count: int = 0
+
+
+class DataValidationOverviewResponse(APIModel):
+    total_series: int = 0
+    pass_count: int = 0
+    warning_count: int = 0
+    fail_count: int = 0
+    duplicate_rows_total: int = 0
+    invalid_timestamps_total: int = 0
+    internal_gap_total: int = 0
+
+
+class DataValidationSummaryResponse(APIModel):
+    generated_at: datetime
+    exchange_code: str
+    lookback_days: int
+    verdict: str
+    overview: DataValidationOverviewResponse
+    worst_symbols: list[DataValidationSymbolSummaryResponse] = Field(default_factory=list)
+    worst_timeframes: list[DataValidationTimeframeSummaryResponse] = Field(default_factory=list)
+    one_minute_laggards: list[DataValidationOneMinuteSummaryResponse] = Field(default_factory=list)
+    completion_by_timeframe: dict[str, Decimal] = Field(default_factory=dict)
+
+
+class DataValidationReportResponse(APIModel):
+    summary: DataValidationSummaryResponse
+    results: list[DataValidationResultResponse] = Field(default_factory=list)
+
+
+class FeatureRunRequest(APIModel):
+    exchange_code: str = "binance_us"
+    symbol: str
+    timeframe: str
+    lookback_days: int = Field(default=730, ge=1, le=3650)
+
+    @field_validator("exchange_code")
+    @classmethod
+    def validate_exchange_code(cls, value: str) -> str:
+        return normalize_exchange_code(value)
+
+    @field_validator("symbol")
+    @classmethod
+    def validate_symbol(cls, value: str) -> str:
+        return normalize_supported_symbol(value)
+
+    @field_validator("timeframe")
+    @classmethod
+    def validate_timeframe(cls, value: str) -> str:
+        BinanceUSTimeframe.from_code(value)
+        return value
+
+
+class FeatureCoverageResponse(APIModel):
+    exchange_code: str
+    symbol: str
+    timeframe: str
+    feature_count: int = 0
+    loaded_start_at: Optional[datetime] = None
+    loaded_end_at: Optional[datetime] = None
+
+
+class FeatureRunResponse(APIModel):
+    id: int
+    exchange: str
+    symbol: str
+    timeframe: str
+    lookback_days: int
+    start_at: Optional[datetime] = None
+    end_at: Optional[datetime] = None
+    status: str
+    source_candle_count: int = 0
+    feature_rows_upserted: int = 0
+    computed_start_at: Optional[datetime] = None
+    computed_end_at: Optional[datetime] = None
+    error_text: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+
 class CandleCoverageResponse(APIModel):
     exchange_code: str
     symbol: str

@@ -108,17 +108,26 @@ class BacktestEngine(EngineBase):
         if not strategy.long_only or not strategy.spot_only:
             raise ValueError("BacktestEngine currently supports LONG-only SPOT-only strategies only")
 
-        ordered_candles = sorted(candles, key=lambda candle: candle.open_time)
-        if not ordered_candles:
-            raise ValueError("BacktestEngine requires at least one candle")
-        ordered_closes = [Decimal(str(candle.close)) for candle in ordered_candles]
         requested_start_at = ensure_utc(request.start_at)
         requested_end_at = ensure_utc(request.end_at)
+        ordered_candles = sorted(
+            (candle for candle in candles if candle.open_time <= requested_end_at),
+            key=lambda candle: candle.open_time,
+        )
+        if not ordered_candles:
+            raise ValueError("BacktestEngine requires at least one candle at or before request.end_at")
+        ordered_closes = [Decimal(str(candle.close)) for candle in ordered_candles]
         first_trading_candle_at = next(
-            (candle.open_time for candle in ordered_candles if candle.open_time >= requested_start_at),
+            (
+                candle.open_time
+                for candle in ordered_candles
+                if requested_start_at <= candle.open_time <= requested_end_at
+            ),
             None,
         )
-        trading_candle_count = sum(1 for candle in ordered_candles if candle.open_time >= requested_start_at)
+        trading_candle_count = sum(
+            1 for candle in ordered_candles if requested_start_at <= candle.open_time <= requested_end_at
+        )
 
         config_payload = strategy.default_config()
         config_payload.update(request.strategy_config_override)

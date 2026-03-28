@@ -259,6 +259,122 @@ export type CandleCoverage = {
   completion_pct: NumericValue;
 };
 
+export type DataValidationRequest = {
+  exchange_code: string;
+  symbols: string[];
+  timeframes: string[];
+  lookback_days: number;
+  sample_limit: number;
+  perform_resync: boolean;
+  resync_days: number;
+};
+
+export type ValidationIssue = {
+  severity: string;
+  code: string;
+  message: string;
+};
+
+export type DataValidationResult = {
+  exchange_code: string;
+  symbol: string;
+  timeframe: string;
+  stored_range: {
+    first_candle: string | null;
+    last_candle: string | null;
+    candle_count: number;
+    expected_candle_count: number;
+    completion_pct: NumericValue;
+  };
+  validation_window: CandleCoverage;
+  duplicates: {
+    duplicate_count: number;
+    duplicate_bucket_count: number;
+  };
+  timestamp_alignment: {
+    invalid_timestamp_count: number;
+  };
+  gaps: {
+    missing_candle_count: number;
+  };
+  issues: ValidationIssue[];
+  verdict: string;
+};
+
+export type DataValidationReport = {
+  summary: {
+    generated_at: string;
+    exchange_code: string;
+    lookback_days: number;
+    verdict: string;
+    overview: {
+      total_series: number;
+      pass_count: number;
+      warning_count: number;
+      fail_count: number;
+      duplicate_rows_total: number;
+      invalid_timestamps_total: number;
+      internal_gap_total: number;
+    };
+    worst_symbols: {
+      symbol: string;
+      worst_completion_pct: NumericValue;
+      total_gap_count: number;
+      total_duplicate_count: number;
+      invalid_timestamp_count: number;
+      failing_series_count: number;
+    }[];
+    worst_timeframes: {
+      timeframe: string;
+      avg_completion_pct: NumericValue;
+      total_gap_count: number;
+      failing_series_count: number;
+    }[];
+    one_minute_laggards: {
+      symbol: string;
+      completion_pct: NumericValue;
+      gap_vs_best_timeframe_pct: NumericValue;
+      gap_count: number;
+    }[];
+    completion_by_timeframe: Record<string, NumericValue>;
+  };
+  results: DataValidationResult[];
+};
+
+export type FeatureRunRequest = {
+  exchange_code: string;
+  symbol: string;
+  timeframe: string;
+  lookback_days: number;
+};
+
+export type FeatureCoverage = {
+  exchange_code: string;
+  symbol: string;
+  timeframe: string;
+  feature_count: number;
+  loaded_start_at: string | null;
+  loaded_end_at: string | null;
+};
+
+export type FeatureRun = {
+  id: number;
+  exchange: string;
+  symbol: string;
+  timeframe: string;
+  lookback_days: number;
+  start_at: string | null;
+  end_at: string | null;
+  status: string;
+  source_candle_count: number;
+  feature_rows_upserted: number;
+  computed_start_at: string | null;
+  computed_end_at: string | null;
+  error_text: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type Candle = {
   id: number;
   exchange_code: string;
@@ -413,6 +529,12 @@ export type BacktestFilters = {
 
 export type SyncJobFilters = {
   status?: string;
+  symbol?: string;
+  timeframe?: string;
+  limit?: number;
+};
+
+export type FeatureRunFilters = {
   symbol?: string;
   timeframe?: string;
   limit?: number;
