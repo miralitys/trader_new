@@ -298,6 +298,25 @@ class DataValidationReportResponse(APIModel):
     results: list[DataValidationResultResponse] = Field(default_factory=list)
 
 
+class ValidationRunResponse(APIModel):
+    id: int
+    exchange: str
+    symbols: list[str] = Field(default_factory=list)
+    timeframes: list[str] = Field(default_factory=list)
+    lookback_days: int
+    sample_limit: int
+    perform_resync: bool
+    resync_days: int
+    status: str
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    error_text: Optional[str] = None
+    report_summary: Optional[DataValidationSummaryResponse] = None
+    report: Optional[DataValidationReportResponse] = None
+    created_at: datetime
+    updated_at: datetime
+
+
 class FeatureRunRequest(APIModel):
     exchange_code: str = "binance_us"
     symbol: str

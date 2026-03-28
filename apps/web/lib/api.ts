@@ -10,6 +10,7 @@ import type {
   FeatureRunRequest,
   DataValidationReport,
   DataValidationRequest,
+  ValidationRun,
   DataSyncRequest,
   DataSyncResponse,
   HealthResponse,
@@ -134,6 +135,21 @@ export function runDataValidation(payload: DataValidationRequest) {
     method: "POST",
     body: JSON.stringify(payload),
   });
+}
+
+export function startDataValidationRun(payload: DataValidationRequest) {
+  return apiRequest<ValidationRun>("/api/data/validation-report/start", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getDataValidationRuns(limit = 20) {
+  return apiRequest<ValidationRun[]>(
+    `/api/data/validation-report/runs${buildQueryString({
+      limit,
+    })}`,
+  );
 }
 
 export function runFeatureLayer(payload: FeatureRunRequest) {

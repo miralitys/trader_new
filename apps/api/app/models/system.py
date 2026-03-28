@@ -49,6 +49,28 @@ class FeatureRun(AppModel, TimestampMixin):
     error_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
 
+class ValidationRun(AppModel, TimestampMixin):
+    __tablename__ = "validation_runs"
+
+    exchange: Mapped[str] = mapped_column(Text, nullable=False)
+    symbols_json: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
+    timeframes_json: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
+    lookback_days: Mapped[int] = mapped_column(Integer, nullable=False, default=730)
+    sample_limit: Mapped[int] = mapped_column(Integer, nullable=False, default=5)
+    perform_resync: Mapped[bool] = mapped_column(nullable=False, default=False)
+    resync_days: Mapped[int] = mapped_column(Integer, nullable=False, default=14)
+    status: Mapped[SyncJobStatus] = mapped_column(
+        pg_enum(SyncJobStatus, "sync_job_status_enum"),
+        nullable=False,
+        default=SyncJobStatus.QUEUED,
+    )
+    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    error_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    report_summary_json: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
+    report_json: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
+
+
 class AppLog(AppModel, CreatedAtMixin):
     __tablename__ = "app_logs"
 

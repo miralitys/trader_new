@@ -13,6 +13,7 @@ from app.services.health import HealthService
 from app.services.market_data_service import MarketDataService
 from app.services.pattern_research_service import PatternResearchService
 from app.services.query_service import QueryService
+from app.services.validation_run_service import ValidationRunService
 
 
 def get_settings_dependency() -> Settings:
@@ -55,6 +56,10 @@ def get_feature_layer_service(db: Session = Depends(get_db_dependency)) -> Featu
     return FeatureLayerService(session=db)
 
 
+def get_validation_run_service(db: Session = Depends(get_db_dependency)) -> ValidationRunService:
+    return ValidationRunService(session=db)
+
+
 __all__ = [
     "get_data_validation_service",
     "get_db_dependency",
@@ -64,4 +69,5 @@ __all__ = [
     "get_pattern_research_service",
     "get_query_service",
     "get_settings_dependency",
+    "get_validation_run_service",
 ]

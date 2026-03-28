@@ -117,6 +117,158 @@ def serialize_validation_report(report: DataValidationReport) -> dict[str, Any]:
     return asdict(report)
 
 
+def build_validation_report_payload(report: DataValidationReport) -> dict[str, Any]:
+    payload = serialize_validation_report(report)
+    results = payload["results"]
+
+    completion_by_timeframe: dict[str, list[float]] = {}
+    symbol_rollup: dict[str, dict[str, float | int | str]] = {}
+    timeframe_rollup: dict[str, dict[str, float | int | str | list[float]]] = {}
+    best_completion_by_symbol: dict[str, float] = {}
+    one_minute_rows: list[dict[str, object]] = []
+
+    pass_count = warning_count = fail_count = 0
+    duplicate_rows_total = invalid_timestamps_total = internal_gap_total = 0
+
+    for row in results:
+        verdict = row["verdict"] if isinstance(row, dict) else getattr(row, "verdict")
+        if verdict == "PASS":
+            pass_count += 1
+        elif verdict == "PASS WITH WARNINGS":
+            warning_count += 1
+        else:
+            fail_count += 1
+
+        symbol = row["symbol"] if isinstance(row, dict) else getattr(row, "symbol")
+        timeframe = row["timeframe"] if isinstance(row, dict) else getattr(row, "timeframe")
+        validation_window = row["validation_window"] if isinstance(row, dict) else getattr(row, "validation_window")
+        gaps = row["gaps"] if isinstance(row, dict) else getattr(row, "gaps")
+        duplicates = row["duplicates"] if isinstance(row, dict) else getattr(row, "duplicates")
+        timestamp_alignment = row["timestamp_alignment"] if isinstance(row, dict) else getattr(row, "timestamp_alignment")
+
+        completion_pct = float(validation_window["completion_pct"] if isinstance(validation_window, dict) else getattr(validation_window, "completion_pct"))
+        gap_count = int(gaps["missing_candle_count"] if isinstance(gaps, dict) else getattr(gaps, "missing_candle_count"))
+        duplicate_count = int(duplicates["duplicate_count"] if isinstance(duplicates, dict) else getattr(duplicates, "duplicate_count"))
+        invalid_timestamp_count = int(
+            timestamp_alignment["invalid_timestamp_count"]
+            if isinstance(timestamp_alignment, dict)
+            else getattr(timestamp_alignment, "invalid_timestamp_count")
+        )
+
+        duplicate_rows_total += duplicate_count
+        invalid_timestamps_total += invalid_timestamp_count
+        internal_gap_total += gap_count
+
+        completion_by_timeframe.setdefault(timeframe, []).append(completion_pct)
+        best_completion_by_symbol[symbol] = max(best_completion_by_symbol.get(symbol, 0.0), completion_pct)
+
+        symbol_entry = symbol_rollup.setdefault(
+            symbol,
+            {
+                "symbol": symbol,
+                "worst_completion_pct": 100.0,
+                "total_gap_count": 0,
+                "total_duplicate_count": 0,
+                "invalid_timestamp_count": 0,
+                "failing_series_count": 0,
+            },
+        )
+        symbol_entry["worst_completion_pct"] = min(float(symbol_entry["worst_completion_pct"]), completion_pct)
+        symbol_entry["total_gap_count"] = int(symbol_entry["total_gap_count"]) + gap_count
+        symbol_entry["total_duplicate_count"] = int(symbol_entry["total_duplicate_count"]) + duplicate_count
+        symbol_entry["invalid_timestamp_count"] = int(symbol_entry["invalid_timestamp_count"]) + invalid_timestamp_count
+        if verdict != "PASS":
+            symbol_entry["failing_series_count"] = int(symbol_entry["failing_series_count"]) + 1
+
+        timeframe_entry = timeframe_rollup.setdefault(
+            timeframe,
+            {
+                "timeframe": timeframe,
+                "completion_values": [],
+                "total_gap_count": 0,
+                "failing_series_count": 0,
+            },
+        )
+        timeframe_entry["completion_values"].append(completion_pct)
+        timeframe_entry["total_gap_count"] = int(timeframe_entry["total_gap_count"]) + gap_count
+        if verdict != "PASS":
+            timeframe_entry["failing_series_count"] = int(timeframe_entry["failing_series_count"]) + 1
+
+        if timeframe == "1m":
+            one_minute_rows.append(
+                {
+                    "symbol": symbol,
+                    "completion_pct": completion_pct,
+                    "gap_count": gap_count,
+                }
+            )
+
+    worst_symbols = sorted(
+        symbol_rollup.values(),
+        key=lambda item: (
+            float(item["worst_completion_pct"]),
+            -int(item["total_gap_count"]),
+            -int(item["failing_series_count"]),
+        ),
+    )[:10]
+
+    worst_timeframes = []
+    for _, item in timeframe_rollup.items():
+        completion_values = item.pop("completion_values")
+        avg_completion = sum(completion_values) / max(1, len(completion_values))
+        worst_timeframes.append(
+            {
+                "timeframe": item["timeframe"],
+                "avg_completion_pct": avg_completion,
+                "total_gap_count": item["total_gap_count"],
+                "failing_series_count": item["failing_series_count"],
+            }
+        )
+    worst_timeframes = sorted(
+        worst_timeframes,
+        key=lambda item: (float(item["avg_completion_pct"]), -int(item["total_gap_count"])),
+    )
+
+    one_minute_laggards = sorted(
+        (
+            {
+                "symbol": row["symbol"],
+                "completion_pct": row["completion_pct"],
+                "gap_vs_best_timeframe_pct": max(best_completion_by_symbol.get(row["symbol"], 0.0) - float(row["completion_pct"]), 0.0),
+                "gap_count": row["gap_count"],
+            }
+            for row in one_minute_rows
+        ),
+        key=lambda item: (float(item["completion_pct"]), -float(item["gap_vs_best_timeframe_pct"]), -int(item["gap_count"])),
+    )[:10]
+
+    return {
+        "summary": {
+            "generated_at": payload["generated_at"],
+            "exchange_code": payload["exchange_code"],
+            "lookback_days": payload["lookback_days"],
+            "verdict": payload["verdict"],
+            "overview": {
+                "total_series": len(results),
+                "pass_count": pass_count,
+                "warning_count": warning_count,
+                "fail_count": fail_count,
+                "duplicate_rows_total": duplicate_rows_total,
+                "invalid_timestamps_total": invalid_timestamps_total,
+                "internal_gap_total": internal_gap_total,
+            },
+            "worst_symbols": worst_symbols,
+            "worst_timeframes": worst_timeframes,
+            "one_minute_laggards": one_minute_laggards,
+            "completion_by_timeframe": {
+                timeframe: round(sum(values) / max(1, len(values)), 4)
+                for timeframe, values in completion_by_timeframe.items()
+            },
+        },
+        "results": results,
+    }
+
+
 def derive_recent_window(
     first_candle: Optional[datetime],
     last_candle: Optional[datetime],

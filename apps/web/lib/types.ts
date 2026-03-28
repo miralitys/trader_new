@@ -341,6 +341,25 @@ export type DataValidationReport = {
   results: DataValidationResult[];
 };
 
+export type ValidationRun = {
+  id: number;
+  exchange: string;
+  symbols: string[];
+  timeframes: string[];
+  lookback_days: number;
+  sample_limit: number;
+  perform_resync: boolean;
+  resync_days: number;
+  status: string;
+  started_at: string | null;
+  completed_at: string | null;
+  error_text: string | null;
+  report_summary: DataValidationReport["summary"] | null;
+  report: DataValidationReport | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type FeatureRunRequest = {
   exchange_code: string;
   symbol: string;

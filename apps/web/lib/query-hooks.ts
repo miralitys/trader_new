@@ -5,12 +5,14 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   getCandleCoverage,
   getCandles,
+  getDataValidationRuns,
   getFeatureCoverage,
   getFeatureRuns,
   getHealth,
   getLogs,
   getResearchSummary,
   runDataValidation,
+  startDataValidationRun,
   getSyncJobs,
   runDataSync,
   runFeatureLayer,
@@ -23,6 +25,7 @@ import type {
   FeatureRunRequest,
   LogFilters,
   SyncJobFilters,
+  ValidationRun,
 } from "@/lib/types";
 
 export const queryKeys = {
@@ -33,6 +36,7 @@ export const queryKeys = {
   candleCoverage: (filters: CandleFilters | null) => ["candles", "coverage", filters] as const,
   featureRuns: (filters: FeatureRunFilters) => ["feature-runs", filters] as const,
   featureCoverage: ["feature-coverage"] as const,
+  dataValidationRuns: (limit: number) => ["data-validation-runs", limit] as const,
   logs: (filters: LogFilters) => ["logs", filters] as const,
 };
 
@@ -97,6 +101,22 @@ export function useFeatureCoverage(enabled = true) {
   });
 }
 
+export function useDataValidationRuns(limit = 20, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.dataValidationRuns(limit),
+    queryFn: () => getDataValidationRuns(limit),
+    enabled,
+    refetchInterval: (query) => {
+      const runs = (query.state.data as ValidationRun[] | undefined) ?? [];
+      const latest = runs[0];
+      if (latest && (latest.status === "queued" || latest.status === "running")) {
+        return 5000;
+      }
+      return false;
+    },
+  });
+}
+
 export function useRunDataSync() {
   const queryClient = useQueryClient();
 
@@ -116,6 +136,17 @@ export function useRunDataSync() {
 export function useRunDataValidation() {
   return useMutation({
     mutationFn: (payload: DataValidationRequest) => runDataValidation(payload),
+  });
+}
+
+export function useStartDataValidationRun() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (payload: DataValidationRequest) => startDataValidationRun(payload),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["data-validation-runs"] });
+    },
   });
 }
 

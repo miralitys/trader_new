@@ -5,8 +5,8 @@ import { useMemo, useState } from "react";
 import { DataTable } from "@/components/tables/data-table";
 import { MetricCard } from "@/components/ui/metric-card";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { useRunDataValidation } from "@/lib/query-hooks";
-import type { DataValidationReport } from "@/lib/types";
+import { useDataValidationRuns, useStartDataValidationRun } from "@/lib/query-hooks";
+import type { DataValidationReport, ValidationRun } from "@/lib/types";
 import { formatDateTime, formatInteger, formatPercent, getErrorMessage } from "@/lib/utils";
 
 const validationSymbols = [
@@ -34,54 +34,25 @@ const validationSymbols = [
 const validationTimeframes = ["1m", "5m", "15m", "1h", "4h"] as const;
 
 export function DataValidationForm() {
-  const validationMutation = useRunDataValidation();
+  const startValidationMutation = useStartDataValidationRun();
+  const { data: runs = [], isLoading: isRunsLoading } = useDataValidationRuns(20, true);
   const [lookbackDays, setLookbackDays] = useState(730);
   const [sampleLimit, setSampleLimit] = useState(5);
-  const [report, setReport] = useState<DataValidationReport | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const csvHref = useMemo(() => {
-    if (!report) {
-      return null;
-    }
+  const latestRun = runs[0] ?? null;
+  const latestReport = latestRun?.report ?? null;
+  const latestCompletedRun = useMemo(() => runs.find((run) => run.status === "completed" && run.report) ?? null, [runs]);
+  const report = latestReport ?? latestCompletedRun?.report ?? null;
+  const runningRun = useMemo(() => runs.find((run) => run.status === "queued" || run.status === "running") ?? null, [runs]);
 
-    const header = [
-      "symbol",
-      "timeframe",
-      "verdict",
-      "completion_pct",
-      "missing_candles",
-      "duplicate_rows",
-      "invalid_timestamps",
-      "issue_codes",
-    ];
-    const rows = report.results.map((row) =>
-      [
-        row.symbol,
-        row.timeframe,
-        row.verdict,
-        String(row.validation_window.completion_pct),
-        String(row.gaps.missing_candle_count),
-        String(row.duplicates.duplicate_count),
-        String(row.timestamp_alignment.invalid_timestamp_count),
-        row.issues.map((issue) => issue.code).join("|"),
-      ].join(","),
-    );
-    const csv = [header.join(","), ...rows].join("\n");
-    return URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8;" }));
-  }, [report]);
-
-  const jsonHref = useMemo(() => {
-    if (!report) {
-      return null;
-    }
-    return URL.createObjectURL(new Blob([JSON.stringify(report, null, 2)], { type: "application/json" }));
-  }, [report]);
+  const csvHref = useMemo(() => buildCsvHref(report), [report]);
+  const jsonHref = useMemo(() => buildJsonHref(report), [report]);
 
   async function handleRunValidation() {
     setErrorMessage(null);
     try {
-      const nextReport = await validationMutation.mutateAsync({
+      await startValidationMutation.mutateAsync({
         exchange_code: "binance_us",
         symbols: [...validationSymbols],
         timeframes: [...validationTimeframes],
@@ -90,9 +61,8 @@ export function DataValidationForm() {
         perform_resync: false,
         resync_days: 14,
       });
-      setReport(nextReport);
     } catch (error) {
-      setErrorMessage(getErrorMessage(error, "Unable to run offline validation report."));
+      setErrorMessage(getErrorMessage(error, "Unable to start offline validation report."));
     }
   }
 
@@ -105,8 +75,8 @@ export function DataValidationForm() {
               <p className="text-[11px] uppercase tracking-[0.25em] text-amber-200/80">Offline Validation Report</p>
               <h3 className="mt-1 text-base font-semibold text-white">Validate the full 95-series dataset</h3>
               <p className="mt-2 text-sm leading-7 text-slate-400">
-                This checks every symbol/timeframe combination and gives us one honest report for gaps, duplicates,
-                malformed candles, timeframe coverage alignment, and weak 1m datasets.
+                This runs the full symbol/timeframe audit in the background and keeps the finished report in history, so
+                we do not have to keep a browser request open for a long 95-series scan.
               </p>
             </div>
 
@@ -142,20 +112,35 @@ export function DataValidationForm() {
               <p>Total series checked: {validationSymbols.length * validationTimeframes.length}</p>
             </div>
 
+            {runningRun ? (
+              <div className="rounded-2xl border border-sky-400/15 bg-sky-400/10 px-4 py-3 text-sm text-sky-100">
+                <p className="font-medium">
+                  Validation {runningRun.status} · run #{runningRun.id}
+                </p>
+                <p className="mt-1 text-sky-100/80">
+                  Started {formatNullableDateTime(runningRun.started_at)} · updated {formatNullableDateTime(runningRun.updated_at)}
+                </p>
+              </div>
+            ) : null}
+
             <div className="flex flex-wrap gap-3">
               <button
                 type="button"
                 onClick={handleRunValidation}
-                disabled={validationMutation.isPending}
+                disabled={startValidationMutation.isPending || Boolean(runningRun)}
                 className="rounded-xl bg-amber-300 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-amber-200 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
               >
-                {validationMutation.isPending ? "Running validation..." : "Run offline validation"}
+                {startValidationMutation.isPending
+                  ? "Queueing validation..."
+                  : runningRun
+                    ? "Validation already running"
+                    : "Start offline validation"}
               </button>
 
               {jsonHref ? (
                 <a
                   href={jsonHref}
-                  download="data-validation-report.json"
+                  download={`data-validation-report-${report?.summary.generated_at ?? "latest"}.json`}
                   className="rounded-xl border border-white/10 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:border-white/20 hover:text-white"
                 >
                   Download JSON
@@ -165,7 +150,7 @@ export function DataValidationForm() {
               {csvHref ? (
                 <a
                   href={csvHref}
-                  download="data-validation-report.csv"
+                  download={`data-validation-report-${report?.summary.generated_at ?? "latest"}.csv`}
                   className="rounded-xl border border-white/10 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:border-white/20 hover:text-white"
                 >
                   Download CSV
@@ -173,7 +158,11 @@ export function DataValidationForm() {
               ) : null}
             </div>
 
-            {errorMessage ? <div className="rounded-2xl border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-100">{errorMessage}</div> : null}
+            {errorMessage ? (
+              <div className="rounded-2xl border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-100">
+                {errorMessage}
+              </div>
+            ) : null}
           </div>
         </div>
 
@@ -196,20 +185,101 @@ export function DataValidationForm() {
         </div>
       </div>
 
+      <section className="rounded-3xl border border-white/8 bg-white/[0.03] p-4">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">Validation history</p>
+            <h4 className="mt-1 text-base font-semibold text-white">Recent background runs</h4>
+          </div>
+          <p className="text-xs text-slate-500">
+            {isRunsLoading ? "Loading history..." : `${runs.length} run${runs.length === 1 ? "" : "s"} loaded`}
+          </p>
+        </div>
+
+        <div className="mt-4">
+          <DataTable
+            rows={runs}
+            rowKey={(row) => row.id}
+            emptyTitle="No validation runs yet"
+            emptyDescription="Start the first offline validation run to build the history here."
+            columns={[
+              { key: "id", title: "Run", render: (row) => `#${row.id}` },
+              {
+                key: "status",
+                title: "Status",
+                render: (row) => (
+                  <div className="flex items-center gap-2">
+                    <StatusBadge status={mapStatus(row.status)} />
+                    <span className="text-xs text-slate-400">{row.status}</span>
+                  </div>
+                ),
+              },
+              { key: "lookback", title: "Window", render: (row) => `${row.lookback_days}d · sample ${row.sample_limit}` },
+              {
+                key: "created",
+                title: "Created",
+                render: (row) => formatNullableDateTime(row.created_at),
+              },
+              {
+                key: "completed",
+                title: "Finished",
+                render: (row) => formatNullableDateTime(row.completed_at),
+              },
+              {
+                key: "verdict",
+                title: "Report verdict",
+                render: (row) => row.report_summary?.verdict ?? (row.error_text ? "FAILED" : "—"),
+              },
+            ]}
+          />
+        </div>
+      </section>
+
+      {latestRun?.status === "failed" && latestRun.error_text ? (
+        <section className="rounded-3xl border border-rose-400/20 bg-rose-400/10 p-4 text-sm text-rose-100">
+          <p className="font-medium">Latest validation run failed</p>
+          <p className="mt-2 whitespace-pre-wrap text-rose-100/85">{latestRun.error_text}</p>
+        </section>
+      ) : null}
+
       {report ? (
         <>
           <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <MetricCard label="Report verdict" value={report.summary.verdict} tone={report.summary.verdict === "PASS" ? "positive" : report.summary.verdict === "FAIL" ? "danger" : "warning"} />
-            <MetricCard label="Series checked" value={formatInteger(report.summary.overview.total_series)} hint={formatDateTime(report.summary.generated_at)} />
-            <MetricCard label="Internal gaps" value={formatInteger(report.summary.overview.internal_gap_total)} tone={report.summary.overview.internal_gap_total > 0 ? "warning" : "positive"} />
+            <MetricCard
+              label="Report verdict"
+              value={report.summary.verdict}
+              tone={report.summary.verdict === "PASS" ? "positive" : report.summary.verdict === "FAIL" ? "danger" : "warning"}
+            />
+            <MetricCard
+              label="Series checked"
+              value={formatInteger(report.summary.overview.total_series)}
+              hint={formatDateTime(report.summary.generated_at)}
+            />
+            <MetricCard
+              label="Internal gaps"
+              value={formatInteger(report.summary.overview.internal_gap_total)}
+              tone={report.summary.overview.internal_gap_total > 0 ? "warning" : "positive"}
+            />
             <MetricCard label="1m laggards tracked" value={formatInteger(report.summary.one_minute_laggards.length)} />
             <MetricCard label="Pass" value={formatInteger(report.summary.overview.pass_count)} tone="positive" />
-            <MetricCard label="Warnings" value={formatInteger(report.summary.overview.warning_count)} tone={report.summary.overview.warning_count > 0 ? "warning" : "default"} />
-            <MetricCard label="Fail" value={formatInteger(report.summary.overview.fail_count)} tone={report.summary.overview.fail_count > 0 ? "danger" : "default"} />
+            <MetricCard
+              label="Warnings"
+              value={formatInteger(report.summary.overview.warning_count)}
+              tone={report.summary.overview.warning_count > 0 ? "warning" : "default"}
+            />
+            <MetricCard
+              label="Fail"
+              value={formatInteger(report.summary.overview.fail_count)}
+              tone={report.summary.overview.fail_count > 0 ? "danger" : "default"}
+            />
             <MetricCard
               label="Duplicate / invalid ts"
               value={`${formatInteger(report.summary.overview.duplicate_rows_total)} / ${formatInteger(report.summary.overview.invalid_timestamps_total)}`}
-              tone={report.summary.overview.duplicate_rows_total > 0 || report.summary.overview.invalid_timestamps_total > 0 ? "danger" : "positive"}
+              tone={
+                report.summary.overview.duplicate_rows_total > 0 || report.summary.overview.invalid_timestamps_total > 0
+                  ? "danger"
+                  : "positive"
+              }
             />
           </section>
 
@@ -277,15 +347,7 @@ export function DataValidationForm() {
                   title: "Verdict",
                   render: (row) => (
                     <div className="flex items-center gap-2">
-                      <StatusBadge
-                        status={
-                          row.verdict === "PASS"
-                            ? "completed"
-                            : row.verdict === "FAIL"
-                              ? "failed"
-                              : "warning"
-                        }
-                      />
+                      <StatusBadge status={row.verdict === "PASS" ? "completed" : row.verdict === "FAIL" ? "failed" : "warning"} />
                       <span className="text-xs text-slate-400">{row.verdict}</span>
                     </div>
                   ),
@@ -299,11 +361,15 @@ export function DataValidationForm() {
                   title: "Issues",
                   render: (row) => (
                     <div className="flex flex-wrap gap-1">
-                      {row.issues.length ? row.issues.map((issue) => (
-                        <span key={issue.code} className="rounded-full border border-white/10 px-2 py-0.5 text-xs text-slate-300">
-                          {issue.code}
-                        </span>
-                      )) : <span className="text-xs text-slate-500">none</span>}
+                      {row.issues.length ? (
+                        row.issues.map((issue) => (
+                          <span key={issue.code} className="rounded-full border border-white/10 px-2 py-0.5 text-xs text-slate-300">
+                            {issue.code}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="text-xs text-slate-500">none</span>
+                      )}
                     </div>
                   ),
                 },
@@ -314,6 +380,58 @@ export function DataValidationForm() {
       ) : null}
     </div>
   );
+}
+
+function buildCsvHref(report: DataValidationReport | null) {
+  if (!report) {
+    return null;
+  }
+
+  const header = [
+    "symbol",
+    "timeframe",
+    "verdict",
+    "completion_pct",
+    "missing_candles",
+    "duplicate_rows",
+    "invalid_timestamps",
+    "issue_codes",
+  ];
+  const rows = report.results.map((row) =>
+    [
+      row.symbol,
+      row.timeframe,
+      row.verdict,
+      String(row.validation_window.completion_pct),
+      String(row.gaps.missing_candle_count),
+      String(row.duplicates.duplicate_count),
+      String(row.timestamp_alignment.invalid_timestamp_count),
+      row.issues.map((issue) => issue.code).join("|"),
+    ].join(","),
+  );
+  const csv = [header.join(","), ...rows].join("\n");
+  return URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8;" }));
+}
+
+function buildJsonHref(report: DataValidationReport | null) {
+  if (!report) {
+    return null;
+  }
+  return URL.createObjectURL(new Blob([JSON.stringify(report, null, 2)], { type: "application/json" }));
+}
+
+function mapStatus(status: string): "queued" | "running" | "completed" | "failed" | "warning" {
+  if (status === "queued" || status === "running" || status === "completed" || status === "failed") {
+    return status;
+  }
+  return "warning";
+}
+
+function formatNullableDateTime(value: string | null | undefined) {
+  if (!value) {
+    return "—";
+  }
+  return formatDateTime(value);
 }
 
 const inputClassName =
