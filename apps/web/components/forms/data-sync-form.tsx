@@ -32,6 +32,7 @@ export function DataSyncForm() {
   const [timeframe, setTimeframe] = useState("5m");
   const [startAt, setStartAt] = useState(toDatetimeLocalInput(new Date(Date.now() - 1000 * 60 * 60 * 24 * 7)));
   const [endAt, setEndAt] = useState(toDatetimeLocalInput(new Date()));
+  const [batchLookbackDays, setBatchLookbackDays] = useState<number>(720);
   const [message, setMessage] = useState<string | null>(null);
   const [batchMessage, setBatchMessage] = useState<string | null>(null);
   const [isBatchRunning, setIsBatchRunning] = useState(false);
@@ -46,6 +47,15 @@ export function DataSyncForm() {
     }
     return (endMs - startMs) / (1000 * 60 * 60 * 24);
   }, [startAt, endAt]);
+
+  const batchRange = useMemo(() => {
+    const nextEnd = new Date();
+    const nextStart = new Date(nextEnd.getTime() - batchLookbackDays * 24 * 60 * 60 * 1000);
+    return {
+      startAt: toDatetimeLocalInput(nextStart),
+      endAt: toDatetimeLocalInput(nextEnd),
+    };
+  }, [batchLookbackDays]);
 
   const batchEtaText = useMemo(() => {
     if (!batchProgress || batchProgress.completedWeight <= 0) {
@@ -118,7 +128,7 @@ export function DataSyncForm() {
       return (
         symbolAcc +
         batchTimeframes.reduce((timeframeAcc, orderedTimeframe) => {
-          return timeframeAcc + selectedRangeDays * candlesPerDayByTimeframe[orderedTimeframe];
+          return timeframeAcc + batchLookbackDays * candlesPerDayByTimeframe[orderedTimeframe];
         }, 0)
       );
     }, 0);
@@ -139,7 +149,7 @@ export function DataSyncForm() {
         for (const orderedSymbol of presetSymbols) {
           setBatchMessage(
             `Running ${completedJobs + 1}/${totalJobs}: ${orderedSymbol} ${orderedTimeframe} ` +
-              `for ${startAt} -> ${endAt}`,
+              `for ${batchRange.startAt} -> ${batchRange.endAt}`,
           );
 
           const result = await syncMutation.mutateAsync({
@@ -147,13 +157,13 @@ export function DataSyncForm() {
             exchange_code: "binance_us",
             symbol: orderedSymbol,
             timeframe: orderedTimeframe,
-            start_at: new Date(startAt).toISOString(),
-            end_at: new Date(endAt).toISOString(),
+            start_at: new Date(batchRange.startAt).toISOString(),
+            end_at: new Date(batchRange.endAt).toISOString(),
           });
 
           completedJobs += 1;
           totalInsertedRows += result.inserted_rows;
-          completedWeight += selectedRangeDays * candlesPerDayByTimeframe[orderedTimeframe];
+          completedWeight += batchLookbackDays * candlesPerDayByTimeframe[orderedTimeframe];
           setBatchProgress((current) =>
             current
               ? {
@@ -277,9 +287,13 @@ export function DataSyncForm() {
                 <button
                   key={days}
                   type="button"
-                  onClick={() => applyDayPreset(days)}
+                  onClick={() => setBatchLookbackDays(days)}
                   disabled={isRunning}
-                  className="rounded-full border border-white/10 bg-slate-950/50 px-3.5 py-1.5 text-sm font-medium text-slate-200 transition hover:border-sky-300/35 hover:bg-sky-300/10 hover:text-white disabled:cursor-not-allowed disabled:border-white/5 disabled:bg-slate-900 disabled:text-slate-600"
+                  className={`rounded-full border px-3.5 py-1.5 text-sm font-medium transition disabled:cursor-not-allowed disabled:border-white/5 disabled:bg-slate-900 disabled:text-slate-600 ${
+                    batchLookbackDays === days
+                      ? "border-emerald-300/45 bg-emerald-400/15 text-emerald-100"
+                      : "border-white/10 bg-slate-950/50 text-slate-200 hover:border-sky-300/35 hover:bg-sky-300/10 hover:text-white"
+                  }`}
                 >
                   {days}d
                 </button>
@@ -291,7 +305,10 @@ export function DataSyncForm() {
               <p className="mt-2 text-sm leading-6 text-sky-100">
                 {batchMessage ?? "Pick a day range and start Add All Data when you want the full queue to run."}
               </p>
-              <p className="mt-2 text-sm text-slate-400">{isBatchRunning ? batchEtaText : `Range selected: ~${Math.round(selectedRangeDays)} days.`}</p>
+              <p className="mt-2 text-sm text-slate-300">
+                Batch range: {batchRange.startAt} → {batchRange.endAt} ({batchLookbackDays}d)
+              </p>
+              <p className="mt-2 text-sm text-slate-400">{isBatchRunning ? batchEtaText : `Queue prepared for ~${batchLookbackDays} days.`}</p>
             </div>
 
             <div className="flex justify-end">
