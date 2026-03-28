@@ -29,7 +29,7 @@ const presetSymbols = [
 ] as const;
 
 const batchTimeframes = ["4h", "1h", "15m", "5m", "1m"] as const;
-const batchDayPresets = [30, 60] as const;
+const batchDayPresets = [30, 60, 90, 180, 365, 720] as const;
 
 export function DataSyncForm() {
   const syncMutation = useRunDataSync();
@@ -181,41 +181,64 @@ export function DataSyncForm() {
         ) : null}
       </div>
 
-      <div className="flex flex-col gap-3 border-t border-white/6 pt-4 md:flex-row md:items-center md:justify-between">
-        <p className="text-sm text-slate-400">Use incremental mode to top up the latest candles with overlap and dedupe. Initial and manual modes require an explicit range.</p>
-        <div className="flex flex-col items-start gap-3">
-          {message ? <span className="text-sm text-slate-300">{message}</span> : null}
-          {batchMessage ? <span className="text-sm text-sky-200">{batchMessage}</span> : null}
-          <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center">
-            <div className="flex items-center gap-2">
-              <span className="text-xs uppercase tracking-[0.2em] text-slate-500">All Data</span>
+      <div className="grid gap-4 border-t border-white/6 pt-4 xl:grid-cols-[minmax(0,1.15fr)_minmax(380px,0.85fr)]">
+        <div className="flex flex-col gap-3">
+          <p className="text-sm leading-7 text-slate-400">
+            Use incremental mode to top up the latest candles with overlap and dedupe. Initial and manual modes
+            require an explicit range.
+          </p>
+          {message ? <div className="rounded-2xl border border-white/8 bg-white/5 px-4 py-3 text-sm text-slate-200">{message}</div> : null}
+        </div>
+
+        <div className="rounded-3xl border border-sky-400/15 bg-sky-400/5 p-4 shadow-[0_0_0_1px_rgba(125,211,252,0.04)]">
+          <div className="flex flex-col gap-4">
+            <div className="flex items-start justify-between gap-4">
+              <div className="space-y-1">
+                <p className="text-[11px] uppercase tracking-[0.25em] text-sky-200/75">All Data Queue</p>
+                <h3 className="text-base font-semibold text-white">Run every symbol overnight</h3>
+                <p className="text-sm text-slate-400">Queue order: 4h → 1h → 15m → 5m → 1m, one symbol at a time.</p>
+              </div>
+              <button
+                type="button"
+                onClick={handleBatchSync}
+                disabled={isRunning || mode === "incremental"}
+                className="min-w-[160px] rounded-2xl border border-sky-300/30 bg-sky-300/15 px-4 py-3 text-sm font-semibold text-sky-50 transition hover:bg-sky-300/25 disabled:cursor-not-allowed disabled:border-slate-700 disabled:bg-slate-800 disabled:text-slate-500"
+              >
+                {isBatchRunning ? "Running all data..." : "Add All Data"}
+              </button>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="mr-1 text-[11px] uppercase tracking-[0.2em] text-slate-500">Days</span>
               {batchDayPresets.map((days) => (
                 <button
                   key={days}
                   type="button"
                   onClick={() => applyDayPreset(days)}
                   disabled={isRunning}
-                  className="rounded-full border border-white/10 px-3 py-1 text-xs font-medium text-slate-300 transition hover:border-white/20 hover:text-white disabled:cursor-not-allowed disabled:border-white/5 disabled:text-slate-600"
+                  className="rounded-full border border-white/10 bg-slate-950/50 px-3.5 py-1.5 text-sm font-medium text-slate-200 transition hover:border-sky-300/35 hover:bg-sky-300/10 hover:text-white disabled:cursor-not-allowed disabled:border-white/5 disabled:bg-slate-900 disabled:text-slate-600"
                 >
                   {days}d
                 </button>
               ))}
             </div>
-            <button
-              type="button"
-              onClick={handleBatchSync}
-              disabled={isRunning || mode === "incremental"}
-              className="rounded-xl border border-sky-400/30 bg-sky-400/10 px-4 py-2 text-sm font-semibold text-sky-100 transition hover:bg-sky-400/20 disabled:cursor-not-allowed disabled:border-slate-700 disabled:bg-slate-800 disabled:text-slate-500"
-            >
-              {isBatchRunning ? "Running all data..." : "Add All Data"}
-            </button>
-            <button
-              type="submit"
-              disabled={isRunning}
-              className="rounded-xl bg-emerald-400 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
-            >
-              {isRunning ? "Running..." : "Run sync"}
-            </button>
+
+            <div className="rounded-2xl border border-white/8 bg-slate-950/45 px-4 py-3">
+              <p className="text-[11px] uppercase tracking-[0.2em] text-slate-500">Queue status</p>
+              <p className="mt-2 text-sm leading-6 text-sky-100">
+                {batchMessage ?? "Pick a day range and start Add All Data when you want the full queue to run."}
+              </p>
+            </div>
+
+            <div className="flex justify-end">
+              <button
+                type="submit"
+                disabled={isRunning}
+                className="rounded-xl bg-emerald-400 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+              >
+                {isRunning ? "Running..." : "Run sync"}
+              </button>
+            </div>
           </div>
         </div>
       </div>
