@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useMemo, useState } from "react";
 
 import { DateRangePresets } from "@/components/forms/date-range-presets";
 import { useRunDataSync } from "@/lib/query-hooks";
@@ -30,6 +30,21 @@ const presetSymbols = [
 
 const batchTimeframes = ["4h", "1h", "15m", "5m", "1m"] as const;
 const batchDayPresets = [30, 60, 90, 180, 365, 720] as const;
+const candlesPerDayByTimeframe: Record<(typeof batchTimeframes)[number], number> = {
+  "4h": 6,
+  "1h": 24,
+  "15m": 96,
+  "5m": 288,
+  "1m": 1440,
+};
+
+type BatchProgress = {
+  startedAt: number;
+  completedJobs: number;
+  totalJobs: number;
+  completedWeight: number;
+  totalWeight: number;
+};
 
 export function DataSyncForm() {
   const syncMutation = useRunDataSync();
@@ -41,8 +56,41 @@ export function DataSyncForm() {
   const [message, setMessage] = useState<string | null>(null);
   const [batchMessage, setBatchMessage] = useState<string | null>(null);
   const [isBatchRunning, setIsBatchRunning] = useState(false);
+  const [batchProgress, setBatchProgress] = useState<BatchProgress | null>(null);
 
   const isRunning = syncMutation.isPending || isBatchRunning;
+  const selectedRangeDays = useMemo(() => {
+    const startMs = new Date(startAt).getTime();
+    const endMs = new Date(endAt).getTime();
+    if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) {
+      return 0;
+    }
+    return (endMs - startMs) / (1000 * 60 * 60 * 24);
+  }, [startAt, endAt]);
+
+  const batchEtaText = useMemo(() => {
+    if (!batchProgress || batchProgress.completedWeight <= 0) {
+      return "ETA will appear after the first completed job.";
+    }
+
+    const elapsedMs = Date.now() - batchProgress.startedAt;
+    const msPerWeight = elapsedMs / batchProgress.completedWeight;
+    const remainingWeight = Math.max(batchProgress.totalWeight - batchProgress.completedWeight, 0);
+    const remainingMs = remainingWeight * msPerWeight;
+
+    if (!Number.isFinite(remainingMs) || remainingMs <= 0) {
+      return "Finalizing queue...";
+    }
+
+    const remainingMinutes = Math.round(remainingMs / 60000);
+    if (remainingMinutes < 60) {
+      return `ETA ~${remainingMinutes} min remaining.`;
+    }
+
+    const hours = Math.floor(remainingMinutes / 60);
+    const minutes = remainingMinutes % 60;
+    return `ETA ~${hours}h ${minutes}m remaining.`;
+  }, [batchProgress]);
 
   function applyDayPreset(days: number) {
     const nextEnd = new Date();
@@ -87,15 +135,31 @@ export function DataSyncForm() {
     setIsBatchRunning(true);
 
     const totalJobs = presetSymbols.length * batchTimeframes.length;
+    const totalWeight = presetSymbols.reduce((symbolAcc) => {
+      return (
+        symbolAcc +
+        batchTimeframes.reduce((timeframeAcc, orderedTimeframe) => {
+          return timeframeAcc + selectedRangeDays * candlesPerDayByTimeframe[orderedTimeframe];
+        }, 0)
+      );
+    }, 0);
     let completedJobs = 0;
     let totalInsertedRows = 0;
+    let completedWeight = 0;
+
+    setBatchProgress({
+      startedAt: Date.now(),
+      completedJobs: 0,
+      totalJobs,
+      completedWeight: 0,
+      totalWeight,
+    });
 
     try {
       for (const orderedTimeframe of batchTimeframes) {
         for (const orderedSymbol of presetSymbols) {
-          completedJobs += 1;
           setBatchMessage(
-            `Running ${completedJobs}/${totalJobs}: ${orderedSymbol} ${orderedTimeframe} ` +
+            `Running ${completedJobs + 1}/${totalJobs}: ${orderedSymbol} ${orderedTimeframe} ` +
               `for ${startAt} -> ${endAt}`,
           );
 
@@ -108,7 +172,18 @@ export function DataSyncForm() {
             end_at: new Date(endAt).toISOString(),
           });
 
+          completedJobs += 1;
           totalInsertedRows += result.inserted_rows;
+          completedWeight += selectedRangeDays * candlesPerDayByTimeframe[orderedTimeframe];
+          setBatchProgress((current) =>
+            current
+              ? {
+                  ...current,
+                  completedJobs,
+                  completedWeight,
+                }
+              : current,
+          );
           setBatchMessage(
             `Completed ${completedJobs}/${totalJobs}: ${orderedSymbol} ${orderedTimeframe}. ` +
               `Inserted ${formatInteger(result.inserted_rows)} candles this run.`,
@@ -126,6 +201,15 @@ export function DataSyncForm() {
       );
     } finally {
       setIsBatchRunning(false);
+      setBatchProgress((current) =>
+        current
+          ? {
+              ...current,
+              completedJobs,
+              completedWeight,
+            }
+          : current,
+      );
     }
   }
 
@@ -228,6 +312,7 @@ export function DataSyncForm() {
               <p className="mt-2 text-sm leading-6 text-sky-100">
                 {batchMessage ?? "Pick a day range and start Add All Data when you want the full queue to run."}
               </p>
+              <p className="mt-2 text-sm text-slate-400">{isBatchRunning ? batchEtaText : `Range selected: ~${Math.round(selectedRangeDays)} days.`}</p>
             </div>
 
             <div className="flex justify-end">
