@@ -28,6 +28,9 @@ const presetSymbols = [
   "FIL-USDT",
 ] as const;
 
+const batchTimeframes = ["4h", "1h", "15m", "5m", "1m"] as const;
+const batchDayPresets = [30, 60] as const;
+
 export function DataSyncForm() {
   const syncMutation = useRunDataSync();
   const [mode, setMode] = useState<"initial" | "incremental" | "manual">("manual");
@@ -36,6 +39,10 @@ export function DataSyncForm() {
   const [startAt, setStartAt] = useState(toDatetimeLocalInput(new Date(Date.now() - 1000 * 60 * 60 * 24 * 7)));
   const [endAt, setEndAt] = useState(toDatetimeLocalInput(new Date()));
   const [message, setMessage] = useState<string | null>(null);
+  const [batchMessage, setBatchMessage] = useState<string | null>(null);
+  const [isBatchRunning, setIsBatchRunning] = useState(false);
+
+  const isRunning = syncMutation.isPending || isBatchRunning;
 
   function applyDayPreset(days: number) {
     const nextEnd = new Date();
@@ -47,6 +54,7 @@ export function DataSyncForm() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setMessage(null);
+    setBatchMessage(null);
 
     try {
       const result = await syncMutation.mutateAsync({
@@ -65,6 +73,59 @@ export function DataSyncForm() {
       );
     } catch (error) {
       setMessage(getErrorMessage(error, "Unable to run data sync."));
+    }
+  }
+
+  async function handleBatchSync() {
+    if (mode === "incremental") {
+      setBatchMessage("Add All Data works with manual or initial mode because it needs an explicit date range.");
+      return;
+    }
+
+    setMessage(null);
+    setBatchMessage(null);
+    setIsBatchRunning(true);
+
+    const totalJobs = presetSymbols.length * batchTimeframes.length;
+    let completedJobs = 0;
+    let totalInsertedRows = 0;
+
+    try {
+      for (const orderedTimeframe of batchTimeframes) {
+        for (const orderedSymbol of presetSymbols) {
+          completedJobs += 1;
+          setBatchMessage(
+            `Running ${completedJobs}/${totalJobs}: ${orderedSymbol} ${orderedTimeframe} ` +
+              `for ${startAt} -> ${endAt}`,
+          );
+
+          const result = await syncMutation.mutateAsync({
+            mode,
+            exchange_code: "binance_us",
+            symbol: orderedSymbol,
+            timeframe: orderedTimeframe,
+            start_at: new Date(startAt).toISOString(),
+            end_at: new Date(endAt).toISOString(),
+          });
+
+          totalInsertedRows += result.inserted_rows;
+          setBatchMessage(
+            `Completed ${completedJobs}/${totalJobs}: ${orderedSymbol} ${orderedTimeframe}. ` +
+              `Inserted ${formatInteger(result.inserted_rows)} candles this run.`,
+          );
+        }
+      }
+
+      setBatchMessage(
+        `Add All Data finished. Completed ${totalJobs} sync jobs and inserted ` +
+          `${formatInteger(totalInsertedRows)} candles in total.`,
+      );
+    } catch (error) {
+      setBatchMessage(
+        `Batch stopped on job ${completedJobs}/${totalJobs}. ${getErrorMessage(error, "Unable to continue Add All Data.")}`,
+      );
+    } finally {
+      setIsBatchRunning(false);
     }
   }
 
@@ -122,15 +183,40 @@ export function DataSyncForm() {
 
       <div className="flex flex-col gap-3 border-t border-white/6 pt-4 md:flex-row md:items-center md:justify-between">
         <p className="text-sm text-slate-400">Use incremental mode to top up the latest candles with overlap and dedupe. Initial and manual modes require an explicit range.</p>
-        <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center">
+        <div className="flex flex-col items-start gap-3">
           {message ? <span className="text-sm text-slate-300">{message}</span> : null}
-          <button
-            type="submit"
-            disabled={syncMutation.isPending}
-            className="rounded-xl bg-emerald-400 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
-          >
-            {syncMutation.isPending ? "Running..." : "Run sync"}
-          </button>
+          {batchMessage ? <span className="text-sm text-sky-200">{batchMessage}</span> : null}
+          <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center">
+            <div className="flex items-center gap-2">
+              <span className="text-xs uppercase tracking-[0.2em] text-slate-500">All Data</span>
+              {batchDayPresets.map((days) => (
+                <button
+                  key={days}
+                  type="button"
+                  onClick={() => applyDayPreset(days)}
+                  disabled={isRunning}
+                  className="rounded-full border border-white/10 px-3 py-1 text-xs font-medium text-slate-300 transition hover:border-white/20 hover:text-white disabled:cursor-not-allowed disabled:border-white/5 disabled:text-slate-600"
+                >
+                  {days}d
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={handleBatchSync}
+              disabled={isRunning || mode === "incremental"}
+              className="rounded-xl border border-sky-400/30 bg-sky-400/10 px-4 py-2 text-sm font-semibold text-sky-100 transition hover:bg-sky-400/20 disabled:cursor-not-allowed disabled:border-slate-700 disabled:bg-slate-800 disabled:text-slate-500"
+            >
+              {isBatchRunning ? "Running all data..." : "Add All Data"}
+            </button>
+            <button
+              type="submit"
+              disabled={isRunning}
+              className="rounded-xl bg-emerald-400 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+            >
+              {isRunning ? "Running..." : "Run sync"}
+            </button>
+          </div>
         </div>
       </div>
     </form>
