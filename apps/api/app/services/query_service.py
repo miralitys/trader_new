@@ -8,7 +8,7 @@ from app.core.logging import get_logger
 from sqlalchemy.orm import Session
 
 from app.api.errors import BadRequestError, NotFoundError
-from app.models.enums import AppLogLevel, BacktestStatus, PositionStatus, StrategyRunMode, StrategyRunStatus, SyncJobStatus
+from app.models.enums import AppLogLevel, BacktestStatus, PositionStatus, SyncJobStatus
 from app.repositories.backtest_repository import BacktestRepository
 from app.repositories.candle_repository import CandleRepository
 from app.repositories.log_repository import LogRepository
@@ -23,10 +23,6 @@ from app.schemas.api import (
     BacktestListItemResponse,
     CandleCoverageResponse,
     CandleResponse,
-    DashboardDataSyncStatus,
-    DashboardPerformanceSnapshot,
-    DashboardRunStatus,
-    DashboardSummaryResponse,
     PositionResponse,
     SignalResponse,
     StrategyRunDetailResponse,
@@ -35,7 +31,6 @@ from app.schemas.api import (
     TradeResponse,
 )
 from app.schemas.backtest import BacktestMetrics, BacktestResponse, BacktestTrade, EquityPoint
-from app.services.strategy_service import StrategyService
 from app.utils.time import ensure_utc
 
 logger = get_logger(__name__)
@@ -53,7 +48,6 @@ class QueryService:
         self.strategy_run_repository = StrategyRunRepository(session)
         self.sync_job_repository = SyncJobRepository(session)
         self.trade_repository = TradeRepository(session)
-        self.strategy_service = StrategyService(session)
 
     def list_strategy_runs(
         self,
@@ -369,70 +363,6 @@ class QueryService:
             )
             for log in logs
         ]
-
-    def get_dashboard_summary(self) -> DashboardSummaryResponse:
-        strategies = self.strategy_service.list_strategies()
-        visible_strategy_codes = self.strategy_service.visible_strategy_codes()
-        paper_runs = [
-            row
-            for row in self.strategy_run_repository.list_runs(mode=StrategyRunMode.PAPER, limit=500)
-            if row[1].code in visible_strategy_codes
-        ]
-        recent_backtests = [
-            backtest
-            for backtest in self.list_backtests(limit=100)
-            if backtest.strategy_code in visible_strategy_codes
-        ][:5]
-        recent_trades = [
-            trade
-            for trade in self.list_trades(limit=100)
-            if trade.strategy_code in visible_strategy_codes
-        ][:5]
-        open_positions_count = sum(
-            1
-            for position in self.list_positions(status=PositionStatus.OPEN.value, limit=500)
-            if position.strategy_code in visible_strategy_codes
-        )
-        recent_jobs = self.list_sync_jobs(limit=5)
-        completed_backtests = [
-            backtest for backtest in recent_backtests if backtest.status == BacktestStatus.COMPLETED.value
-        ]
-
-        active_paper_runs = sum(1 for run, _ in paper_runs if run.status == StrategyRunStatus.RUNNING)
-        stopped_paper_runs = sum(1 for run, _ in paper_runs if run.status == StrategyRunStatus.STOPPED)
-        failed_paper_runs = sum(1 for run, _ in paper_runs if run.status == StrategyRunStatus.FAILED)
-
-        key_metrics = [
-            DashboardPerformanceSnapshot(
-                backtest_run_id=backtest.id,
-                strategy_code=backtest.strategy_code,
-                symbol=backtest.symbol,
-                timeframe=backtest.timeframe,
-                total_return_pct=backtest.total_return_pct,
-                win_rate_pct=backtest.win_rate_pct,
-                max_drawdown_pct=backtest.max_drawdown_pct,
-                total_trades=backtest.total_trades,
-            )
-            for backtest in completed_backtests
-        ]
-
-        return DashboardSummaryResponse(
-            strategies=strategies,
-            run_status=DashboardRunStatus(
-                active_paper_runs=active_paper_runs,
-                stopped_paper_runs=stopped_paper_runs,
-                failed_paper_runs=failed_paper_runs,
-                recent_backtests=len(recent_backtests),
-            ),
-            key_performance_metrics=key_metrics,
-            open_positions_count=open_positions_count,
-            recent_trades=recent_trades,
-            recent_backtests=recent_backtests,
-            data_sync_status=DashboardDataSyncStatus(
-                latest_job=recent_jobs[0] if recent_jobs else None,
-                recent_jobs=recent_jobs,
-            ),
-        )
 
     def _build_strategy_run_response(self, run, strategy) -> StrategyRunSummaryResponse:
         account = self.paper_account_repository.get_by_strategy_id(strategy.id)

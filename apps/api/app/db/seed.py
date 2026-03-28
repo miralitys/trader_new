@@ -23,7 +23,6 @@ from app.models import (
     Trade,
 )
 from app.models.enums import AppLogLevel
-from app.strategies.registry import list_strategies
 from app.utils.exchanges import normalize_exchange_code
 from app.utils.symbols import supported_symbol_codes
 
@@ -81,6 +80,9 @@ def _run_scope_cleanup(session) -> None:
 
     cleanup_counts["backtest_results_deleted"] = session.execute(delete(BacktestResult)).rowcount or 0
     cleanup_counts["backtest_runs_deleted"] = session.execute(delete(BacktestRun)).rowcount or 0
+    cleanup_counts["paper_accounts_deleted"] = session.execute(delete(PaperAccount)).rowcount or 0
+    cleanup_counts["strategy_configs_deleted"] = session.execute(delete(StrategyConfig)).rowcount or 0
+    cleanup_counts["strategies_deleted"] = session.execute(delete(Strategy)).rowcount or 0
 
     sanitized_strategy_configs = 0
     for strategy_config in session.scalars(select(StrategyConfig)):
@@ -182,6 +184,7 @@ def _sanitize_strategy_config_payload(config_json: dict[str, object], allowed_sy
 def seed_reference_data() -> None:
     settings = get_settings()
     timeframe_rows = {
+        "1m": {"code": "1m", "name": "1 Minute", "duration_seconds": 60},
         "5m": {"code": "5m", "name": "5 Minutes", "duration_seconds": 300},
         "15m": {"code": "15m", "name": "15 Minutes", "duration_seconds": 900},
         "1h": {"code": "1h", "name": "1 Hour", "duration_seconds": 3600},
@@ -231,46 +234,6 @@ def seed_reference_data() -> None:
             )
 
         session.flush()
-
-        for strategy_impl in list_strategies():
-            strategy = session.scalar(select(Strategy).where(Strategy.code == strategy_impl.key))
-            if strategy is None:
-                strategy = Strategy(
-                    code=strategy_impl.key,
-                    name=strategy_impl.name,
-                    description=strategy_impl.description,
-                    is_active=True,
-                )
-                session.add(strategy)
-                session.flush()
-
-            strategy_config = session.scalar(
-                select(StrategyConfig).where(
-                    StrategyConfig.strategy_id == strategy.id,
-                    StrategyConfig.is_active.is_(True),
-                )
-            )
-            if strategy_config is None:
-                session.add(
-                    StrategyConfig(
-                        strategy_id=strategy.id,
-                        config_json=strategy_impl.default_config(),
-                        is_active=True,
-                    )
-                )
-
-            paper_account = session.scalar(
-                select(PaperAccount).where(PaperAccount.strategy_id == strategy.id)
-            )
-            if paper_account is None:
-                session.add(
-                    PaperAccount(
-                        strategy_id=strategy.id,
-                        balance=10000,
-                        currency="USD",
-                        is_active=True,
-                    )
-                )
 
 
 if __name__ == "__main__":

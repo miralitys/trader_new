@@ -65,7 +65,7 @@ export default function DataPage() {
       <PageHeader
         eyebrow="Data Operations"
         title="Market data manager"
-        description="Trigger historical sync jobs, review ingestion status, and query stored candles for coverage validation."
+        description="Build the research dataset: sync 1m / 5m / 15m / 1h / 4h history, inspect coverage, and verify that the stored candles are clean enough for pattern mining."
       />
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -109,7 +109,7 @@ export default function DataPage() {
 
           <label className="grid gap-2">
             <span className="text-[11px] uppercase tracking-[0.2em] text-slate-400">Timeframe</span>
-            <input value={timeframeFilter} onChange={(event) => setTimeframeFilter(event.target.value)} className={inputClassName} placeholder="5m, 1h or 4h" />
+            <input value={timeframeFilter} onChange={(event) => setTimeframeFilter(event.target.value)} className={inputClassName} placeholder="1m, 5m, 15m, 1h or 4h" />
           </label>
         </div>
 
@@ -205,7 +205,7 @@ export default function DataPage() {
         {coverage ? (
           <p className="mt-4 text-sm text-slate-400">
             Coverage metrics are aggregated over the full requested window. The table below is a spot-check slice and can
-            be limited separately.
+            be limited separately while we build the two-year research base.
           </p>
         ) : null}
 

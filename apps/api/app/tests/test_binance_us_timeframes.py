@@ -8,6 +8,7 @@ from app.integrations.binance_us import BinanceUSTimeframe
 
 
 def test_binance_us_timeframe_mapping() -> None:
+    assert BinanceUSTimeframe.from_code("1m").granularity_seconds == 60
     assert BinanceUSTimeframe.from_code("5m").granularity_seconds == 300
     assert BinanceUSTimeframe.from_code("15m").granularity_seconds == 900
     assert BinanceUSTimeframe.from_code("1h").granularity_seconds == 3600

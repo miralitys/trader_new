@@ -50,3 +50,11 @@ def test_strategy_run_out_of_scope_rejects_unsupported_symbols_or_exchange() -> 
 def test_base_strategy_config_rejects_unsupported_symbols() -> None:
     with pytest.raises(ValueError, match="Unsupported symbol"):
         BaseStrategyConfig(symbols=["BTC-USDT", "ARB-USDT"])
+
+
+def test_base_strategy_config_accepts_new_supported_symbols() -> None:
+    config = BaseStrategyConfig(
+        symbols=["ICP-USDT", "GALA-USDT", "AXS-USDT", "ONDO-USDT", "IOTA-USDT", "FIL-USDT"]
+    )
+
+    assert config.symbols == ["ICP-USDT", "GALA-USDT", "AXS-USDT", "ONDO-USDT", "IOTA-USDT", "FIL-USDT"]

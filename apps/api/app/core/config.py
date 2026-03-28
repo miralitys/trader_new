@@ -80,7 +80,7 @@ class Settings(BaseSettings):
         default="BTC-USDT,ETH-USDT,SOL-USDT,BNB-USDT,ADA-USDT,ALPINE-USDT,XRP-USDT,1INCH-USDT,LTC-USDT,BCH-USDT,AVAX-USDT,LINK-USDT,DOGE-USDT,ICP-USDT,GALA-USDT,AXS-USDT,ONDO-USDT,IOTA-USDT,FIL-USDT",
         alias="DEFAULT_SYMBOLS",
     )
-    default_timeframes: str = Field(default="5m,15m,1h", alias="DEFAULT_TIMEFRAMES")
+    default_timeframes: str = Field(default="1m,5m,15m,1h,4h", alias="DEFAULT_TIMEFRAMES")
     allowed_origins: list[str] = Field(default=["*"], alias="ALLOWED_ORIGINS")
 
     @field_validator("database_url", mode="before")

@@ -10,6 +10,7 @@ from app.utils.time import ensure_utc
 
 
 class BinanceUSTimeframe(str, Enum):
+    ONE_MINUTE = "1m"
     FIVE_MINUTES = "5m"
     FIFTEEN_MINUTES = "15m"
     ONE_HOUR = "1h"
@@ -25,6 +26,7 @@ class BinanceUSTimeframe(str, Enum):
     @property
     def granularity_seconds(self) -> int:
         mapping = {
+            BinanceUSTimeframe.ONE_MINUTE: 60,
             BinanceUSTimeframe.FIVE_MINUTES: 300,
             BinanceUSTimeframe.FIFTEEN_MINUTES: 900,
             BinanceUSTimeframe.ONE_HOUR: 3600,
@@ -35,6 +37,7 @@ class BinanceUSTimeframe(str, Enum):
     @property
     def api_interval(self) -> str:
         mapping = {
+            BinanceUSTimeframe.ONE_MINUTE: "1m",
             BinanceUSTimeframe.FIVE_MINUTES: "5m",
             BinanceUSTimeframe.FIFTEEN_MINUTES: "15m",
             BinanceUSTimeframe.ONE_HOUR: "1h",
@@ -49,6 +52,7 @@ class BinanceUSTimeframe(str, Enum):
     @property
     def display_name(self) -> str:
         mapping = {
+            BinanceUSTimeframe.ONE_MINUTE: "1 Minute",
             BinanceUSTimeframe.FIVE_MINUTES: "5 Minutes",
             BinanceUSTimeframe.FIFTEEN_MINUTES: "15 Minutes",
             BinanceUSTimeframe.ONE_HOUR: "1 Hour",

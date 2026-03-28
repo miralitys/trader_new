@@ -18,8 +18,8 @@ def create_app() -> FastAPI:
         title=settings.app_name,
         version=settings.app_version,
         description=(
-            "Backend API for Binance.US-first algorithmic trading with market data sync, "
-            "strategy management, paper trading, and backtesting."
+            "Backend API for Binance.US-first market data ingestion, "
+            "pattern research, and historical dataset validation."
         ),
         debug=settings.debug,
     )

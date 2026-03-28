@@ -36,14 +36,14 @@ export default function LogsPage() {
       <PageHeader
         eyebrow="Observability"
         title="Application logs"
-        description="Inspect recent backend events, runtime issues, and ingestion activity without leaving the dashboard."
+        description="Inspect ingestion activity, research scans, and backend issues without leaving the workspace."
       />
 
       <SectionCard title="Log stream" eyebrow="Filters and recent events">
         <div className="mb-5 grid gap-4 border-b border-white/6 pb-5 md:grid-cols-2 xl:grid-cols-3">
           <label className="grid gap-2">
             <span className="text-[11px] uppercase tracking-[0.2em] text-slate-400">Scope</span>
-            <input value={scope} onChange={(event) => setScope(event.target.value)} className={inputClassName} placeholder="paper_engine" />
+            <input value={scope} onChange={(event) => setScope(event.target.value)} className={inputClassName} placeholder="market_data, research, api" />
           </label>
 
           <label className="grid gap-2">

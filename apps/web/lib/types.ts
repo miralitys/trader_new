@@ -360,6 +360,44 @@ export type DashboardSummary = {
   data_sync_status: DashboardDataSyncStatus;
 };
 
+export type ResearchCoverage = {
+  symbol: string;
+  timeframe: string;
+  candle_count: number;
+  loaded_start_at: string | null;
+  loaded_end_at: string | null;
+  completion_pct: NumericValue;
+  ready_for_pattern_scan: boolean;
+};
+
+export type PatternSummary = {
+  pattern_code: string;
+  pattern_name: string;
+  symbol: string;
+  timeframe: string;
+  sample_size: number;
+  win_rate_pct: NumericValue;
+  avg_forward_return_pct: NumericValue;
+  median_forward_return_pct: NumericValue;
+  avg_net_return_pct: NumericValue;
+  best_forward_return_pct: NumericValue;
+  worst_forward_return_pct: NumericValue;
+  verdict: string;
+};
+
+export type ResearchSummary = {
+  generated_at: string;
+  exchange_code: string;
+  lookback_days: number;
+  forward_bars: number;
+  fee_pct: NumericValue;
+  slippage_pct: NumericValue;
+  max_bars_per_series: number;
+  coverage: ResearchCoverage[];
+  patterns: PatternSummary[];
+  notes: string[];
+};
+
 export type StrategyRunFilters = {
   strategyCode?: string;
   status?: string;

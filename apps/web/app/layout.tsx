@@ -12,13 +12,11 @@ const monoFont = IBM_Plex_Mono({ subsets: ["latin"], weight: ["400", "500"], var
 
 export const metadata: Metadata = {
   title: "Trader MVP",
-  description: "Algorithmic trading dashboard for Binance.US paper trading and backtests.",
+  description: "Research-first dashboard for Binance.US market data ingestion and recurring pattern discovery.",
 };
 
 const links = [
-  { href: "/", label: "Dashboard" },
-  { href: "/backtests", label: "Backtests" },
-  { href: "/paper", label: "Paper Plan" },
+  { href: "/", label: "Research" },
   { href: "/data", label: "Data" },
   { href: "/logs", label: "Logs" },
 ];
@@ -35,7 +33,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
                   <p className="text-[11px] uppercase tracking-[0.24em] text-emerald-300">Binance.US quant desk</p>
                   <h1 className="mt-3 text-3xl font-semibold tracking-tight text-white">Trader MVP</h1>
                   <p className="mt-4 text-sm leading-6 text-slate-400">
-                    Unified operator console for strategy control, backtests, paper execution, and historical market data sync.
+                    Unified operator console for market data ingestion, pattern mining, and research-first validation over multi-timeframe history.
                   </p>
                 </div>
 
@@ -52,7 +50,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
                   </div>
                   <div>
                     <p className="text-[11px] uppercase tracking-[0.2em] text-slate-500">Execution model</p>
-                    <p className="mt-2 text-sm text-slate-300">LONG-only SPOT paper engine and candle-driven backtests</p>
+                    <p className="mt-2 text-sm text-slate-300">Data sync, pattern research, and forward validation before any future execution layer</p>
                   </div>
                 </div>
               </aside>

@@ -35,6 +35,7 @@ from app.schemas.backtest import (
 )
 from app.schemas.health import HealthResponse
 from app.schemas.paper import PaperRunResponse, PaperRunStartRequest
+from app.schemas.research import PatternSummaryResponse, ResearchCoverageResponse, ResearchSummaryResponse
 from app.schemas.strategy import StrategyDescriptor
 
 __all__ = [
@@ -59,7 +60,10 @@ __all__ = [
     "PaperRunResponse",
     "PaperRunStartRequest",
     "PositionResponse",
+    "PatternSummaryResponse",
     "SignalResponse",
+    "ResearchCoverageResponse",
+    "ResearchSummaryResponse",
     "StrategyConfigResponse",
     "StrategyConfigUpdateRequest",
     "StrategyDescriptor",
