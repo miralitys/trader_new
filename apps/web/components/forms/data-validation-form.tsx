@@ -45,6 +45,7 @@ export function DataValidationForm() {
   const latestCompletedRun = useMemo(() => runs.find((run) => run.status === "completed" && run.report) ?? null, [runs]);
   const report = latestReport ?? latestCompletedRun?.report ?? null;
   const runningRun = useMemo(() => runs.find((run) => run.status === "queued" || run.status === "running") ?? null, [runs]);
+  const runningEtaText = useMemo(() => buildValidationEta(runningRun), [runningRun]);
 
   const csvHref = useMemo(() => buildCsvHref(report), [report]);
   const jsonHref = useMemo(() => buildJsonHref(report), [report]);
@@ -137,6 +138,7 @@ export function DataValidationForm() {
                     <p className="text-xs text-sky-100/75">
                       Current: {runningRun.progress.current_symbol ?? "—"} · {runningRun.progress.current_timeframe ?? "—"}
                     </p>
+                    <p className="text-xs text-sky-100/75">{runningEtaText}</p>
                   </div>
                 ) : null}
               </div>
@@ -458,6 +460,48 @@ function formatNullableDateTime(value: string | null | undefined) {
     return "—";
   }
   return formatDateTime(value);
+}
+
+function buildValidationEta(run: ValidationRun | null) {
+  if (!run?.progress || !run.started_at) {
+    return "ETA will appear once enough progress is recorded.";
+  }
+
+  const processed = Number(run.progress.processed_series ?? 0);
+  const total = Number(run.progress.total_series ?? 0);
+  if (processed <= 0 || total <= 0 || processed >= total) {
+    return processed >= total && total > 0 ? "Finalizing report..." : "ETA will appear after the first completed series.";
+  }
+
+  const startedAtMs = new Date(run.started_at).getTime();
+  if (!Number.isFinite(startedAtMs)) {
+    return "ETA unavailable.";
+  }
+
+  const elapsedMs = Date.now() - startedAtMs;
+  if (!Number.isFinite(elapsedMs) || elapsedMs <= 0) {
+    return "ETA unavailable.";
+  }
+
+  const msPerSeries = elapsedMs / processed;
+  const remainingSeries = total - processed;
+  const remainingMs = msPerSeries * remainingSeries;
+
+  if (!Number.isFinite(remainingMs) || remainingMs <= 0) {
+    return "Finalizing report...";
+  }
+
+  const remainingMinutes = Math.round(remainingMs / 60000);
+  if (remainingMinutes < 1) {
+    return "ETA < 1 min remaining.";
+  }
+  if (remainingMinutes < 60) {
+    return `ETA ~${remainingMinutes} min remaining.`;
+  }
+
+  const hours = Math.floor(remainingMinutes / 60);
+  const minutes = remainingMinutes % 60;
+  return `ETA ~${hours}h ${minutes}m remaining.`;
 }
 
 const inputClassName =
