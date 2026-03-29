@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta
 from math import sqrt
 from statistics import pstdev
 from typing import Optional
@@ -20,6 +20,14 @@ from app.utils.symbols import normalize_supported_symbol
 from app.utils.time import ensure_utc, utc_now
 
 logger = get_logger(__name__)
+
+FEATURE_CHUNK_DAYS = {
+    "1m": 7,
+    "5m": 30,
+    "15m": 90,
+    "1h": 180,
+    "4h": 365,
+}
 
 
 @dataclass(frozen=True)
@@ -50,6 +58,29 @@ class _FeatureRow:
 
     def to_payload(self) -> dict[str, object]:
         return self.__dict__.copy()
+
+
+@dataclass
+class _FeatureRunAggregate:
+    source_candle_count: int = 0
+    feature_rows_upserted: int = 0
+    computed_start_at: datetime | None = None
+    computed_end_at: datetime | None = None
+
+    def update(
+        self,
+        *,
+        source_candle_count: int,
+        feature_rows_upserted: int,
+        computed_start_at: datetime | None,
+        computed_end_at: datetime | None,
+    ) -> None:
+        self.source_candle_count += source_candle_count
+        self.feature_rows_upserted += feature_rows_upserted
+        if self.computed_start_at is None and computed_start_at is not None:
+            self.computed_start_at = computed_start_at
+        if computed_end_at is not None:
+            self.computed_end_at = computed_end_at
 
 
 class FeatureLayerService:
@@ -109,9 +140,7 @@ class FeatureLayerService:
             )
 
         source_candles = []
-        feature_rows_upserted = 0
-        computed_start_at = None
-        computed_end_at = None
+        aggregate = _FeatureRunAggregate()
 
         try:
             with session_scope() as session:
@@ -119,52 +148,116 @@ class FeatureLayerService:
                 run = repository.get_by_id(run_id)
                 if run is None:
                     return False
+                run_exchange = run.exchange
+                run_symbol = run.symbol
+                run_timeframe = run.timeframe
+                run_start_at = run.start_at
+                run_end_at = run.end_at
 
-                candle_repository = CandleRepository(session)
-                exchange = candle_repository.get_exchange(run.exchange)
-                if exchange is None:
-                    raise ValueError(f"Exchange {run.exchange} is not loaded")
+            if run_start_at is None or run_end_at is None:
+                raise ValueError("Feature run is missing start/end bounds")
 
-                symbol_row = candle_repository.get_symbol(exchange.id, run.symbol)
-                if symbol_row is None:
-                    raise ValueError(f"Symbol {run.symbol} is not loaded")
+            processing_windows = self._build_processing_windows(
+                start_at=run_start_at,
+                end_at=run_end_at,
+                timeframe=run_timeframe,
+            )
 
-                timeframe_value = BinanceUSTimeframe.from_code(run.timeframe)
-                warmup_bars = 240
-                warmup_start_at = run.start_at - timeframe_value.interval * warmup_bars if run.start_at else None
+            timeframe_value = BinanceUSTimeframe.from_code(run_timeframe)
+            warmup_bars = 240
 
-                source_candles = candle_repository.list_candles(
-                    exchange_code=run.exchange,
-                    symbol_code=run.symbol,
-                    timeframe=run.timeframe,
-                    start_at=warmup_start_at,
-                    end_at=run.end_at,
+            for chunk_index, (chunk_start_at, chunk_end_at) in enumerate(processing_windows, start=1):
+                chunk_source_count = 0
+                chunk_feature_rows_upserted = 0
+                chunk_computed_start_at = None
+                chunk_computed_end_at = None
+
+                with session_scope() as session:
+                    repository = FeatureRepository(session)
+                    run = repository.get_by_id(run_id)
+                    if run is None:
+                        return False
+                    if run.status.value != "running":
+                        logger.info(
+                            "Feature run aborted before chunk execution",
+                            extra={"run_id": run_id, "chunk_index": chunk_index},
+                        )
+                        return False
+
+                    candle_repository = CandleRepository(session)
+                    exchange = candle_repository.get_exchange(run_exchange)
+                    if exchange is None:
+                        raise ValueError(f"Exchange {run_exchange} is not loaded")
+
+                    symbol_row = candle_repository.get_symbol(exchange.id, run_symbol)
+                    if symbol_row is None:
+                        raise ValueError(f"Symbol {run_symbol} is not loaded")
+
+                    warmup_start_at = chunk_start_at - timeframe_value.interval * warmup_bars
+                    source_candles = candle_repository.list_candles(
+                        exchange_code=run_exchange,
+                        symbol_code=run_symbol,
+                        timeframe=run_timeframe,
+                        start_at=warmup_start_at,
+                        end_at=chunk_end_at,
+                    )
+
+                    feature_rows = self._compute_feature_rows(source_candles=source_candles, start_at=chunk_start_at)
+                    chunk_source_count = sum(1 for candle in source_candles if candle.open_time >= chunk_start_at)
+
+                    if feature_rows:
+                        chunk_feature_rows_upserted = repository.upsert_features(
+                            exchange_id=exchange.id,
+                            symbol_id=symbol_row.id,
+                            timeframe=run_timeframe,
+                            rows=[row.to_payload() for row in feature_rows],
+                        )
+                        chunk_computed_start_at = feature_rows[0].open_time
+                        chunk_computed_end_at = feature_rows[-1].open_time
+
+                    aggregate.update(
+                        source_candle_count=chunk_source_count,
+                        feature_rows_upserted=chunk_feature_rows_upserted,
+                        computed_start_at=chunk_computed_start_at,
+                        computed_end_at=chunk_computed_end_at,
+                    )
+
+                    run.source_candle_count = aggregate.source_candle_count
+                    run.feature_rows_upserted = aggregate.feature_rows_upserted
+                    run.computed_start_at = aggregate.computed_start_at
+                    run.computed_end_at = aggregate.computed_end_at
+                    run.error_text = None
+                    session.add(run)
+                    session.flush()
+
+                logger.info(
+                    "Feature run chunk completed",
+                    extra={
+                        "run_id": run_id,
+                        "symbol": run_symbol,
+                        "timeframe": run_timeframe,
+                        "chunk_index": chunk_index,
+                        "chunk_total": len(processing_windows),
+                        "chunk_start_at": chunk_start_at.isoformat(),
+                        "chunk_end_at": chunk_end_at.isoformat(),
+                        "chunk_source_candle_count": chunk_source_count,
+                        "chunk_feature_rows_upserted": chunk_feature_rows_upserted,
+                        "feature_rows_upserted_total": aggregate.feature_rows_upserted,
+                    },
                 )
 
-                feature_rows = self._compute_feature_rows(source_candles=source_candles, start_at=run.start_at)
+            with session_scope() as session:
+                repository = FeatureRepository(session)
                 run = repository.get_by_id(run_id)
-                if run is None or run.status.value != "running":
-                    logger.info(
-                        "Feature run aborted before upsert",
-                        extra={"run_id": run_id},
-                    )
+                if run is None:
                     return False
-                if feature_rows:
-                    feature_rows_upserted = repository.upsert_features(
-                        exchange_id=exchange.id,
-                        symbol_id=symbol_row.id,
-                        timeframe=run.timeframe,
-                        rows=[row.to_payload() for row in feature_rows],
-                    )
-                    computed_start_at = feature_rows[0].open_time
-                    computed_end_at = feature_rows[-1].open_time
 
                 repository.mark_completed(
                     run,
-                    source_candle_count=len(source_candles),
-                    feature_rows_upserted=feature_rows_upserted,
-                    computed_start_at=computed_start_at,
-                    computed_end_at=computed_end_at,
+                    source_candle_count=aggregate.source_candle_count,
+                    feature_rows_upserted=aggregate.feature_rows_upserted,
+                    computed_start_at=aggregate.computed_start_at,
+                    computed_end_at=aggregate.computed_end_at,
                 )
                 logger.info(
                     "Feature run completed",
@@ -172,8 +265,9 @@ class FeatureLayerService:
                         "run_id": run.id,
                         "symbol": run.symbol,
                         "timeframe": run.timeframe,
-                        "source_candle_count": len(source_candles),
-                        "feature_rows_upserted": feature_rows_upserted,
+                        "source_candle_count": aggregate.source_candle_count,
+                        "feature_rows_upserted": aggregate.feature_rows_upserted,
+                        "chunk_total": len(processing_windows),
                     },
                 )
                 return True
@@ -186,10 +280,10 @@ class FeatureLayerService:
                 repository.mark_failed(
                     run,
                     error_text=str(exc),
-                    source_candle_count=len(source_candles),
-                    feature_rows_upserted=feature_rows_upserted,
-                    computed_start_at=computed_start_at,
-                    computed_end_at=computed_end_at,
+                    source_candle_count=aggregate.source_candle_count,
+                    feature_rows_upserted=aggregate.feature_rows_upserted,
+                    computed_start_at=aggregate.computed_start_at,
+                    computed_end_at=aggregate.computed_end_at,
                 )
                 logger.exception("Feature run failed", extra={"run_id": run.id, "symbol": run.symbol, "timeframe": run.timeframe})
             return False
@@ -404,6 +498,28 @@ class FeatureLayerService:
             )
 
         return rows
+
+    def _build_processing_windows(
+        self,
+        *,
+        start_at: datetime,
+        end_at: datetime,
+        timeframe: str,
+    ) -> list[tuple[datetime, datetime]]:
+        timeframe_value = BinanceUSTimeframe.from_code(timeframe)
+        chunk_days = FEATURE_CHUNK_DAYS.get(timeframe, 30)
+        chunk_span = timedelta(days=chunk_days)
+
+        windows: list[tuple[datetime, datetime]] = []
+        current_start = start_at
+        while current_start <= end_at:
+            next_start = current_start + chunk_span
+            chunk_end = min(end_at, next_start - timeframe_value.interval)
+            if chunk_end < current_start:
+                chunk_end = current_start
+            windows.append((current_start, chunk_end))
+            current_start = chunk_end + timeframe_value.interval
+        return windows
 
     @staticmethod
     def _return(previous: float, current: float) -> float:
