@@ -13,10 +13,22 @@ import { formatDateTime, formatInteger, getErrorMessage } from "@/lib/utils";
 
 const EMPTY_FEATURE_RUNS: FeatureRun[] = [];
 const EMPTY_FEATURE_COVERAGE: FeatureCoverage[] = [];
+const FEATURE_BATCH_TIMEFRAMES = ["4h", "1h", "15m", "5m", "1m"] as const;
+
+type FeatureBatchState = {
+  totalJobs: number;
+  completedJobs: number;
+  currentIndex: number;
+  currentSymbol: string | null;
+  currentTimeframe: string | null;
+  completedBySymbol: Record<string, number>;
+  failedJobs: number;
+};
 
 export default function FeatureLayerPage() {
   const [lookbackDays, setLookbackDays] = useState(180);
   const [message, setMessage] = useState<string | null>(null);
+  const [batchState, setBatchState] = useState<FeatureBatchState | null>(null);
 
   const featureRunsQuery = useFeatureRuns({ limit: 1000 });
   const featureCoverageQuery = useFeatureCoverage();
@@ -68,6 +80,81 @@ export default function FeatureLayerPage() {
     }
   }
 
+  async function handleRunAll() {
+    if (runFeatureMutation.isPending || batchState) {
+      return;
+    }
+
+    setMessage(null);
+    const queue = FEATURE_BATCH_TIMEFRAMES.flatMap((timeframe) =>
+      presetSymbols.map((symbol) => ({
+        symbol,
+        timeframe,
+      })),
+    );
+
+    const initialCompletedBySymbol = Object.fromEntries(presetSymbols.map((symbol) => [symbol, 0])) as Record<string, number>;
+
+    setBatchState({
+      totalJobs: queue.length,
+      completedJobs: 0,
+      currentIndex: 0,
+      currentSymbol: queue[0]?.symbol ?? null,
+      currentTimeframe: queue[0]?.timeframe ?? null,
+      completedBySymbol: initialCompletedBySymbol,
+      failedJobs: 0,
+    });
+
+    let completedJobs = 0;
+    let failedJobs = 0;
+    const completedBySymbol = { ...initialCompletedBySymbol };
+
+    for (let index = 0; index < queue.length; index += 1) {
+      const item = queue[index];
+
+      setBatchState({
+        totalJobs: queue.length,
+        completedJobs,
+        currentIndex: index + 1,
+        currentSymbol: item.symbol,
+        currentTimeframe: item.timeframe,
+        completedBySymbol: { ...completedBySymbol },
+        failedJobs,
+      });
+
+      try {
+        await runFeatureMutation.mutateAsync({
+          exchange_code: "binance_us",
+          symbol: item.symbol,
+          timeframe: item.timeframe,
+          lookback_days: lookbackDays,
+        });
+      } catch {
+        failedJobs += 1;
+      } finally {
+        completedJobs += 1;
+        completedBySymbol[item.symbol] = (completedBySymbol[item.symbol] ?? 0) + 1;
+
+        setBatchState({
+          totalJobs: queue.length,
+          completedJobs,
+          currentIndex: index + 1,
+          currentSymbol: item.symbol,
+          currentTimeframe: item.timeframe,
+          completedBySymbol: { ...completedBySymbol },
+          failedJobs,
+        });
+      }
+    }
+
+    setMessage(
+      `Batch feature build finished. Completed ${completedJobs}/${queue.length} jobs with ${failedJobs} failed runs across ${presetSymbols.length} symbols.`,
+    );
+    setBatchState(null);
+  }
+
+  const batchPercent = batchState ? Math.round((batchState.completedJobs / Math.max(1, batchState.totalJobs)) * 100) : 0;
+
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
@@ -84,11 +171,24 @@ export default function FeatureLayerPage() {
       </section>
 
       <SectionCard title="Run feature generation" eyebrow="Global run window">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="max-w-3xl">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+          <div className="max-w-3xl space-y-4">
             <p className="text-sm leading-7 text-slate-400">
               Feature generation calculates per-bar signals for returns, volatility, structure, trend, volume, and compression. Pick one global lookback window, then launch any symbol/timeframe independently.
             </p>
+            <div className="flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={handleRunAll}
+                disabled={runFeatureMutation.isPending || Boolean(batchState)}
+                className="rounded-xl bg-emerald-300 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-emerald-200 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+              >
+                {batchState ? "Запускаем все..." : "Запустить все"}
+              </button>
+              <div className="rounded-xl border border-white/8 bg-slate-950/45 px-4 py-2 text-sm text-slate-300">
+                Queue order: 4h → 1h → 15m → 5m → 1m for every symbol
+              </div>
+            </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <span className="mr-1 text-[11px] uppercase tracking-[0.2em] text-slate-500">Days</span>
@@ -108,30 +208,76 @@ export default function FeatureLayerPage() {
             ))}
           </div>
         </div>
+        {batchState ? (
+          <div className="mt-5 rounded-2xl border border-emerald-300/10 bg-emerald-300/5 px-4 py-4">
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div>
+                <p className="text-sm font-semibold text-white">
+                  Running {batchState.currentIndex}/{batchState.totalJobs}: {batchState.currentSymbol} {batchState.currentTimeframe}
+                </p>
+                <p className="mt-1 text-sm text-slate-400">
+                  Completed {batchState.completedJobs} jobs · Failed {batchState.failedJobs}
+                </p>
+              </div>
+              <p className="text-sm font-semibold text-emerald-100">{batchPercent}% complete</p>
+            </div>
+            <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-950/45">
+              <div className="h-full rounded-full bg-emerald-300 transition-all duration-300" style={{ width: `${batchPercent}%` }} />
+            </div>
+          </div>
+        ) : null}
         {message ? <div className="mt-5 rounded-2xl border border-white/8 bg-white/5 px-4 py-3 text-sm text-slate-200">{message}</div> : null}
       </SectionCard>
 
       <div className="grid gap-5">
         {presetSymbols.map((symbol) => {
           const symbolRuns = (runsBySymbol[symbol] ?? []).slice(0, 8);
+          const symbolBatchCompleted = batchState?.completedBySymbol[symbol] ?? 0;
+          const symbolBatchPercent = Math.round((symbolBatchCompleted / FEATURE_BATCH_TIMEFRAMES.length) * 100);
+          const symbolIsCurrent = batchState?.currentSymbol === symbol;
 
           return (
             <SectionCard key={symbol} title={symbol} eyebrow="Independent feature build" className="h-full">
               <div className="flex flex-col gap-5">
+                {batchState ? (
+                  <div className="rounded-2xl border border-white/8 bg-slate-950/35 px-4 py-4">
+                    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                      <div>
+                        <p className="text-sm font-semibold text-white">
+                          {symbolIsCurrent
+                            ? `Running now · ${batchState.currentTimeframe}`
+                            : `${symbolBatchCompleted}/${FEATURE_BATCH_TIMEFRAMES.length} timeframes complete`}
+                        </p>
+                        <p className="mt-1 text-sm text-slate-400">
+                          Queue order for this symbol: {FEATURE_BATCH_TIMEFRAMES.join(" → ")}
+                        </p>
+                      </div>
+                      <p className="text-sm font-semibold text-slate-200">{symbolBatchPercent}%</p>
+                    </div>
+                    <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-950/45">
+                      <div
+                        className={`h-full rounded-full transition-all duration-300 ${symbolIsCurrent ? "bg-sky-300" : "bg-emerald-300"}`}
+                        style={{ width: `${symbolBatchPercent}%` }}
+                      />
+                    </div>
+                  </div>
+                ) : null}
+
                 <div className="grid gap-3">
-                  {presetTimeframes.map((timeframe) => {
+                  {FEATURE_BATCH_TIMEFRAMES.map((timeframe) => {
                     const coverage = coverageByKey[`${symbol}:${timeframe}`];
                     const isRunningThisButton =
-                      runFeatureMutation.isPending &&
-                      runFeatureMutation.variables?.symbol === symbol &&
-                      runFeatureMutation.variables?.timeframe === timeframe;
+                      (runFeatureMutation.isPending &&
+                        runFeatureMutation.variables?.symbol === symbol &&
+                        runFeatureMutation.variables?.timeframe === timeframe) ||
+                      (batchState?.currentSymbol === symbol && batchState?.currentTimeframe === timeframe);
 
                     return (
                       <button
                         key={timeframe}
                         type="button"
                         onClick={() => handleRun(symbol, timeframe)}
-                        disabled={runFeatureMutation.isPending}
+                        disabled={runFeatureMutation.isPending || Boolean(batchState)}
                         className="rounded-2xl border border-white/10 bg-slate-950/50 px-4 py-4 text-left transition hover:border-sky-300/30 hover:bg-sky-400/5 disabled:cursor-not-allowed disabled:border-white/5 disabled:bg-slate-950/30"
                       >
                         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
