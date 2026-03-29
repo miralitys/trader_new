@@ -82,15 +82,33 @@ export default function FeatureLayerPage() {
     const completedRuns = runs.filter((run) => run.status === "completed");
     const failedRuns = runs.filter((run) => run.status === "failed");
     const runningRuns = runs.filter((run) => run.status === "running");
+    const queuedRuns = runs.filter((run) => run.status === "queued");
     const totalRows = completedRuns.reduce((sum, run) => sum + run.feature_rows_upserted, 0);
     return {
       totalRuns: runs.length,
       completedRuns: completedRuns.length,
       failedRuns: failedRuns.length,
       runningRuns: runningRuns.length,
+      queuedRuns: queuedRuns.length,
       totalRows,
     };
   }, [runs]);
+
+  const runningRun = useMemo(() => {
+    return runs.find((run) => run.status === "running") ?? null;
+  }, [runs]);
+
+  const queuedRuns = useMemo(() => {
+    return runs
+      .filter((run) => run.status === "queued")
+      .sort((left, right) => new Date(left.created_at).getTime() - new Date(right.created_at).getTime());
+  }, [runs]);
+
+  const nextQueuedRun = queuedRuns[0] ?? null;
+  const workerQueueEtaText = useMemo(
+    () => buildWorkerQueueEta(runningRun, queuedRuns, averageRunDurationByKey),
+    [runningRun, queuedRuns, averageRunDurationByKey],
+  );
 
   const symbolMeta = useMemo(() => {
     return presetSymbols.map((symbol) => {
@@ -232,7 +250,7 @@ export default function FeatureLayerPage() {
         description="Use one compact workspace to run batch feature generation, inspect symbol coverage, and review recent builds without scrolling through a long operations wall."
       />
 
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
         <MetricCard label="Tracked symbols" value={formatInteger(presetSymbols.length)} hint="19 symbols in the active research basket" />
         <MetricCard label="Timeframes" value={formatInteger(FEATURE_BATCH_TIMEFRAMES.length)} hint="4h, 1h, 15m, 5m, 1m" />
         <MetricCard
@@ -246,6 +264,16 @@ export default function FeatureLayerPage() {
           value={`${formatInteger(stats.runningRuns)} / ${formatInteger(stats.failedRuns)}`}
           hint="Live workspace status"
           tone={stats.failedRuns ? "danger" : stats.runningRuns ? "warning" : "default"}
+        />
+        <MetricCard
+          label="Queued jobs"
+          value={formatInteger(stats.queuedRuns)}
+          hint={
+            nextQueuedRun
+              ? `${nextQueuedRun.symbol} · ${nextQueuedRun.timeframe} next · ${workerQueueEtaText}`
+              : "No worker backlog"
+          }
+          tone={stats.queuedRuns ? "warning" : "default"}
         />
       </section>
 
@@ -318,9 +346,18 @@ export default function FeatureLayerPage() {
           <div className="rounded-3xl border border-white/8 bg-slate-950/35 p-4">
             <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">Workspace snapshot</p>
             <div className="mt-4 grid gap-3">
-              <WorkspaceStat label="Current symbol" value={batchState?.currentSymbol ?? selectedSymbol} />
-              <WorkspaceStat label="Current timeframe" value={batchState?.currentTimeframe ?? "—"} />
+              <WorkspaceStat label="Current symbol" value={batchState?.currentSymbol ?? runningRun?.symbol ?? selectedSymbol} />
+              <WorkspaceStat label="Current timeframe" value={batchState?.currentTimeframe ?? runningRun?.timeframe ?? "—"} />
               <WorkspaceStat label="Selected window" value={`${lookbackDays}d`} />
+              <WorkspaceStat
+                label="Next in queue"
+                value={
+                  nextQueuedRun
+                    ? `${nextQueuedRun.symbol} · ${nextQueuedRun.timeframe} · ${nextQueuedRun.lookback_days}d`
+                    : "Nothing waiting in the worker queue"
+                }
+              />
+              <WorkspaceStat label="Queue ETA" value={workerQueueEtaText} subdued />
               <WorkspaceStat label="Most recent message" value={message ?? "No recent queue messages"} subdued />
             </div>
           </div>
@@ -582,6 +619,43 @@ function buildFeatureRunEta(run: FeatureRun, averageRunDurationByKey: Map<string
   }
 
   return `ETA ${formatEta(remainingMs)}`;
+}
+
+function buildWorkerQueueEta(
+  runningRun: FeatureRun | null,
+  queuedRuns: FeatureRun[],
+  averageRunDurationByKey: Map<string, number>,
+) {
+  const remainingDurations: number[] = [];
+
+  if (runningRun) {
+    remainingDurations.push(resolveRemainingRunDurationMs(runningRun, averageRunDurationByKey));
+  }
+
+  for (const run of queuedRuns) {
+    remainingDurations.push(resolveExpectedRunDurationMs(run, averageRunDurationByKey));
+  }
+
+  const totalRemainingMs = remainingDurations.reduce((sum, value) => sum + value, 0);
+  if (totalRemainingMs <= 0) {
+    return "No queued work remaining.";
+  }
+  return formatEta(totalRemainingMs);
+}
+
+function resolveRemainingRunDurationMs(run: FeatureRun, averageRunDurationByKey: Map<string, number>) {
+  const createdAtMs = new Date(run.created_at).getTime();
+  const expectedMs = resolveExpectedRunDurationMs(run, averageRunDurationByKey);
+  if (!Number.isFinite(createdAtMs) || !Number.isFinite(expectedMs) || expectedMs <= 0) {
+    return 0;
+  }
+  const elapsedMs = Date.now() - createdAtMs;
+  return Math.max(expectedMs - elapsedMs, 0);
+}
+
+function resolveExpectedRunDurationMs(run: FeatureRun, averageRunDurationByKey: Map<string, number>) {
+  const key = `${run.timeframe}:${run.lookback_days}`;
+  return averageRunDurationByKey.get(key) ?? estimateFeatureRunDurationMs(run.timeframe, run.lookback_days);
 }
 
 function estimateFeatureRunDurationMs(timeframe: string, lookbackDays: number) {
