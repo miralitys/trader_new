@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Query, status
+from fastapi import APIRouter, Depends, Query, status
 
 from app.api.dependencies import (
     get_data_validation_service,
@@ -193,11 +193,9 @@ def run_data_validation(
 )
 def start_data_validation(
     request: DataValidationRequest,
-    background_tasks: BackgroundTasks,
     service: ValidationRunService = Depends(get_validation_run_service),
 ) -> ValidationRunResponse:
     run = service.create_run(request)
-    background_tasks.add_task(service.run_in_background, run.id)
     return run
 
 

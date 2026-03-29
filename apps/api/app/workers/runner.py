@@ -4,7 +4,9 @@ import time
 
 from app.core.config import get_settings
 from app.core.logging import configure_logging, get_logger
+from app.db.session import session_scope
 from app.services.paper_execution_service import PaperExecutionService
+from app.services.validation_run_service import ValidationRunService
 
 logger = get_logger(__name__)
 
@@ -25,6 +27,20 @@ def main() -> None:
 
     while True:
         try:
+            with session_scope() as session:
+                validation_service = ValidationRunService(session)
+                stale_count = validation_service.mark_stale_running_runs(
+                    stale_after_seconds=settings.validation_run_stale_after_seconds
+                )
+                if stale_count:
+                    logger.warning(
+                        "Validation stale sweep completed",
+                        extra={"stale_runs_marked_failed": stale_count},
+                    )
+                queued_processed = validation_service.process_next_queued_run()
+                if queued_processed:
+                    logger.info("Validation worker cycle completed")
+
             runs = service.process_active_runs(
                 max_candles_per_stream=settings.worker_max_candles_per_stream
             )

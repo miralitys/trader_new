@@ -3,6 +3,7 @@ from __future__ import annotations
 from fastapi.encoders import jsonable_encoder
 from sqlalchemy.orm import Session
 
+from app.core.logging import get_logger
 from app.db.session import session_scope
 from app.repositories.validation_run_repository import ValidationRunRepository
 from app.schemas.api import (
@@ -14,6 +15,8 @@ from app.schemas.api import (
 )
 from app.services.data_validation_service import DataValidationService, build_validation_report_payload
 from app.utils.time import utc_now
+
+logger = get_logger(__name__)
 
 
 class ValidationRunService:
@@ -44,11 +47,16 @@ class ValidationRunService:
         return self._to_response(run)
 
     def run_in_background(self, run_id: int) -> None:
+        self.execute_run(run_id)
+
+    def execute_run(self, run_id: int) -> bool:
         with session_scope() as session:
             repository = ValidationRunRepository(session)
             run = repository.get_by_id(run_id)
             if run is None:
-                return
+                return False
+            if run.status.value == "completed":
+                return False
 
             repository.mark_running(run, started_at=utc_now())
             repository.update_progress(
@@ -62,13 +70,14 @@ class ValidationRunService:
                     "current_timeframe": None,
                 },
             )
+            logger.info("Validation run started", extra={"run_id": run_id})
 
         try:
             with session_scope() as session:
                 repository = ValidationRunRepository(session)
                 run = repository.get_by_id(run_id)
                 if run is None:
-                    return
+                    return False
 
                 validation_service = DataValidationService(session=session)
                 try:
@@ -107,13 +116,54 @@ class ValidationRunService:
                         )
                     ),
                 )
+                logger.info("Validation run completed", extra={"run_id": run_id})
+                return True
         except Exception as exc:
             with session_scope() as session:
                 repository = ValidationRunRepository(session)
                 run = repository.get_by_id(run_id)
                 if run is None:
-                    return
+                    return False
                 repository.mark_failed(run, completed_at=utc_now(), error_text=str(exc))
+                logger.exception("Validation run failed", extra={"run_id": run_id})
+            return False
+
+    def process_next_queued_run(self) -> bool:
+        with session_scope() as session:
+            repository = ValidationRunRepository(session)
+            run = repository.get_next_queued_run()
+            run_id = run.id if run is not None else None
+
+        if run_id is None:
+            return False
+
+        return self.execute_run(run_id)
+
+    def mark_stale_running_runs(self, *, stale_after_seconds: int) -> int:
+        if stale_after_seconds <= 0:
+            return 0
+
+        stale_before = utc_now()
+        stale_before = stale_before.replace(microsecond=0)
+        from datetime import timedelta
+
+        stale_before = stale_before - timedelta(seconds=stale_after_seconds)
+
+        with session_scope() as session:
+            repository = ValidationRunRepository(session)
+            stale_runs = repository.list_stale_running_runs(stale_before=stale_before)
+            for run in stale_runs:
+                repository.mark_failed(
+                    run,
+                    completed_at=utc_now(),
+                    error_text="Validation run became stale before completion. The background process likely stopped or the instance restarted.",
+                )
+            if stale_runs:
+                logger.warning(
+                    "Marked stale validation runs as failed",
+                    extra={"run_ids": [run.id for run in stale_runs], "count": len(stale_runs)},
+                )
+            return len(stale_runs)
 
     def _to_response(self, run) -> ValidationRunResponse:
         progress = None

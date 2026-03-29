@@ -46,6 +46,26 @@ class ValidationRunRepository(BaseRepository):
         stmt = select(ValidationRun).order_by(ValidationRun.updated_at.desc(), ValidationRun.id.desc()).limit(limit)
         return list(self.session.scalars(stmt))
 
+    def get_next_queued_run(self) -> Optional[ValidationRun]:
+        stmt = (
+            select(ValidationRun)
+            .where(ValidationRun.status == SyncJobStatus.QUEUED)
+            .order_by(ValidationRun.created_at.asc(), ValidationRun.id.asc())
+            .limit(1)
+        )
+        return self.session.scalar(stmt)
+
+    def list_stale_running_runs(self, *, stale_before: datetime) -> list[ValidationRun]:
+        stmt = (
+            select(ValidationRun)
+            .where(
+                ValidationRun.status == SyncJobStatus.RUNNING,
+                ValidationRun.updated_at < stale_before,
+            )
+            .order_by(ValidationRun.updated_at.asc(), ValidationRun.id.asc())
+        )
+        return list(self.session.scalars(stmt))
+
     def mark_running(self, run: ValidationRun, started_at: datetime) -> ValidationRun:
         run.status = SyncJobStatus.RUNNING
         run.started_at = started_at

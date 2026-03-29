@@ -10,9 +10,16 @@ from app.api.dependencies import (
     get_feature_layer_service,
     get_pattern_research_service,
     get_query_service,
+    get_validation_run_service,
 )
 from app.main import app
-from app.schemas.api import CandleCoverageResponse, FeatureCoverageResponse, FeatureRunResponse
+from app.schemas.api import (
+    CandleCoverageResponse,
+    FeatureCoverageResponse,
+    FeatureRunResponse,
+    ValidationRunProgressResponse,
+    ValidationRunResponse,
+)
 from app.schemas.research import PatternSummaryResponse, ResearchCoverageResponse, ResearchSummaryResponse
 
 
@@ -179,6 +186,72 @@ class FakeFeatureLayerService:
         ]
 
 
+class FakeValidationRunService:
+    def create_run(self, request) -> ValidationRunResponse:
+        return ValidationRunResponse(
+            id=1,
+            exchange=request.exchange_code,
+            symbols=request.symbols,
+            timeframes=request.timeframes,
+            lookback_days=request.lookback_days,
+            sample_limit=request.sample_limit,
+            perform_resync=request.perform_resync,
+            resync_days=request.resync_days,
+            status="queued",
+            started_at=None,
+            completed_at=None,
+            error_text=None,
+            progress=ValidationRunProgressResponse(
+                phase="queued",
+                processed_series=0,
+                total_series=len(request.symbols) * len(request.timeframes),
+                percent_complete=Decimal("0"),
+                current_symbol=None,
+                current_timeframe=None,
+            ),
+            report_summary=None,
+            report=None,
+            created_at=datetime(2026, 3, 28, 1, 0, tzinfo=timezone.utc),
+            updated_at=datetime(2026, 3, 28, 1, 0, tzinfo=timezone.utc),
+        )
+
+    def list_runs(self, limit: int = 20) -> list[ValidationRunResponse]:
+        _ = limit
+        return [
+            ValidationRunResponse(
+                id=1,
+                exchange="binance_us",
+                symbols=["BTC-USDT"],
+                timeframes=["4h"],
+                lookback_days=730,
+                sample_limit=5,
+                perform_resync=False,
+                resync_days=14,
+                status="queued",
+                started_at=None,
+                completed_at=None,
+                error_text=None,
+                progress=ValidationRunProgressResponse(
+                    phase="queued",
+                    processed_series=0,
+                    total_series=1,
+                    percent_complete=Decimal("0"),
+                    current_symbol=None,
+                    current_timeframe=None,
+                ),
+                report_summary=None,
+                report=None,
+                created_at=datetime(2026, 3, 28, 1, 0, tzinfo=timezone.utc),
+                updated_at=datetime(2026, 3, 28, 1, 0, tzinfo=timezone.utc),
+            )
+        ]
+
+    def get_run(self, run_id: int) -> ValidationRunResponse | None:
+        if run_id != 1:
+            return None
+        return self.list_runs(limit=1)[0]
+
+
 def test_research_summary_endpoint_returns_pattern_payload(client: TestClient) -> None:
     app.dependency_overrides[get_pattern_research_service] = lambda: FakePatternResearchService()
 
@@ -265,3 +338,37 @@ def test_feature_coverage_endpoint_returns_rows(client: TestClient) -> None:
     payload = response.json()
     assert payload[0]["symbol"] == "BTC-USDT"
     assert payload[0]["feature_count"] == 1180
+
+
+def test_data_validation_start_endpoint_returns_queued_run(client: TestClient) -> None:
+    app.dependency_overrides[get_validation_run_service] = lambda: FakeValidationRunService()
+
+    response = client.post(
+        "/api/data/validation-report/start",
+        json={
+            "exchange_code": "binance_us",
+            "symbols": ["BTC-USDT", "ETH-USDT"],
+            "timeframes": ["4h", "1h"],
+            "lookback_days": 730,
+            "sample_limit": 5,
+            "perform_resync": False,
+            "resync_days": 14,
+        },
+    )
+
+    assert response.status_code == 202
+    payload = response.json()
+    assert payload["status"] == "queued"
+    assert payload["progress"]["phase"] == "queued"
+    assert payload["progress"]["total_series"] == 4
+
+
+def test_data_validation_runs_endpoint_returns_history(client: TestClient) -> None:
+    app.dependency_overrides[get_validation_run_service] = lambda: FakeValidationRunService()
+
+    response = client.get("/api/data/validation-report/runs")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert len(payload) == 1
+    assert payload[0]["status"] == "queued"
