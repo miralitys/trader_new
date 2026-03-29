@@ -6,7 +6,7 @@ import { SectionCard } from "@/components/section-card";
 import { MetricCard } from "@/components/ui/metric-card";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { longDayPresets, presetSymbols, presetTimeframes } from "@/lib/preset-symbols";
+import { longDayPresets, presetSymbols } from "@/lib/preset-symbols";
 import { useFeatureCoverage, useFeatureRuns, useRunFeatureLayer } from "@/lib/query-hooks";
 import type { FeatureCoverage, FeatureRun } from "@/lib/types";
 import { formatDateTime, formatInteger, getErrorMessage } from "@/lib/utils";
@@ -28,6 +28,7 @@ type FeatureBatchState = {
 
 export default function FeatureLayerPage() {
   const [lookbackDays, setLookbackDays] = useState(180);
+  const [selectedSymbol, setSelectedSymbol] = useState<string>(presetSymbols[0]);
   const [message, setMessage] = useState<string | null>(null);
   const [batchState, setBatchState] = useState<FeatureBatchState | null>(null);
 
@@ -37,6 +38,21 @@ export default function FeatureLayerPage() {
 
   const runs = featureRunsQuery.data ?? EMPTY_FEATURE_RUNS;
   const coverageRows = featureCoverageQuery.data ?? EMPTY_FEATURE_COVERAGE;
+
+  const runsBySymbol = useMemo(() => {
+    return runs.reduce<Record<string, FeatureRun[]>>((accumulator, run) => {
+      accumulator[run.symbol] = accumulator[run.symbol] ? [...accumulator[run.symbol], run] : [run];
+      return accumulator;
+    }, {});
+  }, [runs]);
+
+  const coverageByKey = useMemo(() => {
+    return coverageRows.reduce<Record<string, FeatureCoverage>>((accumulator, row) => {
+      accumulator[`${row.symbol}:${row.timeframe}`] = row;
+      return accumulator;
+    }, {});
+  }, [coverageRows]);
+
   const averageRunDurationByKey = useMemo(() => {
     const grouped = new Map<string, number[]>();
 
@@ -62,31 +78,48 @@ export default function FeatureLayerPage() {
     return averages;
   }, [runs]);
 
-  const runsBySymbol = useMemo(() => {
-    return runs.reduce<Record<string, FeatureRun[]>>((accumulator, run) => {
-      accumulator[run.symbol] = accumulator[run.symbol] ? [...accumulator[run.symbol], run] : [run];
-      return accumulator;
-    }, {});
-  }, [runs]);
-
-  const coverageByKey = useMemo(() => {
-    return coverageRows.reduce<Record<string, FeatureCoverage>>((accumulator, row) => {
-      accumulator[`${row.symbol}:${row.timeframe}`] = row;
-      return accumulator;
-    }, {});
-  }, [coverageRows]);
-
   const stats = useMemo(() => {
     const completedRuns = runs.filter((run) => run.status === "completed");
     const failedRuns = runs.filter((run) => run.status === "failed");
+    const runningRuns = runs.filter((run) => run.status === "running");
     const totalRows = completedRuns.reduce((sum, run) => sum + run.feature_rows_upserted, 0);
     return {
       totalRuns: runs.length,
       completedRuns: completedRuns.length,
       failedRuns: failedRuns.length,
+      runningRuns: runningRuns.length,
       totalRows,
     };
   }, [runs]);
+
+  const symbolMeta = useMemo(() => {
+    return presetSymbols.map((symbol) => {
+      const symbolRuns = runsBySymbol[symbol] ?? [];
+      const completed = symbolRuns.filter((run) => run.status === "completed").length;
+      const failed = symbolRuns.filter((run) => run.status === "failed").length;
+      const running = symbolRuns.find((run) => run.status === "running") ?? null;
+      const lastRun = symbolRuns[0] ?? null;
+      const populatedTimeframes = FEATURE_BATCH_TIMEFRAMES.filter(
+        (timeframe) => (coverageByKey[`${symbol}:${timeframe}`]?.feature_count ?? 0) > 0,
+      ).length;
+
+      return {
+        symbol,
+        completed,
+        failed,
+        running,
+        lastRun,
+        populatedTimeframes,
+      };
+    });
+  }, [coverageByKey, runsBySymbol]);
+
+  const selectedRuns = (runsBySymbol[selectedSymbol] ?? []).slice(0, 10);
+  const selectedSymbolMeta = symbolMeta.find((item) => item.symbol === selectedSymbol) ?? null;
+  const selectedCoverageRows = FEATURE_BATCH_TIMEFRAMES.map((timeframe) => ({
+    timeframe,
+    coverage: coverageByKey[`${selectedSymbol}:${timeframe}`] ?? null,
+  }));
 
   async function handleRun(symbol: string, timeframe: string) {
     setMessage(null);
@@ -118,7 +151,6 @@ export default function FeatureLayerPage() {
       })),
     );
     const batchStartedAt = Date.now();
-
     const initialCompletedBySymbol = Object.fromEntries(presetSymbols.map((symbol) => [symbol, 0])) as Record<string, number>;
 
     setBatchState({
@@ -189,204 +221,306 @@ export default function FeatureLayerPage() {
     <div className="flex flex-col gap-6">
       <PageHeader
         eyebrow="Feature Layer"
-        title="Per-symbol feature generation"
-        description="This page computes the first MVP feature layer on top of the two-year candle dataset. Every coin has its own block, every timeframe runs separately, and every run leaves a history trail so we can see exactly what has been generated."
+        title="Feature Workspace"
+        description="Use one compact workspace to run batch feature generation, inspect symbol coverage, and review recent builds without scrolling through a long operations wall."
       />
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard label="Tracked symbols" value={formatInteger(presetSymbols.length)} hint="19 symbols in the active research basket" />
-        <MetricCard label="Timeframes" value={formatInteger(presetTimeframes.length)} hint="1m, 5m, 15m, 1h, 4h" />
-        <MetricCard label="Completed runs" value={formatInteger(stats.completedRuns)} hint={`${formatInteger(stats.totalRows)} feature rows saved`} tone={stats.completedRuns ? "positive" : "warning"} />
-        <MetricCard label="Failed runs" value={formatInteger(stats.failedRuns)} hint="History stays visible per symbol" tone={stats.failedRuns ? "danger" : "default"} />
+        <MetricCard label="Timeframes" value={formatInteger(FEATURE_BATCH_TIMEFRAMES.length)} hint="4h, 1h, 15m, 5m, 1m" />
+        <MetricCard
+          label="Completed runs"
+          value={formatInteger(stats.completedRuns)}
+          hint={`${formatInteger(stats.totalRows)} feature rows saved`}
+          tone={stats.completedRuns ? "positive" : "warning"}
+        />
+        <MetricCard
+          label="Running / failed"
+          value={`${formatInteger(stats.runningRuns)} / ${formatInteger(stats.failedRuns)}`}
+          hint="Live workspace status"
+          tone={stats.failedRuns ? "danger" : stats.runningRuns ? "warning" : "default"}
+        />
       </section>
 
-      <SectionCard title="Run feature generation" eyebrow="Global run window">
-        <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
-          <div className="max-w-3xl space-y-4">
-            <p className="text-sm leading-7 text-slate-400">
-              Feature generation calculates per-bar signals for returns, volatility, structure, trend, volume, and compression. Pick one global lookback window, then launch any symbol/timeframe independently.
+      <SectionCard title="Control center" eyebrow="Global feature build">
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,1.2fr)_minmax(360px,0.8fr)]">
+          <div className="space-y-5">
+            <p className="max-w-3xl text-sm leading-7 text-slate-400">
+              Generate feature rows for one market or queue the full basket in research order. The queue always runs larger bars first so you get usable higher-timeframe features earlier and the heavier 1m work last.
             </p>
-            <div className="flex flex-wrap gap-3">
+
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="mr-1 text-[11px] uppercase tracking-[0.2em] text-slate-500">Days</span>
+              {longDayPresets.map((days) => (
+                <button
+                  key={days}
+                  type="button"
+                  onClick={() => setLookbackDays(days)}
+                  className={`rounded-full border px-3.5 py-1.5 text-sm font-medium transition ${
+                    lookbackDays === days
+                      ? "border-emerald-300/45 bg-emerald-400/15 text-emerald-100"
+                      : "border-white/10 bg-slate-950/50 text-slate-200 hover:border-emerald-300/30 hover:bg-emerald-400/10 hover:text-white"
+                  }`}
+                >
+                  {days}d
+                </button>
+              ))}
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
               <button
                 type="button"
                 onClick={handleRunAll}
                 disabled={runFeatureMutation.isPending || Boolean(batchState)}
-                className="rounded-xl bg-emerald-300 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-emerald-200 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
+                className="rounded-2xl bg-emerald-300 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-200 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
               >
                 {batchState ? "Запускаем все..." : "Запустить все"}
               </button>
-              <div className="rounded-xl border border-white/8 bg-slate-950/45 px-4 py-2 text-sm text-slate-300">
-                Queue order: 4h → 1h → 15m → 5m → 1m for every symbol
+              <div className="rounded-2xl border border-white/8 bg-slate-950/45 px-4 py-3 text-sm text-slate-300">
+                Queue order: {FEATURE_BATCH_TIMEFRAMES.join(" → ")} across all symbols
               </div>
             </div>
+
+            {batchState ? (
+              <div className="rounded-2xl border border-emerald-300/10 bg-emerald-300/5 px-4 py-4">
+                <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-white">
+                      Running {batchState.currentIndex}/{batchState.totalJobs}: {batchState.currentSymbol} {batchState.currentTimeframe}
+                    </p>
+                    <p className="mt-1 text-sm text-slate-400">
+                      Completed {batchState.completedJobs} jobs · Failed {batchState.failedJobs}
+                    </p>
+                    <p className="mt-1 text-sm text-slate-500">{batchEtaText}</p>
+                  </div>
+                  <p className="text-sm font-semibold text-emerald-100">{batchPercent}% complete</p>
+                </div>
+                <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-950/45">
+                  <div className="h-full rounded-full bg-emerald-300 transition-all duration-300" style={{ width: `${batchPercent}%` }} />
+                </div>
+              </div>
+            ) : null}
+
+            {message ? (
+              <div className="rounded-2xl border border-white/8 bg-white/5 px-4 py-3 text-sm text-slate-200">
+                {message}
+              </div>
+            ) : null}
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="mr-1 text-[11px] uppercase tracking-[0.2em] text-slate-500">Days</span>
-            {longDayPresets.map((days) => (
-              <button
-                key={days}
-                type="button"
-                onClick={() => setLookbackDays(days)}
-                className={`rounded-full border px-3.5 py-1.5 text-sm font-medium transition ${
-                  lookbackDays === days
-                    ? "border-emerald-300/45 bg-emerald-400/15 text-emerald-100"
-                    : "border-white/10 bg-slate-950/50 text-slate-200 hover:border-emerald-300/30 hover:bg-emerald-400/10 hover:text-white"
-                }`}
-              >
-                {days}d
-              </button>
-            ))}
+
+          <div className="rounded-3xl border border-white/8 bg-slate-950/35 p-4">
+            <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">Workspace snapshot</p>
+            <div className="mt-4 grid gap-3">
+              <WorkspaceStat label="Current symbol" value={batchState?.currentSymbol ?? selectedSymbol} />
+              <WorkspaceStat label="Current timeframe" value={batchState?.currentTimeframe ?? "—"} />
+              <WorkspaceStat label="Selected window" value={`${lookbackDays}d`} />
+              <WorkspaceStat label="Most recent message" value={message ?? "No recent build messages"} subdued />
+            </div>
           </div>
         </div>
-        {batchState ? (
-          <div className="mt-5 rounded-2xl border border-emerald-300/10 bg-emerald-300/5 px-4 py-4">
-            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <div>
-                <p className="text-sm font-semibold text-white">
-                  Running {batchState.currentIndex}/{batchState.totalJobs}: {batchState.currentSymbol} {batchState.currentTimeframe}
-                </p>
-                <p className="mt-1 text-sm text-slate-400">
-                  Completed {batchState.completedJobs} jobs · Failed {batchState.failedJobs}
-                </p>
-                <p className="mt-1 text-sm text-slate-500">{batchEtaText}</p>
-              </div>
-              <p className="text-sm font-semibold text-emerald-100">{batchPercent}% complete</p>
-            </div>
-            <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-950/45">
-              <div className="h-full rounded-full bg-emerald-300 transition-all duration-300" style={{ width: `${batchPercent}%` }} />
-            </div>
-          </div>
-        ) : null}
-        {message ? <div className="mt-5 rounded-2xl border border-white/8 bg-white/5 px-4 py-3 text-sm text-slate-200">{message}</div> : null}
       </SectionCard>
 
-      <div className="grid gap-5">
-        {presetSymbols.map((symbol) => {
-          const symbolRuns = (runsBySymbol[symbol] ?? []).slice(0, 8);
-          const symbolBatchCompleted = batchState?.completedBySymbol[symbol] ?? 0;
-          const symbolBatchPercent = Math.round((symbolBatchCompleted / FEATURE_BATCH_TIMEFRAMES.length) * 100);
-          const symbolIsCurrent = batchState?.currentSymbol === symbol;
+      <SectionCard title="Symbol navigator" eyebrow="One active market at a time">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {symbolMeta.map((item) => {
+            const isActive = item.symbol === selectedSymbol;
+            const batchProgress = batchState ? Math.round(((batchState.completedBySymbol[item.symbol] ?? 0) / FEATURE_BATCH_TIMEFRAMES.length) * 100) : null;
+            return (
+              <button
+                key={item.symbol}
+                type="button"
+                onClick={() => setSelectedSymbol(item.symbol)}
+                className={`rounded-2xl border px-4 py-4 text-left transition ${
+                  isActive
+                    ? "border-sky-300/35 bg-sky-400/10"
+                    : "border-white/8 bg-slate-950/35 hover:border-white/15 hover:bg-white/[0.04]"
+                }`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-base font-semibold text-white">{item.symbol}</p>
+                    <p className="mt-1 text-sm text-slate-400">
+                      {item.populatedTimeframes}/{FEATURE_BATCH_TIMEFRAMES.length} timeframes populated
+                    </p>
+                  </div>
+                  <StatusBadge
+                    status={item.running ? "running" : item.failed ? "failed" : item.completed ? "completed" : "idle"}
+                  />
+                </div>
 
-          return (
-            <SectionCard key={symbol} title={symbol} eyebrow="Independent feature build" className="h-full">
-              <div className="flex flex-col gap-5">
-                {batchState ? (
-                  <div className="rounded-2xl border border-white/8 bg-slate-950/35 px-4 py-4">
-                    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                      <div>
-                        <p className="text-sm font-semibold text-white">
-                          {symbolIsCurrent
-                            ? `Running now · ${batchState.currentTimeframe}`
-                            : `${symbolBatchCompleted}/${FEATURE_BATCH_TIMEFRAMES.length} timeframes complete`}
-                        </p>
-                        <p className="mt-1 text-sm text-slate-400">
-                          Queue order for this symbol: {FEATURE_BATCH_TIMEFRAMES.join(" → ")}
-                        </p>
-                      </div>
-                      <p className="text-sm font-semibold text-slate-200">{symbolBatchPercent}%</p>
+                <div className="mt-4 grid gap-1 text-sm text-slate-300 sm:grid-cols-3">
+                  <span>{formatInteger(item.completed)} completed</span>
+                  <span>{formatInteger(item.failed)} failed</span>
+                  <span>{item.lastRun ? formatDateTime(item.lastRun.updated_at) : "No runs yet"}</span>
+                </div>
+
+                {batchProgress !== null ? (
+                  <div className="mt-4">
+                    <div className="mb-2 flex items-center justify-between text-xs text-slate-400">
+                      <span>Batch progress</span>
+                      <span>{batchProgress}%</span>
                     </div>
-                    <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-950/45">
+                    <div className="h-2 overflow-hidden rounded-full bg-slate-950/45">
                       <div
-                        className={`h-full rounded-full transition-all duration-300 ${symbolIsCurrent ? "bg-sky-300" : "bg-emerald-300"}`}
-                        style={{ width: `${symbolBatchPercent}%` }}
+                        className={`h-full rounded-full transition-all duration-300 ${batchState?.currentSymbol === item.symbol ? "bg-sky-300" : "bg-emerald-300"}`}
+                        style={{ width: `${batchProgress}%` }}
                       />
                     </div>
                   </div>
                 ) : null}
+              </button>
+            );
+          })}
+        </div>
+      </SectionCard>
 
-                <div className="grid gap-3">
-                  {FEATURE_BATCH_TIMEFRAMES.map((timeframe) => {
-                    const coverage = coverageByKey[`${symbol}:${timeframe}`];
-                    const isRunningThisButton =
-                      (runFeatureMutation.isPending &&
-                        runFeatureMutation.variables?.symbol === symbol &&
-                        runFeatureMutation.variables?.timeframe === timeframe) ||
-                      (batchState?.currentSymbol === symbol && batchState?.currentTimeframe === timeframe);
+      <SectionCard title={selectedSymbol} eyebrow="Active symbol workspace">
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+          <div className="space-y-4">
+            {selectedCoverageRows.map(({ timeframe, coverage }) => {
+              const isRunningThisRow =
+                (runFeatureMutation.isPending &&
+                  runFeatureMutation.variables?.symbol === selectedSymbol &&
+                  runFeatureMutation.variables?.timeframe === timeframe) ||
+                (batchState?.currentSymbol === selectedSymbol && batchState?.currentTimeframe === timeframe);
 
-                    return (
-                      <button
-                        key={timeframe}
-                        type="button"
-                        onClick={() => handleRun(symbol, timeframe)}
-                        disabled={runFeatureMutation.isPending || Boolean(batchState)}
-                        className="rounded-2xl border border-white/10 bg-slate-950/50 px-4 py-4 text-left transition hover:border-sky-300/30 hover:bg-sky-400/5 disabled:cursor-not-allowed disabled:border-white/5 disabled:bg-slate-950/30"
-                      >
-                        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                          <div className="grid gap-3 lg:min-w-0 lg:flex-1 lg:grid-cols-[120px_minmax(0,1fr)_auto] lg:items-center">
-                            <div className="flex items-center gap-3">
-                              <span className="text-lg font-semibold text-white">{timeframe}</span>
-                              {coverage ? (
-                                <StatusBadge status={coverage.feature_count > 0 ? "completed" : "idle"} />
-                              ) : (
-                                <StatusBadge status="idle" />
-                              )}
-                            </div>
+              const runningRunForRow = selectedRuns.find((run) => run.timeframe === timeframe && run.status === "running") ?? null;
 
-                            <div className="grid gap-1 text-sm text-slate-300 sm:grid-cols-2 xl:grid-cols-3">
-                              <span>{coverage ? `${formatInteger(coverage.feature_count)} rows` : "No feature rows yet"}</span>
-                              <span className="text-slate-400">
-                                {coverage?.loaded_end_at ? `Latest: ${formatDateTime(coverage.loaded_end_at)}` : "No completed feature window"}
-                              </span>
-                              <span className="text-slate-500">
-                                {coverage?.loaded_start_at ? `Start: ${formatDateTime(coverage.loaded_start_at)}` : "Runs this timeframe only for this coin"}
-                              </span>
-                            </div>
+              return (
+                <button
+                  key={timeframe}
+                  type="button"
+                  onClick={() => handleRun(selectedSymbol, timeframe)}
+                  disabled={runFeatureMutation.isPending || Boolean(batchState)}
+                  className="w-full rounded-2xl border border-white/10 bg-slate-950/50 px-4 py-4 text-left transition hover:border-sky-300/30 hover:bg-sky-400/5 disabled:cursor-not-allowed disabled:border-white/5 disabled:bg-slate-950/30"
+                >
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="grid gap-3 lg:min-w-0 lg:flex-1 lg:grid-cols-[110px_minmax(0,1fr)]">
+                      <div className="flex items-center gap-3">
+                        <span className="text-lg font-semibold text-white">{timeframe}</span>
+                        <StatusBadge
+                          status={
+                            isRunningThisRow ? "running" : coverage && coverage.feature_count > 0 ? "completed" : "idle"
+                          }
+                        />
+                      </div>
 
-                            <div className="lg:justify-self-end">
-                              <span className="inline-flex rounded-xl bg-sky-400/10 px-3 py-2 text-sm font-medium text-sky-100">
-                                {isRunningThisButton ? "Running..." : `Build ${lookbackDays}d`}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-
-                <div className="rounded-2xl border border-white/8 bg-slate-950/35 px-4 py-4">
-                  <div className="mb-3 flex items-center justify-between gap-3">
-                    <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">Run history</p>
-                    <p className="text-xs text-slate-500">Newest first</p>
+                      <div className="grid gap-2 text-sm text-slate-300 md:grid-cols-2 xl:grid-cols-4">
+                        <span>{coverage ? `${formatInteger(coverage.feature_count)} rows` : "No feature rows yet"}</span>
+                        <span className="text-slate-400">
+                          {coverage?.loaded_end_at ? `Latest: ${formatDateTime(coverage.loaded_end_at)}` : "No completed feature window"}
+                        </span>
+                        <span className="text-slate-500">
+                          {coverage?.loaded_start_at ? `Start: ${formatDateTime(coverage.loaded_start_at)}` : "Runs this timeframe only for this coin"}
+                        </span>
+                        <span className="text-sky-100">
+                          {isRunningThisRow ? "Running now" : `Build ${lookbackDays}d`}
+                        </span>
+                      </div>
+                    </div>
                   </div>
 
-                  {symbolRuns.length ? (
-                    <div className="grid gap-3">
-                      {symbolRuns.map((run) => (
-                        <div key={run.id} className="grid gap-2 rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-3">
-                          <div className="flex flex-wrap items-center justify-between gap-3">
-                            <div className="flex items-center gap-3">
-                              <span className="text-sm font-semibold text-white">{run.timeframe}</span>
-                              <StatusBadge status={run.status} />
-                            </div>
-                            <span className="text-xs text-slate-400">{formatDateTime(run.updated_at)}</span>
-                          </div>
-                          <div className="grid gap-1 text-sm text-slate-300 md:grid-cols-2">
-                            <span>{formatInteger(run.feature_rows_upserted)} feature rows</span>
-                            <span>{formatInteger(run.source_candle_count)} source candles</span>
-                            <span>{run.lookback_days}d window</span>
-                            <span>
-                              {run.computed_end_at ? `Computed through ${formatDateTime(run.computed_end_at)}` : "No completed feature window"}
-                            </span>
-                          </div>
-                          {run.status === "running" ? (
-                            <p className="text-sm text-sky-200">
-                              {buildFeatureRunEta(run, averageRunDurationByKey)}
-                            </p>
-                          ) : null}
-                          {run.error_text ? <p className="text-sm text-rose-200">{run.error_text}</p> : null}
-                        </div>
-                      ))}
+                  {isRunningThisRow ? (
+                    <div className="mt-4 rounded-xl border border-sky-400/15 bg-sky-400/10 px-3 py-3 text-sm text-sky-100">
+                      {buildFeatureRunEta(
+                        runningRunForRow ?? {
+                          id: -1,
+                          exchange: "binance_us",
+                          symbol: selectedSymbol,
+                          timeframe,
+                          lookback_days: lookbackDays,
+                          start_at: null,
+                          end_at: null,
+                          status: "running",
+                          source_candle_count: 0,
+                          feature_rows_upserted: 0,
+                          computed_start_at: null,
+                          computed_end_at: null,
+                          error_text: null,
+                          created_at: new Date().toISOString(),
+                          updated_at: new Date().toISOString(),
+                        },
+                        averageRunDurationByKey,
+                      )}
                     </div>
-                  ) : (
-                    <p className="text-sm text-slate-400">No feature runs for {symbol} yet. Use one of the timeframe buttons above.</p>
-                  )}
-                </div>
+                  ) : null}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="rounded-3xl border border-white/8 bg-slate-950/35 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">Run history</p>
+                <h4 className="mt-1 text-base font-semibold text-white">Newest first</h4>
               </div>
-            </SectionCard>
-          );
-        })}
-      </div>
+              {selectedSymbolMeta ? (
+                <StatusBadge
+                  status={
+                    selectedSymbolMeta.running
+                      ? "running"
+                      : selectedSymbolMeta.failed
+                        ? "failed"
+                        : selectedSymbolMeta.completed
+                          ? "completed"
+                          : "idle"
+                  }
+                />
+              ) : null}
+            </div>
+
+            <div className="mt-4 space-y-3">
+              {selectedRuns.length ? (
+                selectedRuns.map((run) => (
+                  <div key={run.id} className="rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-3">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <span className="text-sm font-semibold text-white">{run.timeframe}</span>
+                        <StatusBadge status={run.status} />
+                      </div>
+                      <span className="text-xs text-slate-400">{formatDateTime(run.updated_at)}</span>
+                    </div>
+
+                    <div className="mt-3 grid gap-2 text-sm text-slate-300">
+                      <span>{formatInteger(run.feature_rows_upserted)} feature rows</span>
+                      <span>{formatInteger(run.source_candle_count)} source candles</span>
+                      <span>{run.lookback_days}d window</span>
+                      <span>
+                        {run.computed_end_at ? `Computed through ${formatDateTime(run.computed_end_at)}` : "No completed feature window"}
+                      </span>
+                      {run.status === "running" ? (
+                        <span className="text-sky-200">{buildFeatureRunEta(run, averageRunDurationByKey)}</span>
+                      ) : null}
+                    </div>
+
+                    {run.error_text ? <p className="mt-3 text-sm text-rose-200">{run.error_text}</p> : null}
+                  </div>
+                ))
+              ) : (
+                <p className="text-sm text-slate-400">No feature runs for {selectedSymbol} yet. Use the rows on the left to start building.</p>
+              )}
+            </div>
+          </div>
+        </div>
+      </SectionCard>
+    </div>
+  );
+}
+
+function WorkspaceStat({
+  label,
+  value,
+  subdued = false,
+}: {
+  label: string;
+  value: string;
+  subdued?: boolean;
+}) {
+  return (
+    <div className="rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-3">
+      <p className="text-[11px] uppercase tracking-[0.2em] text-slate-500">{label}</p>
+      <p className={`mt-2 text-sm leading-6 ${subdued ? "text-slate-400" : "text-white"}`}>{value}</p>
     </div>
   );
 }
@@ -395,7 +529,6 @@ function buildBatchEta(batchState: FeatureBatchState | null) {
   if (!batchState) {
     return null;
   }
-
   if (batchState.completedJobs <= 0) {
     return "ETA will appear after the first completed job.";
   }
