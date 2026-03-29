@@ -24,6 +24,7 @@ import type {
   DataValidationRequest,
   DataSyncRequest,
   FeatureRunFilters,
+  FeatureCoverageFilters,
   FeatureRunRequest,
   LogFilters,
   PatternScanRequest,
@@ -39,7 +40,7 @@ export const queryKeys = {
   candles: (filters: CandleFilters | null) => ["candles", filters] as const,
   candleCoverage: (filters: CandleFilters | null) => ["candles", "coverage", filters] as const,
   featureRuns: (filters: FeatureRunFilters) => ["feature-runs", filters] as const,
-  featureCoverage: ["feature-coverage"] as const,
+  featureCoverage: (filters: FeatureCoverageFilters) => ["feature-coverage", filters] as const,
   dataValidationRuns: (limit: number) => ["data-validation-runs", limit] as const,
   patternScans: (limit: number) => ["pattern-scans", limit] as const,
   logs: (filters: LogFilters) => ["logs", filters] as const,
@@ -105,10 +106,10 @@ export function useFeatureRuns(filters: FeatureRunFilters = {}, enabled = true) 
   });
 }
 
-export function useFeatureCoverage(enabled = true) {
+export function useFeatureCoverage(filters: FeatureCoverageFilters = {}, enabled = true) {
   return useQuery({
-    queryKey: queryKeys.featureCoverage,
-    queryFn: () => getFeatureCoverage(),
+    queryKey: queryKeys.featureCoverage(filters),
+    queryFn: () => getFeatureCoverage(filters),
     enabled,
     refetchInterval: 5000,
   });
@@ -187,7 +188,7 @@ export function useRunFeatureLayer() {
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.featureRuns({}) }),
-        queryClient.invalidateQueries({ queryKey: queryKeys.featureCoverage }),
+        queryClient.invalidateQueries({ queryKey: ["feature-coverage"] }),
       ]);
     },
   });

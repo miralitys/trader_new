@@ -249,7 +249,11 @@ class FeatureLayerService:
                 select(Symbol).where(Symbol.exchange_id == exchange.id, Symbol.code.in_(symbols))
             )
         }
-        raw_rows = self.feature_repository.list_feature_coverages(exchange_id=exchange.id)
+        raw_rows = self.feature_repository.list_feature_coverages(
+            exchange_id=exchange.id,
+            symbol_ids=list(symbol_rows.keys()),
+            timeframes=timeframes,
+        )
         by_key = {
             (symbol_rows.get(item["symbol_id"]), item["timeframe"]): item
             for item in raw_rows

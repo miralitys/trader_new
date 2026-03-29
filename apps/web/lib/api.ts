@@ -5,6 +5,7 @@ import type {
   CandleCoverage,
   CandleFilters,
   FeatureCoverage,
+  FeatureCoverageFilters,
   FeatureRun,
   FeatureRunFilters,
   FeatureRunRequest,
@@ -186,10 +187,11 @@ export function getFeatureRuns(filters: FeatureRunFilters = {}) {
   );
 }
 
-export function getFeatureCoverage(exchangeCode = "binance_us") {
+export function getFeatureCoverage(filters: FeatureCoverageFilters = {}) {
   return apiRequest<FeatureCoverage[]>(
     `/api/features/coverage${buildQueryString({
-      exchange_code: exchangeCode,
+      exchange_code: filters.exchangeCode ?? "binance_us",
+      symbol: filters.symbol,
     })}`,
   );
 }

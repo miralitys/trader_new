@@ -33,10 +33,11 @@ def list_feature_runs(
 @router.get("/coverage", response_model=list[FeatureCoverageResponse], summary="List feature coverage by symbol/timeframe")
 def list_feature_coverages(
     exchange_code: str = Query(default="binance_us"),
+    symbol: Optional[str] = Query(default=None),
     service: FeatureLayerService = Depends(get_feature_layer_service),
 ) -> list[FeatureCoverageResponse]:
     return service.get_symbol_timeframe_coverages(
         exchange_code=exchange_code,
-        symbols=list(supported_symbol_codes()),
+        symbols=[symbol] if symbol else list(supported_symbol_codes()),
         timeframes=["1m", "5m", "15m", "1h", "4h"],
     )

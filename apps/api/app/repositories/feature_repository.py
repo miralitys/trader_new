@@ -218,17 +218,24 @@ class FeatureRepository(BaseRepository):
         self,
         *,
         exchange_id: int,
+        symbol_ids: list[int] | None = None,
+        timeframes: list[str] | None = None,
     ) -> list[dict[str, object]]:
+        stmt = select(
+            MarketFeature.symbol_id,
+            MarketFeature.timeframe,
+            func.count(MarketFeature.id),
+            func.min(MarketFeature.open_time),
+            func.max(MarketFeature.open_time),
+        ).where(MarketFeature.exchange_id == exchange_id)
+
+        if symbol_ids:
+            stmt = stmt.where(MarketFeature.symbol_id.in_(symbol_ids))
+        if timeframes:
+            stmt = stmt.where(MarketFeature.timeframe.in_(timeframes))
+
         rows = self.session.execute(
-            select(
-                MarketFeature.symbol_id,
-                MarketFeature.timeframe,
-                func.count(MarketFeature.id),
-                func.min(MarketFeature.open_time),
-                func.max(MarketFeature.open_time),
-            )
-            .where(MarketFeature.exchange_id == exchange_id)
-            .group_by(MarketFeature.symbol_id, MarketFeature.timeframe)
+            stmt.group_by(MarketFeature.symbol_id, MarketFeature.timeframe)
         ).all()
         return [
             {

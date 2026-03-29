@@ -384,6 +384,11 @@ export type FeatureCoverage = {
   loaded_end_at: string | null;
 };
 
+export type FeatureCoverageFilters = {
+  exchangeCode?: string;
+  symbol?: string;
+};
+
 export type FeatureRun = {
   id: number;
   exchange: string;

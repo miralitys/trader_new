@@ -33,7 +33,7 @@ export default function FeatureLayerPage() {
   const [batchState, setBatchState] = useState<FeatureBatchState | null>(null);
 
   const featureRunsQuery = useFeatureRuns({ limit: 1000 });
-  const featureCoverageQuery = useFeatureCoverage();
+  const featureCoverageQuery = useFeatureCoverage({ symbol: selectedSymbol });
   const runFeatureMutation = useRunFeatureLayer();
 
   const runs = featureRunsQuery.data ?? EMPTY_FEATURE_RUNS;
@@ -46,7 +46,7 @@ export default function FeatureLayerPage() {
     }, {});
   }, [runs]);
 
-  const coverageByKey = useMemo(() => {
+  const selectedCoverageByKey = useMemo(() => {
     return coverageRows.reduce<Record<string, FeatureCoverage>>((accumulator, row) => {
       accumulator[`${row.symbol}:${row.timeframe}`] = row;
       return accumulator;
@@ -99,9 +99,16 @@ export default function FeatureLayerPage() {
       const failed = symbolRuns.filter((run) => run.status === "failed").length;
       const running = symbolRuns.find((run) => run.status === "running") ?? null;
       const lastRun = symbolRuns[0] ?? null;
-      const populatedTimeframes = FEATURE_BATCH_TIMEFRAMES.filter(
-        (timeframe) => (coverageByKey[`${symbol}:${timeframe}`]?.feature_count ?? 0) > 0,
-      ).length;
+      const latestCompletedByTimeframe = new Map<string, FeatureRun>();
+      for (const run of symbolRuns) {
+        if (run.status !== "completed" || run.feature_rows_upserted <= 0) {
+          continue;
+        }
+        if (!latestCompletedByTimeframe.has(run.timeframe)) {
+          latestCompletedByTimeframe.set(run.timeframe, run);
+        }
+      }
+      const populatedTimeframes = latestCompletedByTimeframe.size;
 
       return {
         symbol,
@@ -112,13 +119,13 @@ export default function FeatureLayerPage() {
         populatedTimeframes,
       };
     });
-  }, [coverageByKey, runsBySymbol]);
+  }, [runsBySymbol]);
 
   const selectedRuns = (runsBySymbol[selectedSymbol] ?? []).slice(0, 10);
   const selectedSymbolMeta = symbolMeta.find((item) => item.symbol === selectedSymbol) ?? null;
   const selectedCoverageRows = FEATURE_BATCH_TIMEFRAMES.map((timeframe) => ({
     timeframe,
-    coverage: coverageByKey[`${selectedSymbol}:${timeframe}`] ?? null,
+    coverage: selectedCoverageByKey[`${selectedSymbol}:${timeframe}`] ?? null,
   }));
 
   async function handleRun(symbol: string, timeframe: string) {
