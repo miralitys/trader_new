@@ -16,6 +16,7 @@ const candlesPerDayByTimeframe: Record<(typeof batchTimeframes)[number], number>
   "5m": 288,
   "1m": 1440,
 };
+const batchRetryAttempts = 3;
 
 type BatchProgress = {
   startedAt: number;
@@ -152,13 +153,17 @@ export function DataSyncForm() {
               `for ${batchRange.startAt} -> ${batchRange.endAt}`,
           );
 
-          const result = await syncMutation.mutateAsync({
-            mode,
-            exchange_code: "binance_us",
+          const result = await runBatchSyncJobWithRetry({
             symbol: orderedSymbol,
             timeframe: orderedTimeframe,
-            start_at: new Date(batchRange.startAt).toISOString(),
-            end_at: new Date(batchRange.endAt).toISOString(),
+            startAtIso: new Date(batchRange.startAt).toISOString(),
+            endAtIso: new Date(batchRange.endAt).toISOString(),
+            mode,
+            onRetry: (attempt, totalAttempts, errorText) => {
+              setBatchMessage(
+                `Retry ${attempt}/${totalAttempts} for ${orderedSymbol} ${orderedTimeframe}. ${errorText}`,
+              );
+            },
           });
 
           completedJobs += 1;
@@ -186,7 +191,10 @@ export function DataSyncForm() {
       );
     } catch (error) {
       setBatchMessage(
-        `Batch stopped on job ${completedJobs}/${totalJobs}. ${getErrorMessage(error, "Unable to continue Add All Data.")}`,
+        `Batch stopped on job ${completedJobs + 1}/${totalJobs}. ${getErrorMessage(
+          error,
+          "Unable to continue Add All Data. The backend job may still have completed, so check the latest sync status before restarting.",
+        )}`,
       );
     } finally {
       setIsBatchRunning(false);
@@ -200,6 +208,48 @@ export function DataSyncForm() {
           : current,
       );
     }
+  }
+
+  async function runBatchSyncJobWithRetry({
+    symbol,
+    timeframe,
+    startAtIso,
+    endAtIso,
+    mode,
+    onRetry,
+  }: {
+    symbol: string;
+    timeframe: (typeof batchTimeframes)[number];
+    startAtIso: string;
+    endAtIso: string;
+    mode: "initial" | "incremental" | "manual";
+    onRetry: (attempt: number, totalAttempts: number, errorText: string) => void;
+  }) {
+    let lastError: unknown;
+
+    for (let attempt = 1; attempt <= batchRetryAttempts; attempt += 1) {
+      try {
+        return await syncMutation.mutateAsync({
+          mode,
+          exchange_code: "binance_us",
+          symbol,
+          timeframe,
+          start_at: startAtIso,
+          end_at: endAtIso,
+        });
+      } catch (error) {
+        lastError = error;
+        const isLastAttempt = attempt === batchRetryAttempts;
+        if (!isRetryableBatchError(error) || isLastAttempt) {
+          throw error;
+        }
+
+        onRetry(attempt, batchRetryAttempts - 1, getErrorMessage(error, "Temporary network error."));
+        await sleep(attempt * 1500);
+      }
+    }
+
+    throw lastError ?? new Error("Unknown batch sync error.");
   }
 
   const showRange = mode !== "incremental";
@@ -357,3 +407,19 @@ function Field({
 
 const inputClassName =
   "h-11 rounded-xl border border-white/10 bg-slate-950/60 px-3 text-sm text-white outline-none transition placeholder:text-slate-500 focus:border-sky-400/40";
+
+function isRetryableBatchError(error: unknown) {
+  const message = getErrorMessage(error, "").toLowerCase();
+  return (
+    message.includes("failed to fetch") ||
+    message.includes("networkerror") ||
+    message.includes("network request failed") ||
+    message.includes("load failed") ||
+    message.includes("timeout") ||
+    message.includes("tempor")
+  );
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
