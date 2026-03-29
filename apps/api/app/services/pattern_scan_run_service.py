@@ -137,10 +137,20 @@ class PatternScanRunService:
             repository = PatternScanRunRepository(session)
             stale_runs = repository.list_stale_running_runs(stale_before=stale_before)
             for run in stale_runs:
+                progress = run.progress_json or {}
+                current_symbol = progress.get("current_symbol")
+                current_timeframe = progress.get("current_timeframe")
+                stuck_on = None
+                if current_symbol or current_timeframe:
+                    stuck_on = f"{current_symbol or '—'} · {current_timeframe or '—'}"
                 repository.mark_failed(
                     run,
                     completed_at=utc_now(),
-                    error_text="Pattern scan run became stale before completion. The worker likely stopped or the instance restarted.",
+                    error_text=(
+                        "Pattern scan run became stale before completion. "
+                        + (f"Last active series: {stuck_on}. " if stuck_on else "")
+                        + "The worker likely stopped, the instance restarted, or the current series stalled."
+                    ),
                 )
             if stale_runs:
                 logger.warning(

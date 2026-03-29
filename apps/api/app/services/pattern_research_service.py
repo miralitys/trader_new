@@ -27,6 +27,14 @@ PATTERN_DEFINITIONS = (
     _PatternDefinition(code="compression_release", name="Compression Release"),
 )
 
+TIMEFRAME_SCAN_PRIORITY = {
+    "4h": 0,
+    "1h": 1,
+    "15m": 2,
+    "5m": 3,
+    "1m": 4,
+}
+
 
 class PatternResearchService:
     def __init__(self, session: Session) -> None:
@@ -173,11 +181,21 @@ class PatternResearchService:
 
         results: list[PatternSummaryResponse] = []
         friction_pct = float((fee_pct + slippage_pct) * 2)
-        total = len(coverage)
+        ordered_coverage = sorted(
+            coverage,
+            key=lambda item: (
+                TIMEFRAME_SCAN_PRIORITY.get(item.timeframe, 99),
+                item.symbol,
+            ),
+        )
+        total = len(ordered_coverage)
         processed = 0
 
-        for item in coverage:
+        for item in ordered_coverage:
             try:
+                if progress_callback is not None:
+                    progress_callback(item.symbol, item.timeframe, processed, total)
+
                 if not item.ready_for_pattern_scan:
                     continue
 
