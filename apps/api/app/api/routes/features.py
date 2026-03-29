@@ -12,17 +12,12 @@ from app.utils.symbols import supported_symbol_codes
 router = APIRouter(prefix="/features", tags=["features"])
 
 
-@router.post("/run", response_model=FeatureRunResponse, status_code=status.HTTP_201_CREATED, summary="Run feature generation")
+@router.post("/run", response_model=FeatureRunResponse, status_code=status.HTTP_201_CREATED, summary="Queue feature generation")
 def run_feature_layer(
     request: FeatureRunRequest,
     service: FeatureLayerService = Depends(get_feature_layer_service),
 ) -> FeatureRunResponse:
-    return service.run(
-        exchange_code=request.exchange_code,
-        symbol=request.symbol,
-        timeframe=request.timeframe,
-        lookback_days=request.lookback_days,
-    )
+    return service.create_run(request)
 
 
 @router.get("/runs", response_model=list[FeatureRunResponse], summary="List feature generation history")

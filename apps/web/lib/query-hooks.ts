@@ -95,6 +95,13 @@ export function useFeatureRuns(filters: FeatureRunFilters = {}, enabled = true) 
     queryKey: queryKeys.featureRuns(filters),
     queryFn: () => getFeatureRuns(filters),
     enabled,
+    refetchInterval: (query) => {
+      const runs = (query.state.data as { status: string }[] | undefined) ?? [];
+      if (runs.some((run) => run.status === "queued" || run.status === "running")) {
+        return 5000;
+      }
+      return false;
+    },
   });
 }
 
@@ -103,6 +110,7 @@ export function useFeatureCoverage(enabled = true) {
     queryKey: queryKeys.featureCoverage,
     queryFn: () => getFeatureCoverage(),
     enabled,
+    refetchInterval: 5000,
   });
 }
 

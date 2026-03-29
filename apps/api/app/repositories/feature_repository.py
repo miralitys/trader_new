@@ -96,6 +96,29 @@ class FeatureRepository(BaseRepository):
             stmt = stmt.where(FeatureRun.timeframe == timeframe)
         return list(self.session.scalars(stmt))
 
+    def get_by_id(self, run_id: int) -> Optional[FeatureRun]:
+        return self.session.scalar(select(FeatureRun).where(FeatureRun.id == run_id))
+
+    def get_next_queued_run(self) -> Optional[FeatureRun]:
+        stmt = (
+            select(FeatureRun)
+            .where(FeatureRun.status == SyncJobStatus.QUEUED)
+            .order_by(FeatureRun.created_at.asc(), FeatureRun.id.asc())
+            .limit(1)
+        )
+        return self.session.scalar(stmt)
+
+    def list_stale_running_runs(self, *, stale_before: datetime) -> list[FeatureRun]:
+        stmt = (
+            select(FeatureRun)
+            .where(
+                FeatureRun.status == SyncJobStatus.RUNNING,
+                FeatureRun.updated_at < stale_before,
+            )
+            .order_by(FeatureRun.updated_at.asc(), FeatureRun.id.asc())
+        )
+        return list(self.session.scalars(stmt))
+
     def upsert_features(
         self,
         *,

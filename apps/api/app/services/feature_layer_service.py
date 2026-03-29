@@ -8,14 +8,18 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
+from app.core.logging import get_logger
+from app.db.session import session_scope
+from app.integrations.binance_us import BinanceUSTimeframe
 from app.models import FeatureRun
 from app.repositories.candle_repository import CandleRepository
 from app.repositories.feature_repository import FeatureRepository
-from app.schemas.api import FeatureCoverageResponse, FeatureRunResponse
+from app.schemas.api import FeatureCoverageResponse, FeatureRunRequest, FeatureRunResponse
 from app.utils.exchanges import normalize_exchange_code
 from app.utils.symbols import normalize_supported_symbol
 from app.utils.time import ensure_utc, utc_now
-from app.integrations.binance_us import BinanceUSTimeframe
+
+logger = get_logger(__name__)
 
 
 @dataclass(frozen=True)
@@ -54,40 +58,55 @@ class FeatureLayerService:
         self.candle_repository = CandleRepository(session)
         self.feature_repository = FeatureRepository(session)
 
-    def run(
-        self,
-        *,
-        exchange_code: str,
-        symbol: str,
-        timeframe: str,
-        lookback_days: int,
-    ) -> FeatureRunResponse:
-        normalized_exchange = normalize_exchange_code(exchange_code)
-        normalized_symbol = normalize_supported_symbol(symbol)
-        timeframe_value = BinanceUSTimeframe.from_code(timeframe)
+    def create_run(self, request: FeatureRunRequest) -> FeatureRunResponse:
+        normalized_exchange = normalize_exchange_code(request.exchange_code)
+        normalized_symbol = normalize_supported_symbol(request.symbol)
+        timeframe_value = BinanceUSTimeframe.from_code(request.timeframe)
 
         end_at = utc_now()
-        start_at = end_at - timedelta(days=lookback_days)
-        warmup_bars = 240
-        warmup_start_at = start_at - timeframe_value.interval * warmup_bars
-
-        exchange = self.candle_repository.get_exchange(normalized_exchange)
-        if exchange is None:
-            raise ValueError(f"Exchange {normalized_exchange} is not loaded")
-
-        symbol_row = self.candle_repository.get_symbol(exchange.id, normalized_symbol)
-        if symbol_row is None:
-            raise ValueError(f"Symbol {normalized_symbol} is not loaded")
+        start_at = end_at - timedelta(days=request.lookback_days)
 
         run = self.feature_repository.create_run(
             exchange=normalized_exchange,
             symbol=normalized_symbol,
             timeframe=timeframe_value.value,
-            lookback_days=lookback_days,
+            lookback_days=request.lookback_days,
             start_at=start_at,
             end_at=end_at,
         )
         self.session.commit()
+        return self._build_run_response(run)
+
+    def process_next_queued_run(self) -> bool:
+        with session_scope() as session:
+            repository = FeatureRepository(session)
+            run = repository.get_next_queued_run()
+            run_id = run.id if run is not None else None
+
+        if run_id is None:
+            return False
+
+        return self.execute_run(run_id)
+
+    def execute_run(self, run_id: int) -> bool:
+        with session_scope() as session:
+            repository = FeatureRepository(session)
+            run = repository.get_by_id(run_id)
+            if run is None:
+                return False
+            if run.status.value == "completed":
+                return False
+
+            repository.mark_running(run)
+            logger.info(
+                "Feature run started",
+                extra={
+                    "run_id": run.id,
+                    "symbol": run.symbol,
+                    "timeframe": run.timeframe,
+                    "lookback_days": run.lookback_days,
+                },
+            )
 
         source_candles = []
         feature_rows_upserted = 0
@@ -95,51 +114,107 @@ class FeatureLayerService:
         computed_end_at = None
 
         try:
-            self.feature_repository.mark_running(run)
-            self.session.commit()
+            with session_scope() as session:
+                repository = FeatureRepository(session)
+                run = repository.get_by_id(run_id)
+                if run is None:
+                    return False
 
-            source_candles = self.candle_repository.list_candles(
-                exchange_code=normalized_exchange,
-                symbol_code=normalized_symbol,
-                timeframe=timeframe_value.value,
-                start_at=warmup_start_at,
-                end_at=end_at,
-            )
+                candle_repository = CandleRepository(session)
+                exchange = candle_repository.get_exchange(run.exchange)
+                if exchange is None:
+                    raise ValueError(f"Exchange {run.exchange} is not loaded")
 
-            feature_rows = self._compute_feature_rows(source_candles=source_candles, start_at=start_at)
-            if feature_rows:
-                feature_rows_upserted = self.feature_repository.upsert_features(
-                    exchange_id=exchange.id,
-                    symbol_id=symbol_row.id,
-                    timeframe=timeframe_value.value,
-                    rows=[row.to_payload() for row in feature_rows],
+                symbol_row = candle_repository.get_symbol(exchange.id, run.symbol)
+                if symbol_row is None:
+                    raise ValueError(f"Symbol {run.symbol} is not loaded")
+
+                timeframe_value = BinanceUSTimeframe.from_code(run.timeframe)
+                warmup_bars = 240
+                warmup_start_at = run.start_at - timeframe_value.interval * warmup_bars if run.start_at else None
+
+                source_candles = candle_repository.list_candles(
+                    exchange_code=run.exchange,
+                    symbol_code=run.symbol,
+                    timeframe=run.timeframe,
+                    start_at=warmup_start_at,
+                    end_at=run.end_at,
                 )
-                computed_start_at = feature_rows[0].open_time
-                computed_end_at = feature_rows[-1].open_time
 
-            self.feature_repository.mark_completed(
-                run,
-                source_candle_count=len(source_candles),
-                feature_rows_upserted=feature_rows_upserted,
-                computed_start_at=computed_start_at,
-                computed_end_at=computed_end_at,
-            )
-            self.session.commit()
+                feature_rows = self._compute_feature_rows(source_candles=source_candles, start_at=run.start_at)
+                if feature_rows:
+                    feature_rows_upserted = repository.upsert_features(
+                        exchange_id=exchange.id,
+                        symbol_id=symbol_row.id,
+                        timeframe=run.timeframe,
+                        rows=[row.to_payload() for row in feature_rows],
+                    )
+                    computed_start_at = feature_rows[0].open_time
+                    computed_end_at = feature_rows[-1].open_time
+
+                repository.mark_completed(
+                    run,
+                    source_candle_count=len(source_candles),
+                    feature_rows_upserted=feature_rows_upserted,
+                    computed_start_at=computed_start_at,
+                    computed_end_at=computed_end_at,
+                )
+                logger.info(
+                    "Feature run completed",
+                    extra={
+                        "run_id": run.id,
+                        "symbol": run.symbol,
+                        "timeframe": run.timeframe,
+                        "source_candle_count": len(source_candles),
+                        "feature_rows_upserted": feature_rows_upserted,
+                    },
+                )
+                return True
         except Exception as exc:
-            self.session.rollback()
-            persisted = self.session.get(FeatureRun, run.id) or run
-            self.feature_repository.mark_failed(
-                persisted,
-                error_text=str(exc),
-                source_candle_count=len(source_candles),
-                feature_rows_upserted=feature_rows_upserted,
-                computed_start_at=computed_start_at,
-                computed_end_at=computed_end_at,
-            )
-            self.session.commit()
-            raise
+            with session_scope() as session:
+                repository = FeatureRepository(session)
+                run = repository.get_by_id(run_id)
+                if run is None:
+                    return False
+                repository.mark_failed(
+                    run,
+                    error_text=str(exc),
+                    source_candle_count=len(source_candles),
+                    feature_rows_upserted=feature_rows_upserted,
+                    computed_start_at=computed_start_at,
+                    computed_end_at=computed_end_at,
+                )
+                logger.exception("Feature run failed", extra={"run_id": run.id, "symbol": run.symbol, "timeframe": run.timeframe})
+            return False
 
-        return self._build_run_response(run)
+    def mark_stale_running_runs(self, *, stale_after_seconds: int) -> int:
+        if stale_after_seconds <= 0:
+            return 0
+
+        stale_before = utc_now().replace(microsecond=0) - timedelta(seconds=stale_after_seconds)
+
+        with session_scope() as session:
+            repository = FeatureRepository(session)
+            stale_runs = repository.list_stale_running_runs(stale_before=stale_before)
+            for run in stale_runs:
+                repository.mark_failed(
+                    run,
+                    error_text=(
+                        "Feature run became stale before completion. "
+                        "The background process likely stopped, the instance restarted, or the current series stalled."
+                    ),
+                    source_candle_count=run.source_candle_count,
+                    feature_rows_upserted=run.feature_rows_upserted,
+                    computed_start_at=run.computed_start_at,
+                    computed_end_at=run.computed_end_at,
+                )
+
+            if stale_runs:
+                logger.warning(
+                    "Marked stale feature runs as failed",
+                    extra={"run_ids": [run.id for run in stale_runs], "count": len(stale_runs)},
+                )
+            return len(stale_runs)
 
     def list_runs(
         self,
@@ -258,88 +333,113 @@ class FeatureLayerService:
                 for item in range(max(index - 11, 0), index + 1)
                 if closes[item] > 0
             ]
-            recent_range_window_3 = range_window_12[-3:]
+            volume_window_20 = volumes[max(index - 19, 0) : index + 1]
+            high_window_20 = highs[max(index - 19, 0) : index + 1]
+            low_window_20 = lows[max(index - 19, 0) : index + 1]
+            atr_window_14 = true_ranges[max(index - 13, 0) : index + 1]
 
+            body = abs(close - open_price)
+            upper_wick = max(high - max(open_price, close), 0.0)
+            lower_wick = max(min(open_price, close) - low, 0.0)
             ema20 = ema20_values[index]
             ema50 = ema50_values[index]
             ema200 = ema200_values[index]
 
-            avg_tr_14 = self._mean(true_ranges[max(index - 13, 0) : index + 1])
-            atr_pct = avg_tr_14 / close if close > 0 and avg_tr_14 is not None else None
-            realized_vol_base = self._safe_stdev(returns_window_20) if returns_window_20 else None
+            realized_vol_base = self._safe_stdev(returns_window_20)
             realized_vol_20 = realized_vol_base * sqrt(len(returns_window_20)) if realized_vol_base is not None else None
-
-            rolling_high_20 = max(highs[max(index - 19, 0) : index + 1]) if index >= 0 else None
-            rolling_low_20 = min(lows[max(index - 19, 0) : index + 1]) if index >= 0 else None
-            avg_volume_20 = self._mean(volumes[max(index - 19, 0) : index + 1])
-            volume_stdev_20 = self._safe_stdev(volumes[max(index - 19, 0) : index + 1])
-            avg_range_12 = self._mean(range_window_12)
 
             rows.append(
                 _FeatureRow(
                     open_time=candle.open_time,
-                    ret_1=self._period_return(closes, index, 1),
-                    ret_3=self._period_return(closes, index, 3),
-                    ret_12=self._period_return(closes, index, 12),
-                    ret_48=self._period_return(closes, index, 48),
+                    ret_1=self._series_return(closes, index, 1),
+                    ret_3=self._series_return(closes, index, 3),
+                    ret_12=self._series_return(closes, index, 12),
+                    ret_48=self._series_return(closes, index, 48),
                     range_pct=candle_range_pct,
-                    atr_pct=atr_pct,
+                    atr_pct=(sum(atr_window_14) / len(atr_window_14) / close) if atr_window_14 and close > 0 else None,
                     realized_vol_20=realized_vol_20,
-                    body_pct=(close - open_price) / open_price if open_price > 0 else None,
-                    upper_wick_pct=(high - max(open_price, close)) / open_price if open_price > 0 else None,
-                    lower_wick_pct=(min(open_price, close) - low) / open_price if open_price > 0 else None,
-                    distance_to_high_20_pct=(rolling_high_20 - close) / close if close > 0 and rolling_high_20 is not None else None,
-                    distance_to_low_20_pct=(close - rolling_low_20) / close if close > 0 and rolling_low_20 is not None else None,
-                    ema20_dist_pct=(close - ema20) / ema20 if ema20 else None,
-                    ema50_dist_pct=(close - ema50) / ema50 if ema50 else None,
-                    ema200_dist_pct=(close - ema200) / ema200 if ema200 else None,
-                    ema20_slope_pct=(ema20 - ema20_values[index - 1]) / ema20_values[index - 1] if index > 0 and ema20_values[index - 1] else None,
-                    ema50_slope_pct=(ema50 - ema50_values[index - 1]) / ema50_values[index - 1] if index > 0 and ema50_values[index - 1] else None,
-                    ema200_slope_pct=(ema200 - ema200_values[index - 1]) / ema200_values[index - 1] if index > 0 and ema200_values[index - 1] else None,
-                    relative_volume_20=volume / avg_volume_20 if avg_volume_20 else None,
-                    volume_zscore_20=(volume - avg_volume_20) / volume_stdev_20 if avg_volume_20 is not None and volume_stdev_20 not in (None, 0) else None,
-                    compression_ratio_12=candle_range_pct / avg_range_12 if candle_range_pct is not None and avg_range_12 not in (None, 0) else None,
-                    expansion_ratio_12=self._mean(recent_range_window_3) / avg_range_12 if avg_range_12 not in (None, 0) and recent_range_window_3 else None,
+                    body_pct=body / close if close > 0 else None,
+                    upper_wick_pct=upper_wick / close if close > 0 else None,
+                    lower_wick_pct=lower_wick / close if close > 0 else None,
+                    distance_to_high_20_pct=((close - max(high_window_20)) / max(high_window_20)) if high_window_20 and max(high_window_20) > 0 else None,
+                    distance_to_low_20_pct=((close - min(low_window_20)) / min(low_window_20)) if low_window_20 and min(low_window_20) > 0 else None,
+                    ema20_dist_pct=((close - ema20) / ema20) if ema20 and ema20 > 0 else None,
+                    ema50_dist_pct=((close - ema50) / ema50) if ema50 and ema50 > 0 else None,
+                    ema200_dist_pct=((close - ema200) / ema200) if ema200 and ema200 > 0 else None,
+                    ema20_slope_pct=self._slope_pct(ema20_values, index),
+                    ema50_slope_pct=self._slope_pct(ema50_values, index),
+                    ema200_slope_pct=self._slope_pct(ema200_values, index),
+                    relative_volume_20=(volume / (sum(volume_window_20) / len(volume_window_20))) if volume_window_20 and sum(volume_window_20) > 0 else None,
+                    volume_zscore_20=self._zscore(volume, volume_window_20),
+                    compression_ratio_12=(min(range_window_12) / max(range_window_12)) if len(range_window_12) >= 2 and max(range_window_12) > 0 else None,
+                    expansion_ratio_12=(range_window_12[-1] / (sum(range_window_12[:-1]) / len(range_window_12[:-1]))) if len(range_window_12) >= 2 and sum(range_window_12[:-1]) > 0 else None,
                 )
             )
 
         return rows
 
-    def _period_return(self, values: list[float], index: int, period: int) -> float | None:
-        if index < period:
-            return None
-        previous = values[index - period]
-        current = values[index]
-        return self._return(previous, current)
-
-    def _return(self, previous: float, current: float) -> float | None:
+    @staticmethod
+    def _return(previous: float, current: float) -> float:
         if previous <= 0:
-            return None
+            return 0.0
         return (current - previous) / previous
 
-    def _ema(self, values: list[float], period: int) -> list[float]:
+    def _series_return(self, closes: list[float], index: int, bars: int) -> float | None:
+        previous_index = index - bars
+        if previous_index < 0:
+            return None
+        previous_close = closes[previous_index]
+        current_close = closes[index]
+        if previous_close <= 0:
+            return None
+        return (current_close - previous_close) / previous_close
+
+    def _ema(self, values: list[float], period: int) -> list[float | None]:
         if not values:
             return []
-        alpha = 2 / (period + 1)
-        ema_values: list[float] = [values[0]]
-        for value in values[1:]:
-            ema_values.append((value * alpha) + (ema_values[-1] * (1 - alpha)))
+        multiplier = 2 / (period + 1)
+        ema_values: list[float | None] = []
+        running: float | None = None
+        for value in values:
+            if running is None:
+                running = value
+            else:
+                running = (value - running) * multiplier + running
+            ema_values.append(running)
         return ema_values
 
     def _true_ranges(self, highs: list[float], lows: list[float], closes: list[float]) -> list[float]:
-        values: list[float] = []
+        if not highs:
+            return []
+        ranges: list[float] = []
         for index, (high, low) in enumerate(zip(highs, lows)):
-            previous_close = closes[index - 1] if index > 0 else closes[index]
-            values.append(max(high - low, abs(high - previous_close), abs(low - previous_close)))
-        return values
+            if index == 0:
+                ranges.append(high - low)
+                continue
+            previous_close = closes[index - 1]
+            ranges.append(max(high - low, abs(high - previous_close), abs(low - previous_close)))
+        return ranges
 
-    def _mean(self, values: list[float]) -> float | None:
-        if not values:
+    def _slope_pct(self, values: list[float | None], index: int, bars: int = 5) -> float | None:
+        previous_index = index - bars
+        if previous_index < 0:
             return None
-        return sum(values) / len(values)
+        current_value = values[index]
+        previous_value = values[previous_index]
+        if current_value is None or previous_value is None or previous_value == 0:
+            return None
+        return (current_value - previous_value) / previous_value
 
-    def _safe_stdev(self, values: list[float | None]) -> float | None:
-        numeric_values = [float(value) for value in values if value is not None]
-        if len(numeric_values) < 2:
+    def _zscore(self, current: float, window: list[float]) -> float | None:
+        if len(window) < 2:
             return None
-        return pstdev(numeric_values)
+        mean_value = sum(window) / len(window)
+        stdev = self._safe_stdev(window)
+        if stdev is None or stdev == 0:
+            return None
+        return (current - mean_value) / stdev
+
+    def _safe_stdev(self, values: list[float]) -> float | None:
+        if len(values) < 2:
+            return None
+        return pstdev(values)

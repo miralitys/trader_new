@@ -112,11 +112,12 @@ class NightlyFeatureLayerScheduleService:
                             "lookback_days": state.lookback_days,
                         },
                     )
-                    self.feature_layer_service.run(
-                        exchange_code="binance_us",
-                        symbol=symbol,
-                        timeframe=timeframe,
-                        lookback_days=state.lookback_days,
+                    self.feature_layer_service.create_run(
+                        request=self._build_request(
+                            symbol=symbol,
+                            timeframe=timeframe,
+                            lookback_days=state.lookback_days,
+                        )
                     )
 
             refreshed_state = self.repository.get_by_task_key(TASK_KEY)
@@ -138,3 +139,14 @@ class NightlyFeatureLayerScheduleService:
                 self.session.commit()
             logger.exception("Nightly feature layer failed", extra={"task_key": TASK_KEY, "local_date": local_date})
             return False
+
+    @staticmethod
+    def _build_request(*, symbol: str, timeframe: str, lookback_days: int):
+        from app.schemas.api import FeatureRunRequest
+
+        return FeatureRunRequest(
+            exchange_code="binance_us",
+            symbol=symbol,
+            timeframe=timeframe,
+            lookback_days=lookback_days,
+        )

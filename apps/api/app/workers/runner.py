@@ -10,6 +10,7 @@ from app.services.nightly_feature_layer_schedule_service import NightlyFeatureLa
 from app.services.nightly_validation_schedule_service import NightlyValidationScheduleService
 from app.services.paper_execution_service import PaperExecutionService
 from app.services.pattern_scan_run_service import PatternScanRunService
+from app.services.feature_layer_service import FeatureLayerService
 from app.services.validation_run_service import ValidationRunService
 
 logger = get_logger(__name__)
@@ -65,6 +66,20 @@ def main() -> None:
                 queued_processed = validation_service.process_next_queued_run()
                 if queued_processed:
                     logger.info("Validation worker cycle completed")
+
+            with session_scope() as session:
+                feature_service = FeatureLayerService(session)
+                stale_count = feature_service.mark_stale_running_runs(
+                    stale_after_seconds=settings.feature_run_stale_after_seconds
+                )
+                if stale_count:
+                    logger.warning(
+                        "Feature stale sweep completed",
+                        extra={"stale_runs_marked_failed": stale_count},
+                    )
+                queued_processed = feature_service.process_next_queued_run()
+                if queued_processed:
+                    logger.info("Feature worker cycle completed")
 
             with session_scope() as session:
                 pattern_scan_service = PatternScanRunService(session)

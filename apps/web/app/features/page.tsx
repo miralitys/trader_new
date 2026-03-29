@@ -131,7 +131,7 @@ export default function FeatureLayerPage() {
         lookback_days: lookbackDays,
       });
       setMessage(
-        `${result.symbol} ${result.timeframe} completed. Saved ${formatInteger(result.feature_rows_upserted)} feature rows from ${formatInteger(result.source_candle_count)} source candles.`,
+        `${result.symbol} ${result.timeframe} queued as feature run #${result.id}. Worker will build it in the background.`,
       );
     } catch (error) {
       setMessage(getErrorMessage(error, `Unable to build features for ${symbol} ${timeframe}.`));
@@ -164,7 +164,7 @@ export default function FeatureLayerPage() {
       failedJobs: 0,
     });
 
-    let completedJobs = 0;
+    let queuedJobs = 0;
     let failedJobs = 0;
     const completedBySymbol = { ...initialCompletedBySymbol };
 
@@ -174,7 +174,7 @@ export default function FeatureLayerPage() {
       setBatchState({
         startedAt: batchStartedAt,
         totalJobs: queue.length,
-        completedJobs,
+        completedJobs: queuedJobs,
         currentIndex: index + 1,
         currentSymbol: item.symbol,
         currentTimeframe: item.timeframe,
@@ -189,16 +189,16 @@ export default function FeatureLayerPage() {
           timeframe: item.timeframe,
           lookback_days: lookbackDays,
         });
+        queuedJobs += 1;
       } catch {
         failedJobs += 1;
       } finally {
-        completedJobs += 1;
         completedBySymbol[item.symbol] = (completedBySymbol[item.symbol] ?? 0) + 1;
 
         setBatchState({
           startedAt: batchStartedAt,
           totalJobs: queue.length,
-          completedJobs,
+          completedJobs: queuedJobs,
           currentIndex: index + 1,
           currentSymbol: item.symbol,
           currentTimeframe: item.timeframe,
@@ -209,7 +209,7 @@ export default function FeatureLayerPage() {
     }
 
     setMessage(
-      `Batch feature build finished. Completed ${completedJobs}/${queue.length} jobs with ${failedJobs} failed runs across ${presetSymbols.length} symbols.`,
+      `Batch feature queue finished. Queued ${queuedJobs}/${queue.length} jobs with ${failedJobs} submission failures across ${presetSymbols.length} symbols.`,
     );
     setBatchState(null);
   }
@@ -274,7 +274,7 @@ export default function FeatureLayerPage() {
                 disabled={runFeatureMutation.isPending || Boolean(batchState)}
                 className="rounded-2xl bg-emerald-300 px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-emerald-200 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
               >
-                {batchState ? "Запускаем все..." : "Запустить все"}
+                {batchState ? "Ставим в очередь..." : "Запустить все"}
               </button>
               <div className="rounded-2xl border border-white/8 bg-slate-950/45 px-4 py-3 text-sm text-slate-300">
                 Queue order: {FEATURE_BATCH_TIMEFRAMES.join(" → ")} across all symbols
@@ -286,10 +286,10 @@ export default function FeatureLayerPage() {
                 <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                   <div>
                     <p className="text-sm font-semibold text-white">
-                      Running {batchState.currentIndex}/{batchState.totalJobs}: {batchState.currentSymbol} {batchState.currentTimeframe}
+                      Queueing {batchState.currentIndex}/{batchState.totalJobs}: {batchState.currentSymbol} {batchState.currentTimeframe}
                     </p>
                     <p className="mt-1 text-sm text-slate-400">
-                      Completed {batchState.completedJobs} jobs · Failed {batchState.failedJobs}
+                      Queued {batchState.completedJobs} jobs · Failed {batchState.failedJobs}
                     </p>
                     <p className="mt-1 text-sm text-slate-500">{batchEtaText}</p>
                   </div>
@@ -314,7 +314,7 @@ export default function FeatureLayerPage() {
               <WorkspaceStat label="Current symbol" value={batchState?.currentSymbol ?? selectedSymbol} />
               <WorkspaceStat label="Current timeframe" value={batchState?.currentTimeframe ?? "—"} />
               <WorkspaceStat label="Selected window" value={`${lookbackDays}d`} />
-              <WorkspaceStat label="Most recent message" value={message ?? "No recent build messages"} subdued />
+              <WorkspaceStat label="Most recent message" value={message ?? "No recent queue messages"} subdued />
             </div>
           </div>
         </div>
@@ -378,6 +378,7 @@ export default function FeatureLayerPage() {
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
           <div className="space-y-4">
             {selectedCoverageRows.map(({ timeframe, coverage }) => {
+              const isQueuedThisRow = selectedRuns.find((run) => run.timeframe === timeframe && run.status === "queued") ?? null;
               const isRunningThisRow =
                 (runFeatureMutation.isPending &&
                   runFeatureMutation.variables?.symbol === selectedSymbol &&
@@ -400,7 +401,13 @@ export default function FeatureLayerPage() {
                         <span className="text-lg font-semibold text-white">{timeframe}</span>
                         <StatusBadge
                           status={
-                            isRunningThisRow ? "running" : coverage && coverage.feature_count > 0 ? "completed" : "idle"
+                            isRunningThisRow
+                              ? "running"
+                              : isQueuedThisRow
+                                ? "queued"
+                                : coverage && coverage.feature_count > 0
+                                  ? "completed"
+                                  : "idle"
                           }
                         />
                       </div>
@@ -414,7 +421,7 @@ export default function FeatureLayerPage() {
                           {coverage?.loaded_start_at ? `Start: ${formatDateTime(coverage.loaded_start_at)}` : "Runs this timeframe only for this coin"}
                         </span>
                         <span className="text-sky-100">
-                          {isRunningThisRow ? "Running now" : `Build ${lookbackDays}d`}
+                          {isRunningThisRow ? "Running now" : isQueuedThisRow ? "Queued in worker" : `Build ${lookbackDays}d`}
                         </span>
                       </div>
                     </div>
@@ -442,6 +449,10 @@ export default function FeatureLayerPage() {
                         },
                         averageRunDurationByKey,
                       )}
+                    </div>
+                  ) : isQueuedThisRow ? (
+                    <div className="mt-4 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-3 text-sm text-slate-200">
+                      Waiting in the worker queue. It will start automatically after earlier jobs finish.
                     </div>
                   ) : null}
                 </button>

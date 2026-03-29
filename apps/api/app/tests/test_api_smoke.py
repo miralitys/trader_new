@@ -153,27 +153,45 @@ class FakeDataValidationService:
 
 
 class FakeFeatureLayerService:
-    def run(self, **_: object) -> FeatureRunResponse:
+    def create_run(self, request) -> FeatureRunResponse:
         return FeatureRunResponse(
             id=77,
-            exchange="binance_us",
-            symbol="BTC-USDT",
-            timeframe="15m",
-            lookback_days=180,
+            exchange=request.exchange_code,
+            symbol=request.symbol,
+            timeframe=request.timeframe,
+            lookback_days=request.lookback_days,
             start_at=datetime(2025, 9, 28, 0, 0, tzinfo=timezone.utc),
             end_at=datetime(2026, 3, 27, 0, 0, tzinfo=timezone.utc),
-            status="completed",
-            source_candle_count=1234,
-            feature_rows_upserted=1180,
-            computed_start_at=datetime(2025, 9, 28, 0, 15, tzinfo=timezone.utc),
-            computed_end_at=datetime(2026, 3, 27, 0, 0, tzinfo=timezone.utc),
+            status="queued",
+            source_candle_count=0,
+            feature_rows_upserted=0,
+            computed_start_at=None,
+            computed_end_at=None,
             error_text=None,
             created_at=datetime(2026, 3, 27, 18, 0, tzinfo=timezone.utc),
-            updated_at=datetime(2026, 3, 27, 18, 5, tzinfo=timezone.utc),
+            updated_at=datetime(2026, 3, 27, 18, 0, tzinfo=timezone.utc),
         )
 
     def list_runs(self, **_: object) -> list[FeatureRunResponse]:
-        return [self.run()]
+        return [
+            FeatureRunResponse(
+                id=77,
+                exchange="binance_us",
+                symbol="BTC-USDT",
+                timeframe="15m",
+                lookback_days=180,
+                start_at=datetime(2025, 9, 28, 0, 0, tzinfo=timezone.utc),
+                end_at=datetime(2026, 3, 27, 0, 0, tzinfo=timezone.utc),
+                status="completed",
+                source_candle_count=1234,
+                feature_rows_upserted=1180,
+                computed_start_at=datetime(2025, 9, 28, 0, 15, tzinfo=timezone.utc),
+                computed_end_at=datetime(2026, 3, 27, 0, 0, tzinfo=timezone.utc),
+                error_text=None,
+                created_at=datetime(2026, 3, 27, 18, 0, tzinfo=timezone.utc),
+                updated_at=datetime(2026, 3, 27, 18, 5, tzinfo=timezone.utc),
+            )
+        ]
 
     def get_symbol_timeframe_coverages(self, **_: object) -> list[FeatureCoverageResponse]:
         return [
@@ -396,8 +414,8 @@ def test_feature_run_endpoint_returns_feature_payload(client: TestClient) -> Non
     assert response.status_code == 201
     payload = response.json()
     assert payload["symbol"] == "BTC-USDT"
-    assert payload["feature_rows_upserted"] == 1180
-    assert payload["status"] == "completed"
+    assert payload["feature_rows_upserted"] == 0
+    assert payload["status"] == "queued"
 
 
 def test_feature_coverage_endpoint_returns_rows(client: TestClient) -> None:

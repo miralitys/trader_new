@@ -74,6 +74,7 @@ class Settings(BaseSettings):
     worker_poll_seconds: int = Field(default=15, alias="WORKER_POLL_SECONDS")
     worker_max_candles_per_stream: int = Field(default=100, alias="WORKER_MAX_CANDLES_PER_STREAM")
     backtest_stale_after_seconds: int = Field(default=14400, alias="BACKTEST_STALE_AFTER_SECONDS")
+    feature_run_stale_after_seconds: int = Field(default=1800, alias="FEATURE_RUN_STALE_AFTER_SECONDS")
     validation_run_stale_after_seconds: int = Field(default=900, alias="VALIDATION_RUN_STALE_AFTER_SECONDS")
     pattern_scan_run_stale_after_seconds: int = Field(default=1800, alias="PATTERN_SCAN_RUN_STALE_AFTER_SECONDS")
     nightly_all_data_sync_enabled: bool = Field(default=True, alias="NIGHTLY_ALL_DATA_SYNC_ENABLED")
