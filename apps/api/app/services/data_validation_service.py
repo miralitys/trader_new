@@ -119,7 +119,7 @@ def serialize_validation_report(report: DataValidationReport) -> dict[str, Any]:
 
 def build_validation_report_payload(report: DataValidationReport) -> dict[str, Any]:
     payload = serialize_validation_report(report)
-    results = payload["results"]
+    results = [_normalize_validation_result_payload(row) for row in payload["results"]]
 
     completion_by_timeframe: dict[str, list[float]] = {}
     symbol_rollup: dict[str, dict[str, float | int | str]] = {}
@@ -267,6 +267,26 @@ def build_validation_report_payload(report: DataValidationReport) -> dict[str, A
         },
         "results": results,
     }
+
+
+def _normalize_validation_result_payload(row: dict[str, Any]) -> dict[str, Any]:
+    normalized = dict(row)
+    validation_window = dict(normalized.get("validation_window") or {})
+    if validation_window:
+        normalized["validation_window"] = {
+            "exchange_code": validation_window.get("exchange_code"),
+            "symbol": validation_window.get("symbol") or validation_window.get("symbol_code"),
+            "timeframe": validation_window.get("timeframe"),
+            "requested_start_at": validation_window.get("requested_start_at"),
+            "requested_end_at": validation_window.get("requested_end_at"),
+            "loaded_start_at": validation_window.get("loaded_start_at") or validation_window.get("actual_start_at"),
+            "loaded_end_at": validation_window.get("loaded_end_at") or validation_window.get("actual_end_at"),
+            "candle_count": validation_window.get("candle_count", 0),
+            "expected_candle_count": validation_window.get("expected_candle_count", 0),
+            "missing_candle_count": validation_window.get("missing_candle_count", 0),
+            "completion_pct": validation_window.get("completion_pct", Decimal("0")),
+        }
+    return normalized
 
 
 def derive_recent_window(

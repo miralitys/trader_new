@@ -6,12 +6,15 @@ from decimal import Decimal
 from app.repositories.candle_repository import CandleCoverageSummary
 from app.services.data_validation_service import (
     ApiTruthfulnessSummary,
+    DataValidationReport,
+    DataValidationResult,
     DataValidationService,
     DuplicateSummary,
     GapSummary,
     ResyncSummary,
     StoredRangeSummary,
     TimestampAlignmentSummary,
+    build_validation_report_payload,
     derive_recent_window,
 )
 
@@ -128,3 +131,60 @@ def test_build_issues_marks_resync_instability_as_critical() -> None:
     )
 
     assert any(issue.code == "resync_instability" and issue.severity == "critical" for issue in issues)
+
+
+def test_build_validation_report_payload_normalizes_validation_window_keys() -> None:
+    report = DataValidationReport(
+        generated_at=datetime(2026, 3, 28, 1, 0, tzinfo=timezone.utc),
+        exchange_code="binance_us",
+        lookback_days=730,
+        resync_days=14,
+        perform_resync=False,
+        verdict="PASS",
+        results=[
+            DataValidationResult(
+                exchange_code="binance_us",
+                symbol="BTC-USDT",
+                timeframe="4h",
+                stored_range=StoredRangeSummary(
+                    first_candle=datetime(2024, 3, 28, 0, 0, tzinfo=timezone.utc),
+                    last_candle=datetime(2026, 3, 28, 0, 0, tzinfo=timezone.utc),
+                    candle_count=100,
+                    expected_candle_count=100,
+                    completion_pct=Decimal("100.00"),
+                ),
+                validation_window=CandleCoverageSummary(
+                    exchange_code="binance_us",
+                    symbol_code="BTC-USDT",
+                    timeframe="4h",
+                    requested_start_at=datetime(2024, 3, 28, 0, 0, tzinfo=timezone.utc),
+                    requested_end_at=datetime(2026, 3, 28, 0, 0, tzinfo=timezone.utc),
+                    actual_start_at=datetime(2024, 3, 28, 0, 0, tzinfo=timezone.utc),
+                    actual_end_at=datetime(2026, 3, 28, 0, 0, tzinfo=timezone.utc),
+                    candle_count=100,
+                    expected_candle_count=100,
+                    missing_candle_count=0,
+                    completion_pct=Decimal("100.00"),
+                ),
+                duplicates=DuplicateSummary(duplicate_count=0, duplicate_bucket_count=0, sample_duplicates=[]),
+                timestamp_alignment=TimestampAlignmentSummary(invalid_timestamp_count=0, sample_invalid_timestamps=[]),
+                gaps=GapSummary(missing_candle_count=0, sample_missing_timestamps=[]),
+                api_truthfulness=ApiTruthfulnessSummary(
+                    coverage_endpoint_matches_db=True,
+                    status_endpoint_matches_db=True,
+                    latest_sync_job_id=1,
+                    latest_sync_job_status="completed",
+                    notes=[],
+                ),
+                resync=None,
+                issues=[],
+                verdict="PASS",
+            )
+        ],
+    )
+
+    payload = build_validation_report_payload(report)
+
+    assert payload["results"][0]["validation_window"]["symbol"] == "BTC-USDT"
+    assert payload["results"][0]["validation_window"]["loaded_start_at"] == datetime(2024, 3, 28, 0, 0, tzinfo=timezone.utc)
+    assert payload["results"][0]["validation_window"]["loaded_end_at"] == datetime(2026, 3, 28, 0, 0, tzinfo=timezone.utc)
