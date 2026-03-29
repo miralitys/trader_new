@@ -266,7 +266,8 @@ class FeatureLayerService:
 
             avg_tr_14 = self._mean(true_ranges[max(index - 13, 0) : index + 1])
             atr_pct = avg_tr_14 / close if close > 0 and avg_tr_14 is not None else None
-            realized_vol_20 = self._safe_stdev(returns_window_20) * sqrt(len(returns_window_20)) if returns_window_20 else None
+            realized_vol_base = self._safe_stdev(returns_window_20) if returns_window_20 else None
+            realized_vol_20 = realized_vol_base * sqrt(len(returns_window_20)) if realized_vol_base is not None else None
 
             rolling_high_20 = max(highs[max(index - 19, 0) : index + 1]) if index >= 0 else None
             rolling_low_20 = min(lows[max(index - 19, 0) : index + 1]) if index >= 0 else None
@@ -327,7 +328,7 @@ class FeatureLayerService:
 
     def _true_ranges(self, highs: list[float], lows: list[float], closes: list[float]) -> list[float]:
         values: list[float] = []
-        for index, (high, low) in enumerate(zip(highs, lows, strict=False)):
+        for index, (high, low) in enumerate(zip(highs, lows)):
             previous_close = closes[index - 1] if index > 0 else closes[index]
             values.append(max(high - low, abs(high - previous_close), abs(low - previous_close)))
         return values
