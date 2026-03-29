@@ -377,6 +377,11 @@ class FeatureRunResponse(APIModel):
     updated_at: datetime
 
 
+class FeatureWorkspaceResetResponse(APIModel):
+    deleted_feature_runs: int = 0
+    deleted_feature_rows: int = 0
+
+
 class CandleCoverageResponse(APIModel):
     exchange_code: str
     symbol: str

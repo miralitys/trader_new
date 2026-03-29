@@ -5,7 +5,12 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Query, status
 
 from app.api.dependencies import get_feature_layer_service
-from app.schemas.api import FeatureCoverageResponse, FeatureRunRequest, FeatureRunResponse
+from app.schemas.api import (
+    FeatureCoverageResponse,
+    FeatureRunRequest,
+    FeatureRunResponse,
+    FeatureWorkspaceResetResponse,
+)
 from app.services.feature_layer_service import FeatureLayerService
 from app.utils.symbols import supported_symbol_codes
 
@@ -41,3 +46,10 @@ def list_feature_coverages(
         symbols=[symbol] if symbol else list(supported_symbol_codes()),
         timeframes=["1m", "5m", "15m", "1h", "4h"],
     )
+
+
+@router.post("/reset", response_model=FeatureWorkspaceResetResponse, summary="Reset feature workspace")
+def reset_feature_workspace(
+    service: FeatureLayerService = Depends(get_feature_layer_service),
+) -> FeatureWorkspaceResetResponse:
+    return FeatureWorkspaceResetResponse(**service.reset_workspace())

@@ -142,6 +142,13 @@ class FeatureLayerService:
                 )
 
                 feature_rows = self._compute_feature_rows(source_candles=source_candles, start_at=run.start_at)
+                run = repository.get_by_id(run_id)
+                if run is None or run.status.value != "running":
+                    logger.info(
+                        "Feature run aborted before upsert",
+                        extra={"run_id": run_id},
+                    )
+                    return False
                 if feature_rows:
                     feature_rows_upserted = repository.upsert_features(
                         exchange_id=exchange.id,
@@ -287,6 +294,22 @@ class FeatureLayerService:
                         )
                     )
         return payload
+
+    def reset_workspace(self) -> dict[str, int]:
+        deleted_runs = self.feature_repository.delete_all_runs()
+        deleted_rows = self.feature_repository.delete_all_features()
+        self.session.commit()
+        logger.warning(
+            "Feature workspace reset",
+            extra={
+                "deleted_feature_runs": deleted_runs,
+                "deleted_feature_rows": deleted_rows,
+            },
+        )
+        return {
+            "deleted_feature_runs": deleted_runs,
+            "deleted_feature_rows": deleted_rows,
+        }
 
     def _build_run_response(self, run: FeatureRun) -> FeatureRunResponse:
         return FeatureRunResponse(

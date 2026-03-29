@@ -6,6 +6,7 @@ from math import ceil
 from typing import Optional
 
 from sqlalchemy import func, select
+from sqlalchemy import delete
 from sqlalchemy.dialects.postgresql import insert
 
 from app.models import FeatureRun, MarketFeature
@@ -124,6 +125,14 @@ class FeatureRepository(BaseRepository):
             FeatureRun.status.in_((SyncJobStatus.QUEUED, SyncJobStatus.RUNNING))
         )
         return bool(self.session.scalar(stmt) or 0)
+
+    def delete_all_runs(self) -> int:
+        result = self.session.execute(delete(FeatureRun))
+        return int(result.rowcount or 0)
+
+    def delete_all_features(self) -> int:
+        result = self.session.execute(delete(MarketFeature))
+        return int(result.rowcount or 0)
 
     def upsert_features(
         self,
