@@ -55,6 +55,15 @@ class ValidationRunRepository(BaseRepository):
         )
         return self.session.scalar(stmt)
 
+    def get_latest_completed_run(self) -> Optional[ValidationRun]:
+        stmt = (
+            select(ValidationRun)
+            .where(ValidationRun.status == SyncJobStatus.COMPLETED)
+            .order_by(ValidationRun.completed_at.desc(), ValidationRun.id.desc())
+            .limit(1)
+        )
+        return self.session.scalar(stmt)
+
     def list_stale_running_runs(self, *, stale_before: datetime) -> list[ValidationRun]:
         stmt = (
             select(ValidationRun)

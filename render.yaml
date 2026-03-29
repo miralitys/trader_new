@@ -85,6 +85,16 @@ services:
         value: "1"
       - key: NIGHTLY_VALIDATION_SAMPLE_LIMIT
         value: "5"
+      - key: NIGHTLY_FEATURE_LAYER_ENABLED
+        value: "true"
+      - key: NIGHTLY_FEATURE_LAYER_TIMEZONE
+        value: America/Chicago
+      - key: NIGHTLY_FEATURE_LAYER_HOUR
+        value: "2"
+      - key: NIGHTLY_FEATURE_LAYER_MINUTE
+        value: "0"
+      - key: NIGHTLY_FEATURE_LAYER_LOOKBACK_DAYS
+        value: "1"
 
   - type: worker
     name: trader-mvp-worker
@@ -163,6 +173,16 @@ services:
         value: "1"
       - key: NIGHTLY_VALIDATION_SAMPLE_LIMIT
         value: "5"
+      - key: NIGHTLY_FEATURE_LAYER_ENABLED
+        value: "true"
+      - key: NIGHTLY_FEATURE_LAYER_TIMEZONE
+        value: America/Chicago
+      - key: NIGHTLY_FEATURE_LAYER_HOUR
+        value: "2"
+      - key: NIGHTLY_FEATURE_LAYER_MINUTE
+        value: "0"
+      - key: NIGHTLY_FEATURE_LAYER_LOOKBACK_DAYS
+        value: "1"
 
   - type: web
     name: trader-mvp-frontend

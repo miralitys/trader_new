@@ -6,6 +6,7 @@ from app.core.config import get_settings
 from app.core.logging import configure_logging, get_logger
 from app.db.session import session_scope
 from app.services.nightly_data_sync_service import NightlyDataSyncService
+from app.services.nightly_feature_layer_schedule_service import NightlyFeatureLayerScheduleService
 from app.services.nightly_validation_schedule_service import NightlyValidationScheduleService
 from app.services.paper_execution_service import PaperExecutionService
 from app.services.pattern_scan_run_service import PatternScanRunService
@@ -44,6 +45,12 @@ def main() -> None:
                 scheduled_processed = nightly_validation_service.process_if_due()
                 if scheduled_processed:
                     logger.info("Nightly validation queue cycle completed")
+
+            with session_scope() as session:
+                nightly_feature_layer_service = NightlyFeatureLayerScheduleService(session)
+                scheduled_processed = nightly_feature_layer_service.process_if_due()
+                if scheduled_processed:
+                    logger.info("Nightly feature layer cycle completed")
 
             with session_scope() as session:
                 validation_service = ValidationRunService(session)

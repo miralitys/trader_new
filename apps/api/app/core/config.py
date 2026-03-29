@@ -87,6 +87,11 @@ class Settings(BaseSettings):
     nightly_validation_minute: int = Field(default=0, alias="NIGHTLY_VALIDATION_MINUTE")
     nightly_validation_lookback_days: int = Field(default=1, alias="NIGHTLY_VALIDATION_LOOKBACK_DAYS")
     nightly_validation_sample_limit: int = Field(default=5, alias="NIGHTLY_VALIDATION_SAMPLE_LIMIT")
+    nightly_feature_layer_enabled: bool = Field(default=True, alias="NIGHTLY_FEATURE_LAYER_ENABLED")
+    nightly_feature_layer_timezone: str = Field(default="America/Chicago", alias="NIGHTLY_FEATURE_LAYER_TIMEZONE")
+    nightly_feature_layer_hour: int = Field(default=2, alias="NIGHTLY_FEATURE_LAYER_HOUR")
+    nightly_feature_layer_minute: int = Field(default=0, alias="NIGHTLY_FEATURE_LAYER_MINUTE")
+    nightly_feature_layer_lookback_days: int = Field(default=1, alias="NIGHTLY_FEATURE_LAYER_LOOKBACK_DAYS")
     backtest_progress_interval_bars: int = Field(default=500, alias="BACKTEST_PROGRESS_INTERVAL_BARS")
     backtest_stop_check_interval_bars: int = Field(default=100, alias="BACKTEST_STOP_CHECK_INTERVAL_BARS")
     default_symbols: str = Field(
