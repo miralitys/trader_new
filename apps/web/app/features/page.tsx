@@ -16,6 +16,7 @@ const EMPTY_FEATURE_COVERAGE: FeatureCoverage[] = [];
 const FEATURE_BATCH_TIMEFRAMES = ["4h", "1h", "15m", "5m", "1m"] as const;
 
 type FeatureBatchState = {
+  startedAt: number;
   totalJobs: number;
   completedJobs: number;
   currentIndex: number;
@@ -36,6 +37,30 @@ export default function FeatureLayerPage() {
 
   const runs = featureRunsQuery.data ?? EMPTY_FEATURE_RUNS;
   const coverageRows = featureCoverageQuery.data ?? EMPTY_FEATURE_COVERAGE;
+  const averageRunDurationByKey = useMemo(() => {
+    const grouped = new Map<string, number[]>();
+
+    for (const run of runs) {
+      if (run.status !== "completed") {
+        continue;
+      }
+      const createdAtMs = new Date(run.created_at).getTime();
+      const updatedAtMs = new Date(run.updated_at).getTime();
+      if (!Number.isFinite(createdAtMs) || !Number.isFinite(updatedAtMs) || updatedAtMs <= createdAtMs) {
+        continue;
+      }
+      const key = `${run.timeframe}:${run.lookback_days}`;
+      const current = grouped.get(key) ?? [];
+      current.push(updatedAtMs - createdAtMs);
+      grouped.set(key, current);
+    }
+
+    const averages = new Map<string, number>();
+    for (const [key, values] of grouped.entries()) {
+      averages.set(key, values.reduce((sum, value) => sum + value, 0) / values.length);
+    }
+    return averages;
+  }, [runs]);
 
   const runsBySymbol = useMemo(() => {
     return runs.reduce<Record<string, FeatureRun[]>>((accumulator, run) => {
@@ -92,10 +117,12 @@ export default function FeatureLayerPage() {
         timeframe,
       })),
     );
+    const batchStartedAt = Date.now();
 
     const initialCompletedBySymbol = Object.fromEntries(presetSymbols.map((symbol) => [symbol, 0])) as Record<string, number>;
 
     setBatchState({
+      startedAt: batchStartedAt,
       totalJobs: queue.length,
       completedJobs: 0,
       currentIndex: 0,
@@ -113,6 +140,7 @@ export default function FeatureLayerPage() {
       const item = queue[index];
 
       setBatchState({
+        startedAt: batchStartedAt,
         totalJobs: queue.length,
         completedJobs,
         currentIndex: index + 1,
@@ -136,6 +164,7 @@ export default function FeatureLayerPage() {
         completedBySymbol[item.symbol] = (completedBySymbol[item.symbol] ?? 0) + 1;
 
         setBatchState({
+          startedAt: batchStartedAt,
           totalJobs: queue.length,
           completedJobs,
           currentIndex: index + 1,
@@ -154,6 +183,7 @@ export default function FeatureLayerPage() {
   }
 
   const batchPercent = batchState ? Math.round((batchState.completedJobs / Math.max(1, batchState.totalJobs)) * 100) : 0;
+  const batchEtaText = useMemo(() => buildBatchEta(batchState), [batchState]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -218,6 +248,7 @@ export default function FeatureLayerPage() {
                 <p className="mt-1 text-sm text-slate-400">
                   Completed {batchState.completedJobs} jobs · Failed {batchState.failedJobs}
                 </p>
+                <p className="mt-1 text-sm text-slate-500">{batchEtaText}</p>
               </div>
               <p className="text-sm font-semibold text-emerald-100">{batchPercent}% complete</p>
             </div>
@@ -338,6 +369,11 @@ export default function FeatureLayerPage() {
                               {run.computed_end_at ? `Computed through ${formatDateTime(run.computed_end_at)}` : "No completed feature window"}
                             </span>
                           </div>
+                          {run.status === "running" ? (
+                            <p className="text-sm text-sky-200">
+                              {buildFeatureRunEta(run, averageRunDurationByKey)}
+                            </p>
+                          ) : null}
                           {run.error_text ? <p className="text-sm text-rose-200">{run.error_text}</p> : null}
                         </div>
                       ))}
@@ -353,4 +389,74 @@ export default function FeatureLayerPage() {
       </div>
     </div>
   );
+}
+
+function buildBatchEta(batchState: FeatureBatchState | null) {
+  if (!batchState) {
+    return null;
+  }
+
+  if (batchState.completedJobs <= 0) {
+    return "ETA will appear after the first completed job.";
+  }
+
+  const elapsedMs = Date.now() - batchState.startedAt;
+  if (!Number.isFinite(elapsedMs) || elapsedMs <= 0) {
+    return "ETA unavailable.";
+  }
+
+  const msPerJob = elapsedMs / batchState.completedJobs;
+  const remainingJobs = Math.max(batchState.totalJobs - batchState.completedJobs, 0);
+  const remainingMs = msPerJob * remainingJobs;
+  return formatEta(remainingMs);
+}
+
+function buildFeatureRunEta(run: FeatureRun, averageRunDurationByKey: Map<string, number>) {
+  const createdAtMs = new Date(run.created_at).getTime();
+  if (!Number.isFinite(createdAtMs)) {
+    return "ETA unavailable.";
+  }
+
+  const elapsedMs = Date.now() - createdAtMs;
+  const key = `${run.timeframe}:${run.lookback_days}`;
+  const expectedMs = averageRunDurationByKey.get(key) ?? estimateFeatureRunDurationMs(run.timeframe, run.lookback_days);
+
+  if (!Number.isFinite(expectedMs) || expectedMs <= 0) {
+    return "ETA unavailable.";
+  }
+
+  const remainingMs = Math.max(expectedMs - elapsedMs, 0);
+  if (remainingMs <= 0) {
+    return "Finalizing run...";
+  }
+
+  return `ETA ${formatEta(remainingMs)}`;
+}
+
+function estimateFeatureRunDurationMs(timeframe: string, lookbackDays: number) {
+  const msPerDay: Record<string, number> = {
+    "4h": 350,
+    "1h": 1200,
+    "15m": 1800,
+    "5m": 3500,
+    "1m": 12000,
+  };
+  return (msPerDay[timeframe] ?? 1500) * lookbackDays;
+}
+
+function formatEta(durationMs: number) {
+  if (!Number.isFinite(durationMs) || durationMs <= 0) {
+    return "Finalizing...";
+  }
+
+  const minutes = Math.round(durationMs / 60000);
+  if (minutes < 1) {
+    return "~< 1 min remaining.";
+  }
+  if (minutes < 60) {
+    return `~${minutes} min remaining.`;
+  }
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  return `~${hours}h ${remainingMinutes}m remaining.`;
 }
