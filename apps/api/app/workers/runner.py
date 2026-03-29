@@ -6,6 +6,7 @@ from app.core.config import get_settings
 from app.core.logging import configure_logging, get_logger
 from app.db.session import session_scope
 from app.services.paper_execution_service import PaperExecutionService
+from app.services.pattern_scan_run_service import PatternScanRunService
 from app.services.validation_run_service import ValidationRunService
 
 logger = get_logger(__name__)
@@ -40,6 +41,20 @@ def main() -> None:
                 queued_processed = validation_service.process_next_queued_run()
                 if queued_processed:
                     logger.info("Validation worker cycle completed")
+
+            with session_scope() as session:
+                pattern_scan_service = PatternScanRunService(session)
+                stale_count = pattern_scan_service.mark_stale_running_runs(
+                    stale_after_seconds=settings.pattern_scan_run_stale_after_seconds
+                )
+                if stale_count:
+                    logger.warning(
+                        "Pattern scan stale sweep completed",
+                        extra={"stale_runs_marked_failed": stale_count},
+                    )
+                queued_processed = pattern_scan_service.process_next_queued_run()
+                if queued_processed:
+                    logger.info("Pattern scan worker cycle completed")
 
             runs = service.process_active_runs(
                 max_candles_per_stream=settings.worker_max_candles_per_stream

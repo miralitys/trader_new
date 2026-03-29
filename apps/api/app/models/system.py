@@ -72,6 +72,30 @@ class ValidationRun(AppModel, TimestampMixin):
     report_json: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
 
 
+class PatternScanRun(AppModel, TimestampMixin):
+    __tablename__ = "pattern_scan_runs"
+
+    exchange: Mapped[str] = mapped_column(Text, nullable=False)
+    symbols_json: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
+    timeframes_json: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
+    lookback_days: Mapped[int] = mapped_column(Integer, nullable=False, default=730)
+    forward_bars: Mapped[int] = mapped_column(Integer, nullable=False, default=12)
+    fee_pct: Mapped[str] = mapped_column(Text, nullable=False, default="0.001")
+    slippage_pct: Mapped[str] = mapped_column(Text, nullable=False, default="0.0005")
+    max_bars_per_series: Mapped[int] = mapped_column(Integer, nullable=False, default=5000)
+    status: Mapped[SyncJobStatus] = mapped_column(
+        pg_enum(SyncJobStatus, "sync_job_status_enum"),
+        nullable=False,
+        default=SyncJobStatus.QUEUED,
+    )
+    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    error_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    progress_json: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
+    report_summary_json: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
+    report_json: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
+
+
 class AppLog(AppModel, CreatedAtMixin):
     __tablename__ = "app_logs"
 

@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 from app.api.dependencies import (
     get_data_validation_service,
     get_feature_layer_service,
+    get_pattern_scan_run_service,
     get_pattern_research_service,
     get_query_service,
     get_validation_run_service,
@@ -20,6 +21,7 @@ from app.schemas.api import (
     ValidationRunProgressResponse,
     ValidationRunResponse,
 )
+from app.schemas.research import PatternScanProgressResponse, PatternScanRunResponse
 from app.schemas.research import PatternSummaryResponse, ResearchCoverageResponse, ResearchSummaryResponse
 
 
@@ -252,6 +254,75 @@ class FakeValidationRunService:
         return self.list_runs(limit=1)[0]
 
 
+class FakePatternScanRunService:
+    def create_run(self, request) -> PatternScanRunResponse:
+        return PatternScanRunResponse(
+            id=2,
+            exchange=request.exchange_code,
+            symbols=request.symbols,
+            timeframes=request.timeframes,
+            lookback_days=request.lookback_days,
+            forward_bars=request.forward_bars,
+            fee_pct=Decimal(str(request.fee_pct)),
+            slippage_pct=Decimal(str(request.slippage_pct)),
+            max_bars_per_series=request.max_bars_per_series,
+            status="queued",
+            started_at=None,
+            completed_at=None,
+            error_text=None,
+            progress=PatternScanProgressResponse(
+                phase="queued",
+                processed_series=0,
+                total_series=len(request.symbols) * len(request.timeframes),
+                percent_complete=Decimal("0"),
+                current_symbol=None,
+                current_timeframe=None,
+            ),
+            report_summary=None,
+            report=None,
+            created_at=datetime(2026, 3, 28, 1, 0, tzinfo=timezone.utc),
+            updated_at=datetime(2026, 3, 28, 1, 0, tzinfo=timezone.utc),
+        )
+
+    def list_runs(self, limit: int = 20) -> list[PatternScanRunResponse]:
+        _ = limit
+        report = FakePatternResearchService().get_summary()
+        return [
+            PatternScanRunResponse(
+                id=2,
+                exchange="binance_us",
+                symbols=["BTC-USDT"],
+                timeframes=["5m"],
+                lookback_days=730,
+                forward_bars=12,
+                fee_pct=Decimal("0.001"),
+                slippage_pct=Decimal("0.0005"),
+                max_bars_per_series=5000,
+                status="completed",
+                started_at=datetime(2026, 3, 28, 1, 0, tzinfo=timezone.utc),
+                completed_at=datetime(2026, 3, 28, 1, 10, tzinfo=timezone.utc),
+                error_text=None,
+                progress=PatternScanProgressResponse(
+                    phase="completed",
+                    processed_series=1,
+                    total_series=1,
+                    percent_complete=Decimal("100"),
+                    current_symbol=None,
+                    current_timeframe=None,
+                ),
+                report_summary=report,
+                report=report,
+                created_at=datetime(2026, 3, 28, 1, 0, tzinfo=timezone.utc),
+                updated_at=datetime(2026, 3, 28, 1, 10, tzinfo=timezone.utc),
+            )
+        ]
+
+    def get_run(self, run_id: int) -> PatternScanRunResponse | None:
+        if run_id != 2:
+            return None
+        return self.list_runs(limit=1)[0]
+
+
 def test_research_summary_endpoint_returns_pattern_payload(client: TestClient) -> None:
     app.dependency_overrides[get_pattern_research_service] = lambda: FakePatternResearchService()
 
@@ -372,3 +443,37 @@ def test_data_validation_runs_endpoint_returns_history(client: TestClient) -> No
     payload = response.json()
     assert len(payload) == 1
     assert payload[0]["status"] == "queued"
+
+
+def test_pattern_scan_start_endpoint_returns_queued_run(client: TestClient) -> None:
+    app.dependency_overrides[get_pattern_scan_run_service] = lambda: FakePatternScanRunService()
+
+    response = client.post(
+        "/api/patterns/scan/start",
+        json={
+            "exchange_code": "binance_us",
+            "symbols": ["BTC-USDT", "ETH-USDT"],
+            "timeframes": ["5m", "15m"],
+            "lookback_days": 720,
+            "forward_bars": 12,
+            "fee_pct": 0.001,
+            "slippage_pct": 0.0005,
+            "max_bars_per_series": 5000,
+        },
+    )
+
+    assert response.status_code == 202
+    payload = response.json()
+    assert payload["status"] == "queued"
+    assert payload["progress"]["total_series"] == 4
+
+
+def test_pattern_scan_runs_endpoint_returns_history(client: TestClient) -> None:
+    app.dependency_overrides[get_pattern_scan_run_service] = lambda: FakePatternScanRunService()
+
+    response = client.get("/api/patterns/scans")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert len(payload) == 1
+    assert payload[0]["report"]["patterns"][0]["pattern_code"] == "range_breakout"

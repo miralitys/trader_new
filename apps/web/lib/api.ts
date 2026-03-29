@@ -15,6 +15,8 @@ import type {
   DataSyncResponse,
   HealthResponse,
   LogFilters,
+  PatternScanRequest,
+  PatternScanRun,
   ResearchSummary,
   SyncJob,
   SyncJobFilters,
@@ -75,6 +77,21 @@ export function getHealth() {
 
 export function getResearchSummary() {
   return apiRequest<ResearchSummary>("/api/research/summary");
+}
+
+export function startPatternScan(payload: PatternScanRequest) {
+  return apiRequest<PatternScanRun>("/api/patterns/scan/start", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getPatternScans(limit = 20) {
+  return apiRequest<PatternScanRun[]>(
+    `/api/patterns/scans${buildQueryString({
+      limit,
+    })}`,
+  );
 }
 
 export function runDataSync(payload: DataSyncRequest) {

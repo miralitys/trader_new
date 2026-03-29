@@ -10,9 +10,11 @@ import {
   getFeatureRuns,
   getHealth,
   getLogs,
+  getPatternScans,
   getResearchSummary,
   runDataValidation,
   startDataValidationRun,
+  startPatternScan,
   getSyncJobs,
   runDataSync,
   runFeatureLayer,
@@ -24,6 +26,8 @@ import type {
   FeatureRunFilters,
   FeatureRunRequest,
   LogFilters,
+  PatternScanRequest,
+  PatternScanRun,
   SyncJobFilters,
   ValidationRun,
 } from "@/lib/types";
@@ -37,6 +41,7 @@ export const queryKeys = {
   featureRuns: (filters: FeatureRunFilters) => ["feature-runs", filters] as const,
   featureCoverage: ["feature-coverage"] as const,
   dataValidationRuns: (limit: number) => ["data-validation-runs", limit] as const,
+  patternScans: (limit: number) => ["pattern-scans", limit] as const,
   logs: (filters: LogFilters) => ["logs", filters] as const,
 };
 
@@ -117,6 +122,22 @@ export function useDataValidationRuns(limit = 20, enabled = true) {
   });
 }
 
+export function usePatternScans(limit = 20, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.patternScans(limit),
+    queryFn: () => getPatternScans(limit),
+    enabled,
+    refetchInterval: (query) => {
+      const runs = (query.state.data as PatternScanRun[] | undefined) ?? [];
+      const latest = runs[0];
+      if (latest && (latest.status === "queued" || latest.status === "running")) {
+        return 5000;
+      }
+      return false;
+    },
+  });
+}
+
 export function useRunDataSync() {
   const queryClient = useQueryClient();
 
@@ -159,6 +180,20 @@ export function useRunFeatureLayer() {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.featureRuns({}) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.featureCoverage }),
+      ]);
+    },
+  });
+}
+
+export function useStartPatternScan() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (payload: PatternScanRequest) => startPatternScan(payload),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.patternScans(20) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.research }),
       ]);
     },
   });

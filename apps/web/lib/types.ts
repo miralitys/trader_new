@@ -541,6 +541,47 @@ export type ResearchSummary = {
   notes: string[];
 };
 
+export type PatternScanRequest = {
+  exchange_code: string;
+  symbols: string[];
+  timeframes: string[];
+  lookback_days: number;
+  forward_bars: number;
+  fee_pct: NumericValue;
+  slippage_pct: NumericValue;
+  max_bars_per_series: number;
+};
+
+export type PatternScanProgress = {
+  phase: string;
+  processed_series: number;
+  total_series: number;
+  percent_complete: NumericValue;
+  current_symbol: string | null;
+  current_timeframe: string | null;
+};
+
+export type PatternScanRun = {
+  id: number;
+  exchange: string;
+  symbols: string[];
+  timeframes: string[];
+  lookback_days: number;
+  forward_bars: number;
+  fee_pct: NumericValue;
+  slippage_pct: NumericValue;
+  max_bars_per_series: number;
+  status: string;
+  started_at: string | null;
+  completed_at: string | null;
+  error_text: string | null;
+  progress: PatternScanProgress | null;
+  report_summary: ResearchSummary | null;
+  report: ResearchSummary | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type StrategyRunFilters = {
   strategyCode?: string;
   status?: string;

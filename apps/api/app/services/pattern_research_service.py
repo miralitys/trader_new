@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import timedelta
 from decimal import Decimal
 from statistics import median
+from typing import Callable, Optional
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -41,6 +42,7 @@ class PatternResearchService:
         fee_pct: Decimal = Decimal("0.001"),
         slippage_pct: Decimal = Decimal("0.0005"),
         max_bars_per_series: int = 5000,
+        progress_callback: Optional[Callable[[str, str, int, int], None]] = None,
     ) -> ResearchSummaryResponse:
         selected_symbols = [symbol for symbol in (symbols or list(supported_symbol_codes())[:8]) if symbol]
         selected_timeframes = [timeframe for timeframe in (timeframes or ["1m", "5m", "15m", "1h"]) if timeframe]
@@ -64,6 +66,7 @@ class PatternResearchService:
             fee_pct=fee_pct,
             slippage_pct=slippage_pct,
             max_bars_per_series=max_bars_per_series,
+            progress_callback=progress_callback,
         )
 
         notes = [
@@ -162,6 +165,7 @@ class PatternResearchService:
         fee_pct: Decimal,
         slippage_pct: Decimal,
         max_bars_per_series: int,
+        progress_callback: Optional[Callable[[str, str, int, int], None]] = None,
     ) -> list[PatternSummaryResponse]:
         exchange = self.session.scalar(select(Exchange).where(Exchange.code == exchange_code))
         if exchange is None:
@@ -169,69 +173,76 @@ class PatternResearchService:
 
         results: list[PatternSummaryResponse] = []
         friction_pct = float((fee_pct + slippage_pct) * 2)
+        total = len(coverage)
+        processed = 0
 
         for item in coverage:
-            if not item.ready_for_pattern_scan:
-                continue
-
-            symbol = self.session.scalar(
-                select(Symbol).where(Symbol.exchange_id == exchange.id, Symbol.code == item.symbol)
-            )
-            if symbol is None:
-                continue
-
-            candles = list(
-                self.session.scalars(
-                    select(Candle)
-                    .where(
-                        Candle.exchange_id == exchange.id,
-                        Candle.symbol_id == symbol.id,
-                        Candle.timeframe == item.timeframe,
-                        Candle.open_time >= start_at,
-                        Candle.open_time <= end_at,
-                    )
-                    .order_by(Candle.open_time.desc())
-                    .limit(max_bars_per_series)
-                )
-            )
-            candles.reverse()
-            if len(candles) < max(80, forward_bars + 25):
-                continue
-
-            for definition in PATTERN_DEFINITIONS:
-                forward_returns = self._scan_pattern(definition.code, candles, forward_bars)
-                if not forward_returns:
+            try:
+                if not item.ready_for_pattern_scan:
                     continue
 
-                net_returns = [value - friction_pct for value in forward_returns]
-                sample_size = len(net_returns)
-                avg_forward = sum(forward_returns) / sample_size
-                avg_net = sum(net_returns) / sample_size
-                win_rate = sum(1 for value in net_returns if value > 0) / sample_size * 100
-                verdict = "monitor"
-                if sample_size < 8:
-                    verdict = "insufficient_sample"
-                elif avg_net > 0 and win_rate >= 52:
-                    verdict = "candidate"
-                elif avg_net <= 0:
-                    verdict = "not_profitable"
+                symbol = self.session.scalar(
+                    select(Symbol).where(Symbol.exchange_id == exchange.id, Symbol.code == item.symbol)
+                )
+                if symbol is None:
+                    continue
 
-                results.append(
-                    PatternSummaryResponse(
-                        pattern_code=definition.code,
-                        pattern_name=definition.name,
-                        symbol=item.symbol,
-                        timeframe=item.timeframe,
-                        sample_size=sample_size,
-                        win_rate_pct=_to_percent_decimal(win_rate),
-                        avg_forward_return_pct=_to_percent_decimal(avg_forward * 100),
-                        median_forward_return_pct=_to_percent_decimal(median(forward_returns) * 100),
-                        avg_net_return_pct=_to_percent_decimal(avg_net * 100),
-                        best_forward_return_pct=_to_percent_decimal(max(forward_returns) * 100),
-                        worst_forward_return_pct=_to_percent_decimal(min(forward_returns) * 100),
-                        verdict=verdict,
+                candles = list(
+                    self.session.scalars(
+                        select(Candle)
+                        .where(
+                            Candle.exchange_id == exchange.id,
+                            Candle.symbol_id == symbol.id,
+                            Candle.timeframe == item.timeframe,
+                            Candle.open_time >= start_at,
+                            Candle.open_time <= end_at,
+                        )
+                        .order_by(Candle.open_time.desc())
+                        .limit(max_bars_per_series)
                     )
                 )
+                candles.reverse()
+                if len(candles) < max(80, forward_bars + 25):
+                    continue
+
+                for definition in PATTERN_DEFINITIONS:
+                    forward_returns = self._scan_pattern(definition.code, candles, forward_bars)
+                    if not forward_returns:
+                        continue
+
+                    net_returns = [value - friction_pct for value in forward_returns]
+                    sample_size = len(net_returns)
+                    avg_forward = sum(forward_returns) / sample_size
+                    avg_net = sum(net_returns) / sample_size
+                    win_rate = sum(1 for value in net_returns if value > 0) / sample_size * 100
+                    verdict = "monitor"
+                    if sample_size < 8:
+                        verdict = "insufficient_sample"
+                    elif avg_net > 0 and win_rate >= 52:
+                        verdict = "candidate"
+                    elif avg_net <= 0:
+                        verdict = "not_profitable"
+
+                    results.append(
+                        PatternSummaryResponse(
+                            pattern_code=definition.code,
+                            pattern_name=definition.name,
+                            symbol=item.symbol,
+                            timeframe=item.timeframe,
+                            sample_size=sample_size,
+                            win_rate_pct=_to_percent_decimal(win_rate),
+                            avg_forward_return_pct=_to_percent_decimal(avg_forward * 100),
+                            median_forward_return_pct=_to_percent_decimal(median(forward_returns) * 100),
+                            avg_net_return_pct=_to_percent_decimal(avg_net * 100),
+                            best_forward_return_pct=_to_percent_decimal(max(forward_returns) * 100),
+                            worst_forward_return_pct=_to_percent_decimal(min(forward_returns) * 100),
+                            verdict=verdict,
+                        )
+                    )
+            finally:
+                processed += 1
+                if progress_callback is not None:
+                    progress_callback(item.symbol, item.timeframe, processed, total)
 
         results.sort(
             key=lambda item: (
