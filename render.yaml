@@ -63,6 +63,16 @@ services:
         value: "14400"
       - key: VALIDATION_RUN_STALE_AFTER_SECONDS
         value: "600"
+      - key: NIGHTLY_ALL_DATA_SYNC_ENABLED
+        value: "true"
+      - key: NIGHTLY_ALL_DATA_SYNC_TIMEZONE
+        value: America/Chicago
+      - key: NIGHTLY_ALL_DATA_SYNC_HOUR
+        value: "0"
+      - key: NIGHTLY_ALL_DATA_SYNC_MINUTE
+        value: "0"
+      - key: NIGHTLY_ALL_DATA_SYNC_LOOKBACK_DAYS
+        value: "1"
 
   - type: worker
     name: trader-mvp-worker
@@ -119,6 +129,16 @@ services:
         value: "14400"
       - key: VALIDATION_RUN_STALE_AFTER_SECONDS
         value: "600"
+      - key: NIGHTLY_ALL_DATA_SYNC_ENABLED
+        value: "true"
+      - key: NIGHTLY_ALL_DATA_SYNC_TIMEZONE
+        value: America/Chicago
+      - key: NIGHTLY_ALL_DATA_SYNC_HOUR
+        value: "0"
+      - key: NIGHTLY_ALL_DATA_SYNC_MINUTE
+        value: "0"
+      - key: NIGHTLY_ALL_DATA_SYNC_LOOKBACK_DAYS
+        value: "1"
 
   - type: web
     name: trader-mvp-frontend

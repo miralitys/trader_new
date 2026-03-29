@@ -6,7 +6,7 @@ from app.models.market_data import Candle, MarketFeature
 from app.models.paper import PaperAccount
 from app.models.reference import Exchange, Strategy, Symbol, Timeframe
 from app.models.strategy import Order, Position, Signal, StrategyConfig, StrategyRun, Trade
-from app.models.system import AppLog, FeatureRun, PatternScanRun, SyncJob, ValidationRun
+from app.models.system import AppLog, FeatureRun, PatternScanRun, ScheduledTaskState, SyncJob, ValidationRun
 
 __all__ = [
     "AppLog",
@@ -21,6 +21,7 @@ __all__ = [
     "Order",
     "PaperAccount",
     "PatternScanRun",
+    "ScheduledTaskState",
     "PerpPrice",
     "Position",
     "Signal",

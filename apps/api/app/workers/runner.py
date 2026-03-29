@@ -5,6 +5,7 @@ import time
 from app.core.config import get_settings
 from app.core.logging import configure_logging, get_logger
 from app.db.session import session_scope
+from app.services.nightly_data_sync_service import NightlyDataSyncService
 from app.services.paper_execution_service import PaperExecutionService
 from app.services.pattern_scan_run_service import PatternScanRunService
 from app.services.validation_run_service import ValidationRunService
@@ -28,6 +29,15 @@ def main() -> None:
 
     while True:
         try:
+            with session_scope() as session:
+                nightly_sync_service = NightlyDataSyncService(session)
+                try:
+                    scheduled_processed = nightly_sync_service.process_if_due()
+                    if scheduled_processed:
+                        logger.info("Nightly all-data sync cycle completed")
+                finally:
+                    nightly_sync_service.close()
+
             with session_scope() as session:
                 validation_service = ValidationRunService(session)
                 stale_count = validation_service.mark_stale_running_runs(

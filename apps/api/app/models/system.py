@@ -96,6 +96,21 @@ class PatternScanRun(AppModel, TimestampMixin):
     report_json: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
 
 
+class ScheduledTaskState(AppModel, TimestampMixin):
+    __tablename__ = "scheduled_task_states"
+
+    task_key: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    timezone_name: Mapped[str] = mapped_column(Text, nullable=False, default="America/Chicago")
+    schedule_local_hour: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    schedule_local_minute: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    lookback_days: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    last_scheduled_date: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    last_started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_status: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    last_error_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+
 class AppLog(AppModel, CreatedAtMixin):
     __tablename__ = "app_logs"
 
