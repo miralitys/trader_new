@@ -382,6 +382,10 @@ class FeatureWorkspaceResetResponse(APIModel):
     deleted_feature_rows: int = 0
 
 
+class FeatureFailedRunsClearResponse(APIModel):
+    deleted_failed_feature_runs: int = 0
+
+
 class CandleCoverageResponse(APIModel):
     exchange_code: str
     symbol: str

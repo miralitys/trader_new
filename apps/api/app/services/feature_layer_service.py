@@ -405,6 +405,15 @@ class FeatureLayerService:
             "deleted_feature_rows": deleted_rows,
         }
 
+    def clear_failed_runs(self) -> dict[str, int]:
+        deleted_failed_runs = self.feature_repository.delete_failed_runs()
+        self.session.commit()
+        logger.warning(
+            "Feature workspace failed runs cleared",
+            extra={"deleted_failed_feature_runs": deleted_failed_runs},
+        )
+        return {"deleted_failed_feature_runs": deleted_failed_runs}
+
     def _build_run_response(self, run: FeatureRun) -> FeatureRunResponse:
         return FeatureRunResponse(
             id=run.id,

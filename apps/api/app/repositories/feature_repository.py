@@ -130,6 +130,12 @@ class FeatureRepository(BaseRepository):
         result = self.session.execute(delete(FeatureRun))
         return int(result.rowcount or 0)
 
+    def delete_failed_runs(self) -> int:
+        result = self.session.execute(
+            delete(FeatureRun).where(FeatureRun.status == SyncJobStatus.FAILED)
+        )
+        return int(result.rowcount or 0)
+
     def delete_all_features(self) -> int:
         result = self.session.execute(delete(MarketFeature))
         return int(result.rowcount or 0)

@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, Query, status
 from app.api.dependencies import get_feature_layer_service
 from app.schemas.api import (
     FeatureCoverageResponse,
+    FeatureFailedRunsClearResponse,
     FeatureRunRequest,
     FeatureRunResponse,
     FeatureWorkspaceResetResponse,
@@ -53,3 +54,10 @@ def reset_feature_workspace(
     service: FeatureLayerService = Depends(get_feature_layer_service),
 ) -> FeatureWorkspaceResetResponse:
     return FeatureWorkspaceResetResponse(**service.reset_workspace())
+
+
+@router.post("/clear-failed", response_model=FeatureFailedRunsClearResponse, summary="Clear failed feature runs")
+def clear_failed_feature_runs(
+    service: FeatureLayerService = Depends(get_feature_layer_service),
+) -> FeatureFailedRunsClearResponse:
+    return FeatureFailedRunsClearResponse(**service.clear_failed_runs())
