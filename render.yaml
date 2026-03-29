@@ -32,7 +32,7 @@ services:
       - key: SECRET_KEY
         generateValue: true
       - key: ALLOWED_ORIGINS
-        value: '["https://trader-mvp-frontend.onrender.com","http://localhost:3000"]'
+        value: '["https://trader-mvp-frontend.onrender.com","https://trader-frontend-i1cr.onrender.com","http://localhost:3000"]'
       - key: DATABASE_URL
         fromDatabase:
           name: trader-mvp-db
