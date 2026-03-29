@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
+from sqlalchemy import delete
 from sqlalchemy import select
 
 from app.models import ValidationRun
@@ -63,6 +64,12 @@ class ValidationRunRepository(BaseRepository):
             .limit(1)
         )
         return self.session.scalar(stmt)
+
+    def delete_failed_runs(self) -> int:
+        result = self.session.execute(
+            delete(ValidationRun).where(ValidationRun.status == SyncJobStatus.FAILED)
+        )
+        return int(result.rowcount or 0)
 
     def list_stale_running_runs(self, *, stale_before: datetime) -> list[ValidationRun]:
         stmt = (

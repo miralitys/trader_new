@@ -327,6 +327,10 @@ class ValidationRunResponse(APIModel):
     updated_at: datetime
 
 
+class ValidationFailedRunsClearResponse(APIModel):
+    deleted_failed_validation_runs: int = 0
+
+
 class FeatureRunRequest(APIModel):
     exchange_code: str = "binance_us"
     symbol: str

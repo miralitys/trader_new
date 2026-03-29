@@ -50,6 +50,15 @@ class ValidationRunService:
             return None
         return self._to_response(run)
 
+    def clear_failed_runs(self) -> dict[str, int]:
+        deleted_failed_validation_runs = self.repository.delete_failed_runs()
+        self.session.commit()
+        logger.warning(
+            "Validation failed runs cleared",
+            extra={"deleted_failed_validation_runs": deleted_failed_validation_runs},
+        )
+        return {"deleted_failed_validation_runs": deleted_failed_validation_runs}
+
     def run_in_background(self, run_id: int) -> None:
         self.execute_run(run_id)
 

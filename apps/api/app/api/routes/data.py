@@ -26,6 +26,7 @@ from app.schemas.api import (
     DataValidationTimeframeSummaryResponse,
     DataValidationOneMinuteSummaryResponse,
     SyncJobResponse,
+    ValidationFailedRunsClearResponse,
     ValidationRunResponse,
 )
 from app.services.data_validation_service import DataValidationService, build_validation_report_payload
@@ -226,3 +227,15 @@ def get_data_validation_run(
     if run is None:
         raise BadRequestError(f"Validation run {run_id} was not found")
     return run
+
+
+@router.post(
+    "/data/validation-report/clear-failed",
+    response_model=ValidationFailedRunsClearResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Clear failed validation runs",
+)
+def clear_failed_data_validation_runs(
+    service: ValidationRunService = Depends(get_validation_run_service),
+) -> ValidationFailedRunsClearResponse:
+    return ValidationFailedRunsClearResponse(**service.clear_failed_runs())
