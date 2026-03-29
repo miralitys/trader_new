@@ -13,7 +13,11 @@ from app.schemas.api import (
     DataValidationSummaryResponse,
     ValidationRunResponse,
 )
-from app.services.data_validation_service import DataValidationService, build_validation_report_payload
+from app.services.data_validation_service import (
+    DataValidationService,
+    build_validation_report_payload,
+    normalize_validation_report_response_payload,
+)
 from app.utils.time import utc_now
 
 logger = get_logger(__name__)
@@ -101,8 +105,14 @@ class ValidationRunService:
                     validation_service.close()
 
                 payload = build_validation_report_payload(report)
+                normalized_report_payload = normalize_validation_report_response_payload(
+                    {
+                        "summary": payload["summary"],
+                        "results": payload["results"],
+                    }
+                )
                 response_payload = DataValidationReportResponse(
-                    summary=DataValidationSummaryResponse(**payload["summary"]),
+                    summary=DataValidationSummaryResponse(**normalized_report_payload["summary"]),
                     results=[],
                 )
                 repository.mark_completed(
@@ -111,8 +121,8 @@ class ValidationRunService:
                     report_summary_json=jsonable_encoder(response_payload.summary),
                     report_json=jsonable_encoder(
                         DataValidationReportResponse(
-                            summary=DataValidationSummaryResponse(**payload["summary"]),
-                            results=payload["results"],
+                            summary=DataValidationSummaryResponse(**normalized_report_payload["summary"]),
+                            results=normalized_report_payload["results"],
                         )
                     ),
                 )
@@ -176,7 +186,8 @@ class ValidationRunService:
 
         report = None
         if run.report_json and "summary" in run.report_json:
-            report = DataValidationReportResponse(**run.report_json)
+            normalized_report_json = normalize_validation_report_response_payload(run.report_json)
+            report = DataValidationReportResponse(**normalized_report_json)
 
         return ValidationRunResponse(
             id=run.id,

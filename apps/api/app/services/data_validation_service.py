@@ -269,9 +269,23 @@ def build_validation_report_payload(report: DataValidationReport) -> dict[str, A
     }
 
 
+def normalize_validation_report_response_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    normalized = dict(payload)
+    raw_results = normalized.get("results") or []
+    if isinstance(raw_results, list):
+        normalized["results"] = [_normalize_validation_result_payload(row) for row in raw_results if isinstance(row, dict)]
+    else:
+        normalized["results"] = []
+    return normalized
+
+
 def _normalize_validation_result_payload(row: dict[str, Any]) -> dict[str, Any]:
     normalized = dict(row)
     validation_window = dict(normalized.get("validation_window") or {})
+    if validation_window:
+        normalized["exchange_code"] = normalized.get("exchange_code") or validation_window.get("exchange_code")
+        normalized["symbol"] = normalized.get("symbol") or validation_window.get("symbol") or validation_window.get("symbol_code")
+        normalized["timeframe"] = normalized.get("timeframe") or validation_window.get("timeframe")
     if validation_window:
         normalized["validation_window"] = {
             "exchange_code": validation_window.get("exchange_code"),

@@ -16,6 +16,7 @@ from app.services.data_validation_service import (
     TimestampAlignmentSummary,
     build_validation_report_payload,
     derive_recent_window,
+    normalize_validation_report_response_payload,
 )
 
 
@@ -188,3 +189,64 @@ def test_build_validation_report_payload_normalizes_validation_window_keys() -> 
     assert payload["results"][0]["validation_window"]["symbol"] == "BTC-USDT"
     assert payload["results"][0]["validation_window"]["loaded_start_at"] == datetime(2024, 3, 28, 0, 0, tzinfo=timezone.utc)
     assert payload["results"][0]["validation_window"]["loaded_end_at"] == datetime(2026, 3, 28, 0, 0, tzinfo=timezone.utc)
+
+
+def test_normalize_validation_report_response_payload_backfills_legacy_result_fields() -> None:
+    payload = {
+        "summary": {
+            "generated_at": datetime(2026, 3, 28, 1, 0, tzinfo=timezone.utc),
+            "exchange_code": "binance_us",
+            "lookback_days": 730,
+            "verdict": "PASS",
+            "overview": {
+                "total_series": 1,
+                "pass_count": 1,
+                "warning_count": 0,
+                "fail_count": 0,
+                "duplicate_rows_total": 0,
+                "invalid_timestamps_total": 0,
+                "internal_gap_total": 0,
+            },
+            "worst_symbols": [],
+            "worst_timeframes": [],
+            "one_minute_laggards": [],
+            "completion_by_timeframe": {"4h": Decimal("100.0")},
+        },
+        "results": [
+            {
+                "stored_range": {
+                    "first_candle": datetime(2024, 3, 28, 0, 0, tzinfo=timezone.utc),
+                    "last_candle": datetime(2026, 3, 28, 0, 0, tzinfo=timezone.utc),
+                    "candle_count": 100,
+                    "expected_candle_count": 100,
+                    "completion_pct": Decimal("100.00"),
+                },
+                "validation_window": {
+                    "exchange_code": "binance_us",
+                    "symbol_code": "BTC-USDT",
+                    "timeframe": "4h",
+                    "requested_start_at": datetime(2024, 3, 28, 0, 0, tzinfo=timezone.utc),
+                    "requested_end_at": datetime(2026, 3, 28, 0, 0, tzinfo=timezone.utc),
+                    "actual_start_at": datetime(2024, 3, 28, 0, 0, tzinfo=timezone.utc),
+                    "actual_end_at": datetime(2026, 3, 28, 0, 0, tzinfo=timezone.utc),
+                    "candle_count": 100,
+                    "expected_candle_count": 100,
+                    "missing_candle_count": 0,
+                    "completion_pct": Decimal("100.00"),
+                },
+                "duplicates": {"duplicate_count": 0, "duplicate_bucket_count": 0, "sample_duplicates": []},
+                "timestamp_alignment": {"invalid_timestamp_count": 0, "sample_invalid_timestamps": []},
+                "gaps": {"missing_candle_count": 0, "sample_missing_timestamps": []},
+                "issues": [],
+                "verdict": "PASS",
+            }
+        ],
+    }
+
+    normalized = normalize_validation_report_response_payload(payload)
+
+    assert normalized["results"][0]["exchange_code"] == "binance_us"
+    assert normalized["results"][0]["symbol"] == "BTC-USDT"
+    assert normalized["results"][0]["timeframe"] == "4h"
+    assert normalized["results"][0]["validation_window"]["symbol"] == "BTC-USDT"
+    assert normalized["results"][0]["validation_window"]["loaded_start_at"] == datetime(2024, 3, 28, 0, 0, tzinfo=timezone.utc)
