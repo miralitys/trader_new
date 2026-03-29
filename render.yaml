@@ -61,6 +61,8 @@ services:
         value: "100"
       - key: BACKTEST_STALE_AFTER_SECONDS
         value: "14400"
+      - key: VALIDATION_RUN_STALE_AFTER_SECONDS
+        value: "600"
 
   - type: worker
     name: trader-mvp-worker
@@ -115,6 +117,8 @@ services:
         value: "100"
       - key: BACKTEST_STALE_AFTER_SECONDS
         value: "14400"
+      - key: VALIDATION_RUN_STALE_AFTER_SECONDS
+        value: "600"
 
   - type: web
     name: trader-mvp-frontend

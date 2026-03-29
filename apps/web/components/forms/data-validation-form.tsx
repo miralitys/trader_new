@@ -32,6 +32,7 @@ const validationSymbols = [
 ] as const;
 
 const validationTimeframes = ["1m", "5m", "15m", "1h", "4h"] as const;
+const validationStaleAfterMs = 10 * 60 * 1000;
 
 export function DataValidationForm() {
   const startValidationMutation = useStartDataValidationRun();
@@ -46,6 +47,7 @@ export function DataValidationForm() {
   const report = latestReport ?? latestCompletedRun?.report ?? null;
   const runningRun = useMemo(() => runs.find((run) => run.status === "queued" || run.status === "running") ?? null, [runs]);
   const runningEtaText = useMemo(() => buildValidationEta(runningRun), [runningRun]);
+  const runningRunAppearsStalled = useMemo(() => isRunStalled(runningRun), [runningRun]);
 
   const csvHref = useMemo(() => buildCsvHref(report), [report]);
   const jsonHref = useMemo(() => buildJsonHref(report), [report]);
@@ -114,16 +116,22 @@ export function DataValidationForm() {
             </div>
 
             {runningRun ? (
-              <div className="rounded-2xl border border-sky-400/15 bg-sky-400/10 px-4 py-3 text-sm text-sky-100">
+              <div
+                className={`rounded-2xl px-4 py-3 text-sm ${
+                  runningRunAppearsStalled
+                    ? "border border-amber-400/20 bg-amber-400/10 text-amber-100"
+                    : "border border-sky-400/15 bg-sky-400/10 text-sky-100"
+                }`}
+              >
                 <p className="font-medium">
-                  Validation {runningRun.status} · run #{runningRun.id}
+                  Validation {runningRunAppearsStalled ? "appears stalled" : runningRun.status} · run #{runningRun.id}
                 </p>
-                <p className="mt-1 text-sky-100/80">
+                <p className={`mt-1 ${runningRunAppearsStalled ? "text-amber-100/80" : "text-sky-100/80"}`}>
                   Started {formatNullableDateTime(runningRun.started_at)} · updated {formatNullableDateTime(runningRun.updated_at)}
                 </p>
                 {runningRun.progress ? (
                   <div className="mt-3 space-y-2">
-                    <div className="flex items-center justify-between gap-3 text-xs text-sky-100/85">
+                    <div className={`flex items-center justify-between gap-3 text-xs ${runningRunAppearsStalled ? "text-amber-100/85" : "text-sky-100/85"}`}>
                       <span>
                         {runningRun.progress.processed_series}/{runningRun.progress.total_series} series
                       </span>
@@ -131,14 +139,18 @@ export function DataValidationForm() {
                     </div>
                     <div className="h-2 overflow-hidden rounded-full bg-slate-950/40">
                       <div
-                        className="h-full rounded-full bg-sky-300 transition-all duration-300"
+                        className={`h-full rounded-full transition-all duration-300 ${runningRunAppearsStalled ? "bg-amber-300" : "bg-sky-300"}`}
                         style={{ width: `${Number(runningRun.progress.percent_complete) || 0}%` }}
                       />
                     </div>
-                    <p className="text-xs text-sky-100/75">
+                    <p className={`text-xs ${runningRunAppearsStalled ? "text-amber-100/75" : "text-sky-100/75"}`}>
                       Current: {runningRun.progress.current_symbol ?? "—"} · {runningRun.progress.current_timeframe ?? "—"}
                     </p>
-                    <p className="text-xs text-sky-100/75">{runningEtaText}</p>
+                    <p className={`text-xs ${runningRunAppearsStalled ? "text-amber-100/75" : "text-sky-100/75"}`}>
+                      {runningRunAppearsStalled
+                        ? "No progress update for more than 10 minutes. This run likely stalled and should be marked failed by the worker shortly."
+                        : runningEtaText}
+                    </p>
                   </div>
                 ) : null}
               </div>
@@ -502,6 +514,19 @@ function buildValidationEta(run: ValidationRun | null) {
   const hours = Math.floor(remainingMinutes / 60);
   const minutes = remainingMinutes % 60;
   return `ETA ~${hours}h ${minutes}m remaining.`;
+}
+
+function isRunStalled(run: ValidationRun | null) {
+  if (!run || (run.status !== "queued" && run.status !== "running") || !run.updated_at) {
+    return false;
+  }
+
+  const updatedAtMs = new Date(run.updated_at).getTime();
+  if (!Number.isFinite(updatedAtMs)) {
+    return false;
+  }
+
+  return Date.now() - updatedAtMs > validationStaleAfterMs;
 }
 
 const inputClassName =
