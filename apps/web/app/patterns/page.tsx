@@ -9,12 +9,13 @@ import { LoadingState } from "@/components/ui/loading-state";
 import { MetricCard } from "@/components/ui/metric-card";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { longDayPresets, presetSymbols, presetTimeframes } from "@/lib/preset-symbols";
+import { longDayPresets, presetSymbols } from "@/lib/preset-symbols";
 import { usePatternScans, useResearchSummary, useStartPatternScan } from "@/lib/query-hooks";
 import type { PatternScanRun, ResearchSummary } from "@/lib/types";
 import { formatDateTime, formatInteger, formatPercent, getErrorMessage } from "@/lib/utils";
 
 const forwardPresets = [6, 12, 24] as const;
+const stablePatternTimeframes = ["4h", "1h", "15m"] as const;
 
 export default function PatternsPage() {
   const [lookbackDays, setLookbackDays] = useState(720);
@@ -48,17 +49,21 @@ export default function PatternsPage() {
   async function handleStart() {
     setMessage(null);
     try {
-      await startMutation.mutateAsync({
-        exchange_code: "binance_us",
-        symbols: [...presetSymbols],
-        timeframes: [...presetTimeframes],
-        lookback_days: lookbackDays,
-        forward_bars: forwardBars,
-        fee_pct: 0.001,
-        slippage_pct: 0.0005,
-        max_bars_per_series: maxBarsPerSeries,
-      });
-      setMessage("Pattern scan queued. The worker will pick it up and keep the full report in history.");
+      for (const timeframe of stablePatternTimeframes) {
+        await startMutation.mutateAsync({
+          exchange_code: "binance_us",
+          symbols: [...presetSymbols],
+          timeframes: [timeframe],
+          lookback_days: lookbackDays,
+          forward_bars: forwardBars,
+          fee_pct: 0.001,
+          slippage_pct: 0.0005,
+          max_bars_per_series: maxBarsPerSeries,
+        });
+      }
+      setMessage(
+        "Queued 3 pattern scans in order: 4h, then 1h, then 15m. We are intentionally leaving 5m and 1m out of this batch for stability.",
+      );
     } catch (error) {
       setMessage(getErrorMessage(error, "Unable to queue pattern scan."));
     }
@@ -89,8 +94,9 @@ export default function PatternsPage() {
           <div className="space-y-5">
             <p className="max-w-3xl text-sm leading-7 text-slate-400">
               The first scan uses rule-based patterns only: range breakout, flush reclaim, and compression release. We
-              run the full basket in the background and keep the finished leaderboard in history so we can compare runs
-              cleanly over time.
+              queue the basket in stable phases and keep the finished leaderboard in history so we can compare runs
+              cleanly over time. This control now starts separate 4h, 1h, and 15m scans in sequence; 5m and 1m stay
+              out of the default batch until we harden the long-run path further.
             </p>
 
             <div className="flex flex-wrap items-center gap-2">
@@ -142,9 +148,11 @@ export default function PatternsPage() {
                 />
               </label>
               <div className="rounded-2xl border border-white/8 bg-slate-950/45 px-4 py-3 text-sm text-slate-300">
-                Universe: {presetSymbols.length} symbols · {presetTimeframes.length} timeframes
+                Universe: {presetSymbols.length} symbols · {stablePatternTimeframes.length} default timeframes
                 <br />
-                Total series per run: {presetSymbols.length * presetTimeframes.length}
+                Series per phase: {presetSymbols.length}
+                <br />
+                Total series across the queued batch: {presetSymbols.length * stablePatternTimeframes.length}
               </div>
             </div>
 
@@ -155,7 +163,11 @@ export default function PatternsPage() {
                 disabled={startMutation.isPending || Boolean(runningRun)}
                 className="rounded-xl bg-emerald-300 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-emerald-200 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
               >
-                {startMutation.isPending ? "Queueing scan..." : runningRun ? "Pattern scan already running" : "Start pattern scan"}
+                {startMutation.isPending
+                  ? "Queueing scans..."
+                  : runningRun
+                    ? "Pattern scan already running"
+                    : "Start phased pattern scan"}
               </button>
             </div>
 
