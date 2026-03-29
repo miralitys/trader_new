@@ -95,6 +95,22 @@ services:
         value: "0"
       - key: NIGHTLY_FEATURE_LAYER_LOOKBACK_DAYS
         value: "1"
+      - key: WEEKLY_DEEP_VALIDATION_ENABLED
+        value: "true"
+      - key: WEEKLY_DEEP_VALIDATION_TIMEZONE
+        value: America/Chicago
+      - key: WEEKLY_DEEP_VALIDATION_HOUR
+        value: "5"
+      - key: WEEKLY_DEEP_VALIDATION_MINUTE
+        value: "0"
+      - key: WEEKLY_DEEP_VALIDATION_WEEKDAY
+        value: FRI
+      - key: WEEKLY_DEEP_VALIDATION_LOOKBACK_DAYS
+        value: "7"
+      - key: WEEKLY_DEEP_VALIDATION_SAMPLE_LIMIT
+        value: "5"
+      - key: WEEKLY_DEEP_VALIDATION_RESYNC_DAYS
+        value: "7"
 
   - type: worker
     name: trader-mvp-worker
@@ -183,6 +199,22 @@ services:
         value: "0"
       - key: NIGHTLY_FEATURE_LAYER_LOOKBACK_DAYS
         value: "1"
+      - key: WEEKLY_DEEP_VALIDATION_ENABLED
+        value: "true"
+      - key: WEEKLY_DEEP_VALIDATION_TIMEZONE
+        value: America/Chicago
+      - key: WEEKLY_DEEP_VALIDATION_HOUR
+        value: "5"
+      - key: WEEKLY_DEEP_VALIDATION_MINUTE
+        value: "0"
+      - key: WEEKLY_DEEP_VALIDATION_WEEKDAY
+        value: FRI
+      - key: WEEKLY_DEEP_VALIDATION_LOOKBACK_DAYS
+        value: "7"
+      - key: WEEKLY_DEEP_VALIDATION_SAMPLE_LIMIT
+        value: "5"
+      - key: WEEKLY_DEEP_VALIDATION_RESYNC_DAYS
+        value: "7"
 
   - type: web
     name: trader-mvp-frontend

@@ -11,6 +11,7 @@ from app.services.nightly_validation_schedule_service import NightlyValidationSc
 from app.services.paper_execution_service import PaperExecutionService
 from app.services.pattern_scan_run_service import PatternScanRunService
 from app.services.feature_layer_service import FeatureLayerService
+from app.services.weekly_deep_validation_schedule_service import WeeklyDeepValidationScheduleService
 from app.services.validation_run_service import ValidationRunService
 
 logger = get_logger(__name__)
@@ -52,6 +53,12 @@ def main() -> None:
                 scheduled_processed = nightly_feature_layer_service.process_if_due()
                 if scheduled_processed:
                     logger.info("Nightly feature layer cycle completed")
+
+            with session_scope() as session:
+                weekly_deep_validation_service = WeeklyDeepValidationScheduleService(session)
+                scheduled_processed = weekly_deep_validation_service.process_if_due()
+                if scheduled_processed:
+                    logger.info("Weekly deep validation queue cycle completed")
 
             with session_scope() as session:
                 validation_service = ValidationRunService(session)

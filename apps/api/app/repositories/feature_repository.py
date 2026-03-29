@@ -119,6 +119,12 @@ class FeatureRepository(BaseRepository):
         )
         return list(self.session.scalars(stmt))
 
+    def has_active_runs(self) -> bool:
+        stmt = select(func.count(FeatureRun.id)).where(
+            FeatureRun.status.in_((SyncJobStatus.QUEUED, SyncJobStatus.RUNNING))
+        )
+        return bool(self.session.scalar(stmt) or 0)
+
     def upsert_features(
         self,
         *,
