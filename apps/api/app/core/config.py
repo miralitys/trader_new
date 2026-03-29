@@ -81,6 +81,12 @@ class Settings(BaseSettings):
     nightly_all_data_sync_hour: int = Field(default=0, alias="NIGHTLY_ALL_DATA_SYNC_HOUR")
     nightly_all_data_sync_minute: int = Field(default=0, alias="NIGHTLY_ALL_DATA_SYNC_MINUTE")
     nightly_all_data_sync_lookback_days: int = Field(default=1, alias="NIGHTLY_ALL_DATA_SYNC_LOOKBACK_DAYS")
+    nightly_validation_enabled: bool = Field(default=True, alias="NIGHTLY_VALIDATION_ENABLED")
+    nightly_validation_timezone: str = Field(default="America/Chicago", alias="NIGHTLY_VALIDATION_TIMEZONE")
+    nightly_validation_hour: int = Field(default=2, alias="NIGHTLY_VALIDATION_HOUR")
+    nightly_validation_minute: int = Field(default=0, alias="NIGHTLY_VALIDATION_MINUTE")
+    nightly_validation_lookback_days: int = Field(default=1, alias="NIGHTLY_VALIDATION_LOOKBACK_DAYS")
+    nightly_validation_sample_limit: int = Field(default=5, alias="NIGHTLY_VALIDATION_SAMPLE_LIMIT")
     backtest_progress_interval_bars: int = Field(default=500, alias="BACKTEST_PROGRESS_INTERVAL_BARS")
     backtest_stop_check_interval_bars: int = Field(default=100, alias="BACKTEST_STOP_CHECK_INTERVAL_BARS")
     default_symbols: str = Field(

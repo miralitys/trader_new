@@ -73,6 +73,18 @@ services:
         value: "0"
       - key: NIGHTLY_ALL_DATA_SYNC_LOOKBACK_DAYS
         value: "1"
+      - key: NIGHTLY_VALIDATION_ENABLED
+        value: "true"
+      - key: NIGHTLY_VALIDATION_TIMEZONE
+        value: America/Chicago
+      - key: NIGHTLY_VALIDATION_HOUR
+        value: "2"
+      - key: NIGHTLY_VALIDATION_MINUTE
+        value: "0"
+      - key: NIGHTLY_VALIDATION_LOOKBACK_DAYS
+        value: "1"
+      - key: NIGHTLY_VALIDATION_SAMPLE_LIMIT
+        value: "5"
 
   - type: worker
     name: trader-mvp-worker
@@ -139,6 +151,18 @@ services:
         value: "0"
       - key: NIGHTLY_ALL_DATA_SYNC_LOOKBACK_DAYS
         value: "1"
+      - key: NIGHTLY_VALIDATION_ENABLED
+        value: "true"
+      - key: NIGHTLY_VALIDATION_TIMEZONE
+        value: America/Chicago
+      - key: NIGHTLY_VALIDATION_HOUR
+        value: "2"
+      - key: NIGHTLY_VALIDATION_MINUTE
+        value: "0"
+      - key: NIGHTLY_VALIDATION_LOOKBACK_DAYS
+        value: "1"
+      - key: NIGHTLY_VALIDATION_SAMPLE_LIMIT
+        value: "5"
 
   - type: web
     name: trader-mvp-frontend
