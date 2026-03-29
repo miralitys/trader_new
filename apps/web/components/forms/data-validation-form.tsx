@@ -120,6 +120,25 @@ export function DataValidationForm() {
                 <p className="mt-1 text-sky-100/80">
                   Started {formatNullableDateTime(runningRun.started_at)} · updated {formatNullableDateTime(runningRun.updated_at)}
                 </p>
+                {runningRun.progress ? (
+                  <div className="mt-3 space-y-2">
+                    <div className="flex items-center justify-between gap-3 text-xs text-sky-100/85">
+                      <span>
+                        {runningRun.progress.processed_series}/{runningRun.progress.total_series} series
+                      </span>
+                      <span>{formatPercent(runningRun.progress.percent_complete)} complete</span>
+                    </div>
+                    <div className="h-2 overflow-hidden rounded-full bg-slate-950/40">
+                      <div
+                        className="h-full rounded-full bg-sky-300 transition-all duration-300"
+                        style={{ width: `${Number(runningRun.progress.percent_complete) || 0}%` }}
+                      />
+                    </div>
+                    <p className="text-xs text-sky-100/75">
+                      Current: {runningRun.progress.current_symbol ?? "—"} · {runningRun.progress.current_timeframe ?? "—"}
+                    </p>
+                  </div>
+                ) : null}
               </div>
             ) : null}
 
@@ -208,9 +227,16 @@ export function DataValidationForm() {
                 key: "status",
                 title: "Status",
                 render: (row) => (
-                  <div className="flex items-center gap-2">
-                    <StatusBadge status={mapStatus(row.status)} />
-                    <span className="text-xs text-slate-400">{row.status}</span>
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <StatusBadge status={mapStatus(row.status)} />
+                      <span className="text-xs text-slate-400">{row.status}</span>
+                    </div>
+                    {row.progress ? (
+                      <span className="text-[11px] text-slate-500">
+                        {row.progress.processed_series}/{row.progress.total_series} · {formatPercent(row.progress.percent_complete)}
+                      </span>
+                    ) : null}
                   </div>
                 ),
               },

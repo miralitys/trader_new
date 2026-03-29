@@ -354,6 +354,14 @@ export type ValidationRun = {
   started_at: string | null;
   completed_at: string | null;
   error_text: string | null;
+  progress: {
+    phase: string;
+    processed_series: number;
+    total_series: number;
+    percent_complete: NumericValue;
+    current_symbol: string | null;
+    current_timeframe: string | null;
+  } | null;
   report_summary: DataValidationReport["summary"] | null;
   report: DataValidationReport | null;
   created_at: string;

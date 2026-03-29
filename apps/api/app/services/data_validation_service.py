@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta
 from decimal import Decimal
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
@@ -304,11 +304,14 @@ class DataValidationService:
         perform_resync: bool = False,
         resync_days: int = 14,
         sample_limit: int = 5,
+        progress_callback: Optional[Callable[[str, str, int, int], None]] = None,
     ) -> DataValidationReport:
         normalized_exchange = normalize_exchange_code(exchange_code)
         normalized_symbols = compact_supported_symbols(symbols)
         normalized_timeframes = [BinanceUSTimeframe.from_code(code).value for code in timeframes]
         results: list[DataValidationResult] = []
+        total = len(normalized_symbols) * len(normalized_timeframes)
+        processed = 0
 
         for symbol in normalized_symbols:
             for timeframe in normalized_timeframes:
@@ -323,6 +326,9 @@ class DataValidationService:
                         sample_limit=sample_limit,
                     )
                 )
+                processed += 1
+                if progress_callback is not None:
+                    progress_callback(symbol, timeframe, processed, total)
 
         verdict = "PASS"
         if any(result.verdict == "FAIL" for result in results):

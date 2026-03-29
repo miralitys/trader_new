@@ -67,6 +67,7 @@ class ValidationRun(AppModel, TimestampMixin):
     started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     error_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    progress_json: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
     report_summary_json: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
     report_json: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
 

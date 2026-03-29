@@ -8,6 +8,7 @@ from app.repositories.validation_run_repository import ValidationRunRepository
 from app.schemas.api import (
     DataValidationReportResponse,
     DataValidationRequest,
+    ValidationRunProgressResponse,
     DataValidationSummaryResponse,
     ValidationRunResponse,
 )
@@ -50,6 +51,17 @@ class ValidationRunService:
                 return
 
             repository.mark_running(run, started_at=utc_now())
+            repository.update_progress(
+                run,
+                progress_json={
+                    "phase": "running",
+                    "processed_series": 0,
+                    "total_series": len(run.symbols_json.get("symbols", [])) * len(run.timeframes_json.get("timeframes", [])),
+                    "percent_complete": 0.0,
+                    "current_symbol": None,
+                    "current_timeframe": None,
+                },
+            )
 
         try:
             with session_scope() as session:
@@ -68,6 +80,13 @@ class ValidationRunService:
                         perform_resync=run.perform_resync,
                         resync_days=run.resync_days,
                         sample_limit=run.sample_limit,
+                        progress_callback=lambda symbol, timeframe, processed, total: self._persist_progress(
+                            run_id=run_id,
+                            symbol=symbol,
+                            timeframe=timeframe,
+                            processed=processed,
+                            total=total,
+                        ),
                     )
                 finally:
                     validation_service.close()
@@ -97,6 +116,10 @@ class ValidationRunService:
                 repository.mark_failed(run, completed_at=utc_now(), error_text=str(exc))
 
     def _to_response(self, run) -> ValidationRunResponse:
+        progress = None
+        if run.progress_json:
+            progress = ValidationRunProgressResponse(**run.progress_json)
+
         report_summary = None
         if run.report_summary_json:
             report_summary = DataValidationSummaryResponse(**run.report_summary_json)
@@ -118,8 +141,32 @@ class ValidationRunService:
             started_at=run.started_at,
             completed_at=run.completed_at,
             error_text=run.error_text,
+            progress=progress,
             report_summary=report_summary,
             report=report,
             created_at=run.created_at,
             updated_at=run.updated_at,
         )
+
+    def _persist_progress(self, *, run_id: int, symbol: str, timeframe: str, processed: int, total: int) -> None:
+        with session_scope() as session:
+            repository = ValidationRunRepository(session)
+            run = repository.get_by_id(run_id)
+            if run is None:
+                return
+
+            percent_complete = 0.0
+            if total > 0:
+                percent_complete = round((processed / total) * 100, 2)
+
+            repository.update_progress(
+                run,
+                progress_json={
+                    "phase": "running",
+                    "processed_series": processed,
+                    "total_series": total,
+                    "percent_complete": percent_complete,
+                    "current_symbol": symbol,
+                    "current_timeframe": timeframe,
+                },
+            )

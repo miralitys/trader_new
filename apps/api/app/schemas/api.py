@@ -298,6 +298,15 @@ class DataValidationReportResponse(APIModel):
     results: list[DataValidationResultResponse] = Field(default_factory=list)
 
 
+class ValidationRunProgressResponse(APIModel):
+    phase: str = "queued"
+    processed_series: int = 0
+    total_series: int = 0
+    percent_complete: Decimal = Decimal("0")
+    current_symbol: Optional[str] = None
+    current_timeframe: Optional[str] = None
+
+
 class ValidationRunResponse(APIModel):
     id: int
     exchange: str
@@ -311,6 +320,7 @@ class ValidationRunResponse(APIModel):
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     error_text: Optional[str] = None
+    progress: Optional[ValidationRunProgressResponse] = None
     report_summary: Optional[DataValidationSummaryResponse] = None
     report: Optional[DataValidationReportResponse] = None
     created_at: datetime

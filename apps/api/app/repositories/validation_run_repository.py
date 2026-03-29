@@ -31,6 +31,7 @@ class ValidationRunRepository(BaseRepository):
             perform_resync=perform_resync,
             resync_days=resync_days,
             status=SyncJobStatus.QUEUED,
+            progress_json={},
             report_summary_json={},
             report_json={},
         )
@@ -48,7 +49,14 @@ class ValidationRunRepository(BaseRepository):
     def mark_running(self, run: ValidationRun, started_at: datetime) -> ValidationRun:
         run.status = SyncJobStatus.RUNNING
         run.started_at = started_at
+        run.completed_at = None
         run.error_text = None
+        self.session.add(run)
+        self.session.flush()
+        return run
+
+    def update_progress(self, run: ValidationRun, *, progress_json: dict) -> ValidationRun:
+        run.progress_json = progress_json
         self.session.add(run)
         self.session.flush()
         return run
@@ -64,6 +72,14 @@ class ValidationRunRepository(BaseRepository):
         run.status = SyncJobStatus.COMPLETED
         run.completed_at = completed_at
         run.error_text = None
+        run.progress_json = {
+            "phase": "completed",
+            "processed_series": report_summary_json.get("overview", {}).get("total_series", 0),
+            "total_series": report_summary_json.get("overview", {}).get("total_series", 0),
+            "percent_complete": 100.0,
+            "current_symbol": None,
+            "current_timeframe": None,
+        }
         run.report_summary_json = report_summary_json
         run.report_json = report_json
         self.session.add(run)
@@ -74,6 +90,9 @@ class ValidationRunRepository(BaseRepository):
         run.status = SyncJobStatus.FAILED
         run.completed_at = completed_at
         run.error_text = error_text
+        progress = dict(run.progress_json or {})
+        progress["phase"] = "failed"
+        run.progress_json = progress
         self.session.add(run)
         self.session.flush()
         return run
