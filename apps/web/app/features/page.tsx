@@ -111,14 +111,14 @@ export default function FeatureLayerPage() {
         {message ? <div className="mt-5 rounded-2xl border border-white/8 bg-white/5 px-4 py-3 text-sm text-slate-200">{message}</div> : null}
       </SectionCard>
 
-      <div className="grid gap-5 xl:grid-cols-2">
+      <div className="grid gap-5">
         {presetSymbols.map((symbol) => {
           const symbolRuns = (runsBySymbol[symbol] ?? []).slice(0, 8);
 
           return (
             <SectionCard key={symbol} title={symbol} eyebrow="Independent feature build" className="h-full">
               <div className="flex flex-col gap-5">
-                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+                <div className="grid gap-3">
                   {presetTimeframes.map((timeframe) => {
                     const coverage = coverageByKey[`${symbol}:${timeframe}`];
                     const isRunningThisButton =
@@ -132,21 +132,36 @@ export default function FeatureLayerPage() {
                         type="button"
                         onClick={() => handleRun(symbol, timeframe)}
                         disabled={runFeatureMutation.isPending}
-                        className="flex flex-col rounded-2xl border border-white/10 bg-slate-950/50 px-4 py-4 text-left transition hover:border-sky-300/30 hover:bg-sky-400/5 disabled:cursor-not-allowed disabled:border-white/5 disabled:bg-slate-950/30"
+                        className="rounded-2xl border border-white/10 bg-slate-950/50 px-4 py-4 text-left transition hover:border-sky-300/30 hover:bg-sky-400/5 disabled:cursor-not-allowed disabled:border-white/5 disabled:bg-slate-950/30"
                       >
-                        <div className="flex items-center justify-between gap-3">
-                          <span className="text-base font-semibold text-white">{timeframe}</span>
-                          {coverage ? <StatusBadge status={coverage.feature_count > 0 ? "completed" : "idle"} /> : <StatusBadge status="idle" />}
+                        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                          <div className="grid gap-3 lg:min-w-0 lg:flex-1 lg:grid-cols-[120px_minmax(0,1fr)_auto] lg:items-center">
+                            <div className="flex items-center gap-3">
+                              <span className="text-lg font-semibold text-white">{timeframe}</span>
+                              {coverage ? (
+                                <StatusBadge status={coverage.feature_count > 0 ? "completed" : "idle"} />
+                              ) : (
+                                <StatusBadge status="idle" />
+                              )}
+                            </div>
+
+                            <div className="grid gap-1 text-sm text-slate-300 sm:grid-cols-2 xl:grid-cols-3">
+                              <span>{coverage ? `${formatInteger(coverage.feature_count)} rows` : "No feature rows yet"}</span>
+                              <span className="text-slate-400">
+                                {coverage?.loaded_end_at ? `Latest: ${formatDateTime(coverage.loaded_end_at)}` : "No completed feature window"}
+                              </span>
+                              <span className="text-slate-500">
+                                {coverage?.loaded_start_at ? `Start: ${formatDateTime(coverage.loaded_start_at)}` : "Runs this timeframe only for this coin"}
+                              </span>
+                            </div>
+
+                            <div className="lg:justify-self-end">
+                              <span className="inline-flex rounded-xl bg-sky-400/10 px-3 py-2 text-sm font-medium text-sky-100">
+                                {isRunningThisButton ? "Running..." : `Build ${lookbackDays}d`}
+                              </span>
+                            </div>
+                          </div>
                         </div>
-                        <span className="mt-3 text-sm text-slate-400">
-                          {coverage ? `${formatInteger(coverage.feature_count)} rows` : "No feature rows yet"}
-                        </span>
-                        <span className="mt-1 text-xs leading-5 text-slate-500">
-                          {coverage?.loaded_end_at ? `Latest: ${formatDateTime(coverage.loaded_end_at)}` : "Runs this timeframe only for this coin"}
-                        </span>
-                        <span className="mt-4 text-sm font-medium text-sky-100">
-                          {isRunningThisButton ? "Running..." : `Build ${lookbackDays}d`}
-                        </span>
                       </button>
                     );
                   })}
