@@ -8,7 +8,14 @@ from app.core.logging import get_logger
 from sqlalchemy.orm import Session
 
 from app.api.errors import BadRequestError, NotFoundError
-from app.models.enums import AppLogLevel, BacktestStatus, PositionStatus, SyncJobStatus
+from app.models.enums import (
+    AppLogLevel,
+    BacktestStatus,
+    PositionStatus,
+    StrategyRunMode,
+    StrategyRunStatus,
+    SyncJobStatus,
+)
 from app.repositories.backtest_repository import BacktestRepository
 from app.repositories.candle_repository import CandleRepository
 from app.repositories.log_repository import LogRepository

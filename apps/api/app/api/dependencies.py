@@ -11,9 +11,11 @@ from app.services.data_validation_service import DataValidationService
 from app.services.feature_layer_service import FeatureLayerService
 from app.services.health import HealthService
 from app.services.market_data_service import MarketDataService
+from app.services.backtest_runner_service import BacktestRunnerService
 from app.services.pattern_scan_run_service import PatternScanRunService
 from app.services.pattern_research_service import PatternResearchService
 from app.services.query_service import QueryService
+from app.services.strategy_service import StrategyService
 from app.services.validation_run_service import ValidationRunService
 
 
@@ -39,6 +41,14 @@ def get_market_data_service() -> Generator[MarketDataService, None, None]:
 
 def get_query_service(db: Session = Depends(get_db_dependency)) -> QueryService:
     return QueryService(session=db)
+
+
+def get_strategy_service(db: Session = Depends(get_db_dependency)) -> StrategyService:
+    return StrategyService(session=db)
+
+
+def get_backtest_runner_service() -> BacktestRunnerService:
+    return BacktestRunnerService()
 
 
 def get_pattern_research_service(db: Session = Depends(get_db_dependency)) -> PatternResearchService:
@@ -71,9 +81,11 @@ __all__ = [
     "get_feature_layer_service",
     "get_health_service",
     "get_market_data_service",
+    "get_backtest_runner_service",
     "get_pattern_scan_run_service",
     "get_pattern_research_service",
     "get_query_service",
     "get_settings_dependency",
+    "get_strategy_service",
     "get_validation_run_service",
 ]

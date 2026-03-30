@@ -22,12 +22,16 @@ from app.strategies.registry import get_strategy, list_strategies
 
 INTERFACE_VISIBLE_STRATEGY_CODES = frozenset(
     {
-        "breakout_retest",
-        "pullback_in_trend",
-        "pullback_to_trend",
-        "rsi_micro_bounce_v2",
-        "trend_reclaim_72h",
-        "trend_retrace_70",
+        "avax_1h_compression_release",
+        "oneinch_1h_flush_reclaim",
+        "gala_1h_range_breakout",
+        "ada_1h_compression_release",
+        "gala_1h_compression_release",
+        "bnb_4h_range_breakout",
+        "oneinch_4h_flush_reclaim",
+        "gala_5m_flush_reclaim",
+        "iota_5m_flush_reclaim",
+        "iota_15m_flush_reclaim",
     }
 )
 

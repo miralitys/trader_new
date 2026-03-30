@@ -7,6 +7,7 @@ from app.api.errors import APIError, api_error_handler
 from app.api.router import api_router
 from app.core.config import get_settings
 from app.core.logging import configure_logging
+import app.strategies  # noqa: F401  # Ensure strategy registration side effects run at startup
 
 configure_logging()
 
