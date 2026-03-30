@@ -1,6 +1,6 @@
 "use client";
 
-import type { PatternScanRun } from "@/lib/types";
+import type { BacktestListItem, PatternScanRun } from "@/lib/types";
 
 export type StrategyCandidateBrief = {
   strategyCode: string;
@@ -49,6 +49,9 @@ export type StrategyCandidateRow = {
   bestMaxBarsPerSeries: number;
   bestHitVerdict: string;
   bestWinRatePct: number;
+  baselineStatus: "pending" | "promoted" | "watch" | "archived_after_baseline";
+  baselineReason: string;
+  latestBacktest: BacktestListItem | null;
 };
 
 export const candidateBriefs: Record<string, StrategyCandidateBrief> = {
@@ -196,6 +199,9 @@ export function aggregateApprovedStrategyCandidates(runs: PatternScanRun[]) {
           bestMaxBarsPerSeries: run.max_bars_per_series,
           bestHitVerdict: pattern.verdict,
           bestWinRatePct: currentWinRate,
+          baselineStatus: "pending",
+          baselineReason: "No baseline replay has been recorded yet.",
+          latestBacktest: null,
         });
         continue;
       }
@@ -247,6 +253,57 @@ export function aggregateApprovedStrategyCandidates(runs: PatternScanRun[]) {
       return right.candidateHits - left.candidateHits;
     }
     return right.avgNetReturnPct - left.avgNetReturnPct;
+  });
+}
+
+export function applyBaselineBacktestVerdicts(
+  candidates: StrategyCandidateRow[],
+  backtests: BacktestListItem[],
+) {
+  const latestBacktestByStrategy = new Map<string, BacktestListItem>();
+
+  for (const row of backtests) {
+    if (!latestBacktestByStrategy.has(row.strategy_code)) {
+      latestBacktestByStrategy.set(row.strategy_code, row);
+    }
+  }
+
+  return candidates.map((candidate) => {
+    const latestBacktest = latestBacktestByStrategy.get(candidate.strategyCode) ?? null;
+    if (!latestBacktest) {
+      return candidate;
+    }
+
+    const totalReturnPct = Number(latestBacktest.total_return_pct ?? 0);
+    const maxDrawdownPct = Number(latestBacktest.max_drawdown_pct ?? 0);
+    const totalTrades = Number(latestBacktest.total_trades ?? 0);
+
+    let baselineStatus: StrategyCandidateRow["baselineStatus"] = "watch";
+    let baselineReason = `Baseline replay returned ${formatSignedPercent(totalReturnPct)} with ${formatPercentValue(maxDrawdownPct)} drawdown across ${totalTrades} trades.`;
+
+    if (latestBacktest.status !== "completed") {
+      baselineStatus = "pending";
+      baselineReason =
+        latestBacktest.status === "failed"
+          ? latestBacktest.error_text?.trim() || "Baseline replay failed before completion."
+          : `Baseline replay is still ${latestBacktest.status}.`;
+    } else if (totalReturnPct > 0 && maxDrawdownPct <= 3) {
+      baselineStatus = "promoted";
+      baselineReason = `Baseline replay held up well: ${formatSignedPercent(totalReturnPct)} return, ${formatPercentValue(maxDrawdownPct)} drawdown, ${totalTrades} trades.`;
+    } else if (totalReturnPct > -3 && maxDrawdownPct <= 4) {
+      baselineStatus = "watch";
+      baselineReason = `Baseline replay stayed near flat: ${formatSignedPercent(totalReturnPct)} return, ${formatPercentValue(maxDrawdownPct)} drawdown, ${totalTrades} trades.`;
+    } else {
+      baselineStatus = "archived_after_baseline";
+      baselineReason = `Baseline replay broke down: ${formatSignedPercent(totalReturnPct)} return, ${formatPercentValue(maxDrawdownPct)} drawdown, ${totalTrades} trades.`;
+    }
+
+    return {
+      ...candidate,
+      baselineStatus,
+      baselineReason,
+      latestBacktest,
+    };
   });
 }
 
@@ -305,4 +362,13 @@ function uniqueSortedStrings(values: string[]) {
 
 function uniqueSortedNumbers(values: number[]) {
   return Array.from(new Set(values)).sort((left, right) => left - right);
+}
+
+function formatSignedPercent(value: number) {
+  const normalized = value >= 0 ? `+${value.toFixed(2)}` : value.toFixed(2);
+  return `${normalized}%`;
+}
+
+function formatPercentValue(value: number) {
+  return `${value.toFixed(2)}%`;
 }
