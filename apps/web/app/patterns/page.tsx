@@ -16,6 +16,20 @@ import { formatDateTime, formatInteger, formatPercent, getErrorMessage } from "@
 
 const forwardPresets = [6, 12, 24] as const;
 const stablePatternTimeframes = ["4h", "1h", "15m"] as const;
+const exploratoryPatternTimeframes = ["5m", "1m"] as const;
+const allPatternTimeframes = [...stablePatternTimeframes, ...exploratoryPatternTimeframes] as const;
+const exploratoryScanPlans = {
+  "5m": [
+    { lookbackDays: 180, maxBarsPerSeries: 12000 },
+    { lookbackDays: 365, maxBarsPerSeries: 25000 },
+    { lookbackDays: 720, maxBarsPerSeries: 50000 },
+  ],
+  "1m": [
+    { lookbackDays: 180, maxBarsPerSeries: 30000 },
+    { lookbackDays: 365, maxBarsPerSeries: 60000 },
+    { lookbackDays: 720, maxBarsPerSeries: 120000 },
+  ],
+} as const;
 
 export default function PatternsPage() {
   const [lookbackDays, setLookbackDays] = useState(720);
@@ -66,10 +80,12 @@ export default function PatternsPage() {
   function toggleTimeframe(timeframe: string) {
     setSelectedTimeframes((current) => {
       if (current.includes(timeframe)) {
-        return current.length === 1 ? current : current.filter((item) => item !== timeframe);
+      return current.length === 1 ? current : current.filter((item) => item !== timeframe);
       }
       return [...current, timeframe].sort(
-        (left, right) => stablePatternTimeframes.indexOf(left as (typeof stablePatternTimeframes)[number]) - stablePatternTimeframes.indexOf(right as (typeof stablePatternTimeframes)[number]),
+        (left, right) =>
+          allPatternTimeframes.indexOf(left as (typeof allPatternTimeframes)[number]) -
+          allPatternTimeframes.indexOf(right as (typeof allPatternTimeframes)[number]),
       );
     });
   }
@@ -123,8 +139,8 @@ export default function PatternsPage() {
             <p className="max-w-3xl text-sm leading-7 text-slate-400">
               The first scan uses rule-based patterns only: range breakout, flush reclaim, and compression release. We
               queue the basket in stable phases and keep the finished leaderboard in history so we can compare runs
-              cleanly over time. This control now starts separate 4h, 1h, and 15m scans in sequence; 5m and 1m stay
-              out of the default batch until we harden the long-run path further.
+              cleanly over time. The primary research path is still 4h, 1h, and 15m, but you can now explicitly
+              include 5m and 1m as exploratory test scans when you want to push lower-timeframe research.
             </p>
 
             <div className="flex flex-wrap items-center gap-2">
@@ -164,7 +180,7 @@ export default function PatternsPage() {
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              <span className="mr-1 text-[11px] uppercase tracking-[0.2em] text-slate-500">Timeframes</span>
+              <span className="mr-1 text-[11px] uppercase tracking-[0.2em] text-slate-500">Core timeframes</span>
               {stablePatternTimeframes.map((timeframe) => {
                 const active = selectedTimeframes.includes(timeframe);
                 return (
@@ -176,6 +192,27 @@ export default function PatternsPage() {
                       active
                         ? "border-violet-300/45 bg-violet-400/15 text-violet-100"
                         : "border-white/10 bg-slate-950/50 text-slate-200 hover:border-violet-300/30 hover:bg-violet-400/10 hover:text-white"
+                    }`}
+                  >
+                    {timeframe}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="mr-1 text-[11px] uppercase tracking-[0.2em] text-slate-500">Test timeframes</span>
+              {exploratoryPatternTimeframes.map((timeframe) => {
+                const active = selectedTimeframes.includes(timeframe);
+                return (
+                  <button
+                    key={timeframe}
+                    type="button"
+                    onClick={() => toggleTimeframe(timeframe)}
+                    className={`rounded-full border px-3.5 py-1.5 text-sm font-medium transition ${
+                      active
+                        ? "border-amber-300/45 bg-amber-400/15 text-amber-100"
+                        : "border-white/10 bg-slate-950/50 text-slate-200 hover:border-amber-300/30 hover:bg-amber-400/10 hover:text-white"
                     }`}
                   >
                     {timeframe}
@@ -203,6 +240,41 @@ export default function PatternsPage() {
                 <br />
                 Total series across the queued batch: {presetSymbols.length * selectedTimeframes.length}
               </div>
+            </div>
+
+            <div className="rounded-2xl border border-white/8 bg-slate-950/45 px-4 py-3 text-sm text-slate-300">
+              <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">Recommended max bars per series</p>
+              <div className="mt-3 grid gap-2">
+                {selectedTimeframes.map((timeframe) => (
+                  <div key={timeframe} className="flex items-center justify-between gap-4 rounded-xl bg-white/[0.03] px-3 py-2">
+                    <span className="font-medium text-white">{timeframe}</span>
+                    <span className="text-slate-300">{recommendedMaxBars(timeframe, lookbackDays)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-amber-300/10 bg-amber-400/[0.05] px-4 py-3 text-sm text-slate-300">
+              <p className="text-[11px] uppercase tracking-[0.2em] text-amber-100/80">Exploratory test plan</p>
+              <div className="mt-3 grid gap-3 lg:grid-cols-2">
+                {exploratoryPatternTimeframes.map((timeframe) => (
+                  <div key={timeframe} className="rounded-xl border border-white/8 bg-slate-950/40 px-3 py-3">
+                    <p className="font-medium text-white">{timeframe}</p>
+                    <div className="mt-2 space-y-1.5 text-xs text-slate-300">
+                      {exploratoryScanPlans[timeframe].map((plan) => (
+                        <div key={`${timeframe}-${plan.lookbackDays}`} className="flex items-center justify-between gap-3">
+                          <span>{plan.lookbackDays}d</span>
+                          <span>{plan.maxBarsPerSeries.toLocaleString()} bars</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-3 text-xs leading-6 text-slate-400">
+                Use 5m and 1m as deliberate test scans after the core 4h / 1h / 15m pass. They are heavier, so we
+                keep their recommended bar caps higher but still bounded.
+              </p>
             </div>
 
             <div className="flex flex-wrap gap-3">
@@ -458,4 +530,34 @@ function formatEta(durationMs: number) {
     return `${Math.max(minutes, 1)}m`;
   }
   return `${hours}h ${minutes}m`;
+}
+
+function recommendedMaxBars(timeframe: string, lookbackDays: number) {
+  if (timeframe === "4h") {
+    if (lookbackDays <= 180) return "1,000";
+    if (lookbackDays <= 365) return "1,500";
+    return "2,500";
+  }
+
+  if (timeframe === "1h") {
+    if (lookbackDays <= 180) return "2,500";
+    if (lookbackDays <= 365) return "4,000";
+    return "7,000";
+  }
+
+  if (timeframe === "15m") {
+    if (lookbackDays <= 180) return "5,000";
+    if (lookbackDays <= 365) return "8,000";
+    return "12,000";
+  }
+
+  if (timeframe === "5m") {
+    if (lookbackDays <= 180) return "12,000";
+    if (lookbackDays <= 365) return "25,000";
+    return "50,000";
+  }
+
+  if (lookbackDays <= 180) return "30,000";
+  if (lookbackDays <= 365) return "60,000";
+  return "120,000";
 }
