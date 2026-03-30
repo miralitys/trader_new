@@ -22,7 +22,7 @@ from app.utils.time import ensure_utc, utc_now
 logger = get_logger(__name__)
 
 FEATURE_CHUNK_DAYS = {
-    "1m": 7,
+    "1m": 2,
     "5m": 30,
     "15m": 90,
     "1h": 180,
@@ -184,6 +184,14 @@ class FeatureLayerService:
                         )
                         return False
 
+                    repository.touch_run(
+                        run,
+                        source_candle_count=aggregate.source_candle_count,
+                        feature_rows_upserted=aggregate.feature_rows_upserted,
+                        computed_start_at=aggregate.computed_start_at,
+                        computed_end_at=aggregate.computed_end_at,
+                    )
+
                     candle_repository = CandleRepository(session)
                     exchange = candle_repository.get_exchange(run_exchange)
                     if exchange is None:
@@ -206,11 +214,25 @@ class FeatureLayerService:
                     chunk_source_count = sum(1 for candle in source_candles if candle.open_time >= chunk_start_at)
 
                     if feature_rows:
+                        repository.touch_run(
+                            run,
+                            source_candle_count=aggregate.source_candle_count + chunk_source_count,
+                            feature_rows_upserted=aggregate.feature_rows_upserted,
+                            computed_start_at=aggregate.computed_start_at or feature_rows[0].open_time,
+                            computed_end_at=aggregate.computed_end_at,
+                        )
                         chunk_feature_rows_upserted = repository.upsert_features(
                             exchange_id=exchange.id,
                             symbol_id=symbol_row.id,
                             timeframe=run_timeframe,
                             rows=[row.to_payload() for row in feature_rows],
+                            heartbeat=lambda _: repository.touch_run(
+                                run,
+                                source_candle_count=aggregate.source_candle_count + chunk_source_count,
+                                feature_rows_upserted=aggregate.feature_rows_upserted,
+                                computed_start_at=aggregate.computed_start_at or feature_rows[0].open_time,
+                                computed_end_at=aggregate.computed_end_at,
+                            ),
                         )
                         chunk_computed_start_at = feature_rows[0].open_time
                         chunk_computed_end_at = feature_rows[-1].open_time

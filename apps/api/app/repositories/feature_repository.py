@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
-from datetime import datetime
+from datetime import datetime, timezone
 from math import ceil
-from typing import Optional
+from typing import Callable, Optional
 
 from sqlalchemy import func, select
 from sqlalchemy import delete
@@ -59,6 +59,28 @@ class FeatureRepository(BaseRepository):
         run.computed_start_at = computed_start_at
         run.computed_end_at = computed_end_at
         run.error_text = None
+        self.session.add(run)
+        self.session.flush()
+        return run
+
+    def touch_run(
+        self,
+        run: FeatureRun,
+        *,
+        source_candle_count: Optional[int] = None,
+        feature_rows_upserted: Optional[int] = None,
+        computed_start_at: Optional[datetime] = None,
+        computed_end_at: Optional[datetime] = None,
+    ) -> FeatureRun:
+        if source_candle_count is not None:
+            run.source_candle_count = source_candle_count
+        if feature_rows_upserted is not None:
+            run.feature_rows_upserted = feature_rows_upserted
+        if computed_start_at is not None:
+            run.computed_start_at = computed_start_at
+        if computed_end_at is not None:
+            run.computed_end_at = computed_end_at
+        run.updated_at = datetime.now(timezone.utc)
         self.session.add(run)
         self.session.flush()
         return run
@@ -148,6 +170,8 @@ class FeatureRepository(BaseRepository):
         timeframe: str,
         rows: Iterable[dict[str, object]],
         chunk_size: int = 500,
+        heartbeat: Optional[Callable[[int], None]] = None,
+        heartbeat_every_chunks: int = 10,
     ) -> int:
         items = list(rows)
         if not items:
@@ -202,6 +226,8 @@ class FeatureRepository(BaseRepository):
             )
             self.session.execute(stmt)
             total_rows += len(chunk)
+            if heartbeat is not None and heartbeat_every_chunks > 0 and (chunk_index + 1) % heartbeat_every_chunks == 0:
+                heartbeat(total_rows)
 
         return total_rows
 
