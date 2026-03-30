@@ -20,6 +20,7 @@ const links = [
   { href: "/data", label: "Data" },
   { href: "/features", label: "Feature Layer" },
   { href: "/patterns", label: "Patterns" },
+  { href: "/pattern-registry", label: "Pattern Registry" },
   { href: "/logs", label: "Logs" },
 ];
 
