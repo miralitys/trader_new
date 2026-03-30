@@ -18,18 +18,6 @@ const forwardPresets = [6, 12, 24] as const;
 const stablePatternTimeframes = ["4h", "1h", "15m"] as const;
 const exploratoryPatternTimeframes = ["5m", "1m"] as const;
 const allPatternTimeframes = [...stablePatternTimeframes, ...exploratoryPatternTimeframes] as const;
-const exploratoryScanPlans = {
-  "5m": [
-    { lookbackDays: 180, maxBarsPerSeries: 12000 },
-    { lookbackDays: 365, maxBarsPerSeries: 25000 },
-    { lookbackDays: 720, maxBarsPerSeries: 50000 },
-  ],
-  "1m": [
-    { lookbackDays: 180, maxBarsPerSeries: 30000 },
-    { lookbackDays: 365, maxBarsPerSeries: 60000 },
-    { lookbackDays: 720, maxBarsPerSeries: 120000 },
-  ],
-} as const;
 
 export default function PatternsPage() {
   const [lookbackDays, setLookbackDays] = useState(720);
@@ -240,41 +228,6 @@ export default function PatternsPage() {
                 <br />
                 Total series across the queued batch: {presetSymbols.length * selectedTimeframes.length}
               </div>
-            </div>
-
-            <div className="rounded-2xl border border-white/8 bg-slate-950/45 px-4 py-3 text-sm text-slate-300">
-              <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">Recommended max bars per series</p>
-              <div className="mt-3 grid gap-2">
-                {selectedTimeframes.map((timeframe) => (
-                  <div key={timeframe} className="flex items-center justify-between gap-4 rounded-xl bg-white/[0.03] px-3 py-2">
-                    <span className="font-medium text-white">{timeframe}</span>
-                    <span className="text-slate-300">{recommendedMaxBars(timeframe, lookbackDays)}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="rounded-2xl border border-amber-300/10 bg-amber-400/[0.05] px-4 py-3 text-sm text-slate-300">
-              <p className="text-[11px] uppercase tracking-[0.2em] text-amber-100/80">Exploratory test plan</p>
-              <div className="mt-3 grid gap-3 lg:grid-cols-2">
-                {exploratoryPatternTimeframes.map((timeframe) => (
-                  <div key={timeframe} className="rounded-xl border border-white/8 bg-slate-950/40 px-3 py-3">
-                    <p className="font-medium text-white">{timeframe}</p>
-                    <div className="mt-2 space-y-1.5 text-xs text-slate-300">
-                      {exploratoryScanPlans[timeframe].map((plan) => (
-                        <div key={`${timeframe}-${plan.lookbackDays}`} className="flex items-center justify-between gap-3">
-                          <span>{plan.lookbackDays}d</span>
-                          <span>{plan.maxBarsPerSeries.toLocaleString()} bars</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <p className="mt-3 text-xs leading-6 text-slate-400">
-                Use 5m and 1m as deliberate test scans after the core 4h / 1h / 15m pass. They are heavier, so we
-                keep their recommended bar caps higher but still bounded.
-              </p>
             </div>
 
             <div className="flex flex-wrap gap-3">
@@ -530,34 +483,4 @@ function formatEta(durationMs: number) {
     return `${Math.max(minutes, 1)}m`;
   }
   return `${hours}h ${minutes}m`;
-}
-
-function recommendedMaxBars(timeframe: string, lookbackDays: number) {
-  if (timeframe === "4h") {
-    if (lookbackDays <= 180) return "1,000";
-    if (lookbackDays <= 365) return "1,500";
-    return "2,500";
-  }
-
-  if (timeframe === "1h") {
-    if (lookbackDays <= 180) return "2,500";
-    if (lookbackDays <= 365) return "4,000";
-    return "7,000";
-  }
-
-  if (timeframe === "15m") {
-    if (lookbackDays <= 180) return "5,000";
-    if (lookbackDays <= 365) return "8,000";
-    return "12,000";
-  }
-
-  if (timeframe === "5m") {
-    if (lookbackDays <= 180) return "12,000";
-    if (lookbackDays <= 365) return "25,000";
-    return "50,000";
-  }
-
-  if (lookbackDays <= 180) return "30,000";
-  if (lookbackDays <= 365) return "60,000";
-  return "120,000";
 }
