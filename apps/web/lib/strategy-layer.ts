@@ -3,6 +3,7 @@
 import type { PatternScanRun } from "@/lib/types";
 
 export type StrategyCandidateBrief = {
+  strategyCode: string;
   priority: number;
   role: string;
   whyItMatters: string;
@@ -25,6 +26,7 @@ export type StrategyCandidateHit = {
 
 export type StrategyCandidateRow = {
   key: string;
+  strategyCode: string;
   priority: number;
   patternName: string;
   patternCode: string;
@@ -51,6 +53,7 @@ export type StrategyCandidateRow = {
 
 export const candidateBriefs: Record<string, StrategyCandidateBrief> = {
   "compression_release:AVAX-USDT:1h": {
+    strategyCode: "avax_1h_compression_release",
     priority: 1,
     role: "Baseline 1h leader",
     whyItMatters: "Most repeated 1h candidate in the full matrix and one of the cleanest cross-horizon signals.",
@@ -59,6 +62,7 @@ export const candidateBriefs: Record<string, StrategyCandidateBrief> = {
     paperFocus: "Run as the first 1h forward-paper candidate and watch signal quality, net edge, and regime sensitivity.",
   },
   "flush_reclaim:1INCH-USDT:1h": {
+    strategyCode: "oneinch_1h_flush_reclaim",
     priority: 2,
     role: "Best 1h reclaim",
     whyItMatters: "Repeats across all major windows and stays economically strong instead of fading after one good run.",
@@ -67,6 +71,7 @@ export const candidateBriefs: Record<string, StrategyCandidateBrief> = {
     paperFocus: "Paper-test as a reclaim-continuation setup and watch whether newer tape keeps the same follow-through.",
   },
   "range_breakout:GALA-USDT:1h": {
+    strategyCode: "gala_1h_range_breakout",
     priority: 3,
     role: "Fast 1h breakout",
     whyItMatters: "Clean repeated breakout behavior with strong net returns on the shorter and medium horizons.",
@@ -75,6 +80,7 @@ export const candidateBriefs: Record<string, StrategyCandidateBrief> = {
     paperFocus: "Forward-test as an impulse model and track how often signals degrade outside the original breakout regime.",
   },
   "compression_release:ADA-USDT:1h": {
+    strategyCode: "ada_1h_compression_release",
     priority: 4,
     role: "Stable 1h compression",
     whyItMatters: "Less flashy than the top two, but repeatable enough to deserve a full strategy candidate pass.",
@@ -83,6 +89,7 @@ export const candidateBriefs: Record<string, StrategyCandidateBrief> = {
     paperFocus: "Paper-test to confirm that the setup still emits clean signals without overtrading.",
   },
   "compression_release:GALA-USDT:1h": {
+    strategyCode: "gala_1h_compression_release",
     priority: 5,
     role: "Secondary GALA 1h setup",
     whyItMatters: "Blends repeated candidate and monitor behavior, which suggests a real edge with some regime sensitivity.",
@@ -91,6 +98,7 @@ export const candidateBriefs: Record<string, StrategyCandidateBrief> = {
     paperFocus: "Paper-test only after the breakout variant so we can compare frequency and overlap cleanly.",
   },
   "range_breakout:BNB-USDT:4h": {
+    strategyCode: "bnb_4h_range_breakout",
     priority: 6,
     role: "Slow structural breakout",
     whyItMatters: "Gives you a higher-timeframe anchor that is calmer and easier to reason about than the fast intraday setups.",
@@ -99,6 +107,7 @@ export const candidateBriefs: Record<string, StrategyCandidateBrief> = {
     paperFocus: "Paper-test as a low-frequency anchor setup and judge quality over several weeks rather than days.",
   },
   "flush_reclaim:1INCH-USDT:4h": {
+    strategyCode: "oneinch_4h_flush_reclaim",
     priority: 7,
     role: "Higher-timeframe reclaim",
     whyItMatters: "Useful as a slower counterpart to the 1h reclaim model on the same symbol.",
@@ -107,6 +116,7 @@ export const candidateBriefs: Record<string, StrategyCandidateBrief> = {
     paperFocus: "Paper-test as a higher-timeframe confirmation candidate with low expected signal count.",
   },
   "flush_reclaim:GALA-USDT:5m": {
+    strategyCode: "gala_5m_flush_reclaim",
     priority: 8,
     role: "Best intraday candidate",
     whyItMatters: "The strongest lower-timeframe result in the matrix, especially on the longer windows and horizons.",
@@ -115,6 +125,7 @@ export const candidateBriefs: Record<string, StrategyCandidateBrief> = {
     paperFocus: "Forward-paper as the lead intraday setup and watch slippage, signal frequency, and edge decay closely.",
   },
   "flush_reclaim:IOTA-USDT:5m": {
+    strategyCode: "iota_5m_flush_reclaim",
     priority: 9,
     role: "Second intraday reclaim",
     whyItMatters: "Not as explosive as GALA, but it carries a stronger sample base and more measured economics.",
@@ -123,6 +134,7 @@ export const candidateBriefs: Record<string, StrategyCandidateBrief> = {
     paperFocus: "Paper-test after GALA 5m so we can compare frequency versus stability.",
   },
   "flush_reclaim:IOTA-USDT:15m": {
+    strategyCode: "iota_15m_flush_reclaim",
     priority: 10,
     role: "Bridge setup",
     whyItMatters: "Sits between the 5m and 1h layers and helps us compare how reclaim behavior changes with speed.",
@@ -161,6 +173,7 @@ export function aggregateApprovedStrategyCandidates(runs: PatternScanRun[]) {
       if (!existing) {
         registry.set(key, {
           key,
+          strategyCode: brief.strategyCode,
           priority: brief.priority,
           patternName: pattern.pattern_name,
           patternCode: pattern.pattern_code,

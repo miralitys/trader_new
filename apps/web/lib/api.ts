@@ -1,6 +1,9 @@
 import type {
   ApiErrorPayload,
   AppLog,
+  BacktestListItem,
+  BacktestResponse,
+  BacktestRunRequest,
   Candle,
   CandleCoverage,
   CandleFilters,
@@ -18,7 +21,12 @@ import type {
   LogFilters,
   PatternScanRequest,
   PatternScanRun,
+  PaperRunResponse,
   ResearchSummary,
+  StrategyPaperStartRequest,
+  StrategyPaperStopRequest,
+  StrategyRunSummary,
+  StrategySummary,
   SyncJob,
   SyncJobFilters,
 } from "@/lib/types";
@@ -194,4 +202,50 @@ export function getFeatureCoverage(filters: FeatureCoverageFilters = {}) {
       symbol: filters.symbol,
     })}`,
   );
+}
+
+export function getStrategies() {
+  return apiRequest<StrategySummary[]>("/api/strategies");
+}
+
+export function getStrategyRuns(filters: { strategyCode?: string; status?: string; mode?: string; limit?: number } = {}) {
+  return apiRequest<StrategyRunSummary[]>(
+    `/api/strategies/runs/list${buildQueryString({
+      strategy_code: filters.strategyCode,
+      status: filters.status,
+      mode: filters.mode,
+      limit: filters.limit,
+    })}`,
+  );
+}
+
+export function startStrategyPaperRun(strategyCode: string, payload: StrategyPaperStartRequest) {
+  return apiRequest<PaperRunResponse>(`/api/strategies/${strategyCode}/paper/start`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function stopStrategyPaperRun(strategyCode: string, payload: StrategyPaperStopRequest) {
+  return apiRequest<PaperRunResponse>(`/api/strategies/${strategyCode}/paper/stop`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function getBacktests(filters: { strategyCode?: string; status?: string; limit?: number } = {}) {
+  return apiRequest<BacktestListItem[]>(
+    `/api/backtests${buildQueryString({
+      strategy_code: filters.strategyCode,
+      status: filters.status,
+      limit: filters.limit,
+    })}`,
+  );
+}
+
+export function runBacktest(payload: BacktestRunRequest) {
+  return apiRequest<BacktestResponse>("/api/backtests/run", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
 }

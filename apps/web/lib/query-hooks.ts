@@ -3,6 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
+  getBacktests,
   getCandleCoverage,
   getCandles,
   getDataValidationRuns,
@@ -12,14 +13,21 @@ import {
   getLogs,
   getPatternScans,
   getResearchSummary,
+  getStrategies,
+  getStrategyRuns,
   runDataValidation,
+  runBacktest,
   startDataValidationRun,
   startPatternScan,
+  startStrategyPaperRun,
+  stopStrategyPaperRun,
   getSyncJobs,
   runDataSync,
   runFeatureLayer,
 } from "@/lib/api";
 import type {
+  BacktestListItem,
+  BacktestRunRequest,
   CandleFilters,
   DataValidationRequest,
   DataSyncRequest,
@@ -29,6 +37,10 @@ import type {
   LogFilters,
   PatternScanRequest,
   PatternScanRun,
+  StrategyPaperStartRequest,
+  StrategyPaperStopRequest,
+  StrategyRunSummary,
+  StrategySummary,
   SyncJobFilters,
   ValidationRun,
 } from "@/lib/types";
@@ -43,6 +55,9 @@ export const queryKeys = {
   featureCoverage: (filters: FeatureCoverageFilters) => ["feature-coverage", filters] as const,
   dataValidationRuns: (limit: number) => ["data-validation-runs", limit] as const,
   patternScans: (limit: number) => ["pattern-scans", limit] as const,
+  strategies: ["strategies"] as const,
+  strategyRuns: (filters: { strategyCode?: string; status?: string; mode?: string; limit?: number }) => ["strategy-runs", filters] as const,
+  backtests: (filters: { strategyCode?: string; status?: string; limit?: number }) => ["backtests", filters] as const,
   logs: (filters: LogFilters) => ["logs", filters] as const,
 };
 
@@ -147,6 +162,48 @@ export function usePatternScans(limit = 20, enabled = true) {
   });
 }
 
+export function useStrategies(enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.strategies,
+    queryFn: getStrategies,
+    enabled,
+    refetchInterval: 10000,
+  });
+}
+
+export function useStrategyRuns(
+  filters: { strategyCode?: string; status?: string; mode?: string; limit?: number } = {},
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: queryKeys.strategyRuns(filters),
+    queryFn: () => getStrategyRuns(filters),
+    enabled,
+    refetchInterval: (query) => {
+      const runs = (query.state.data as StrategyRunSummary[] | undefined) ?? [];
+      if (runs.some((run) => run.status === "running" || run.status === "created")) {
+        return 5000;
+      }
+      return 10000;
+    },
+  });
+}
+
+export function useBacktests(filters: { strategyCode?: string; status?: string; limit?: number } = {}, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.backtests(filters),
+    queryFn: () => getBacktests(filters),
+    enabled,
+    refetchInterval: (query) => {
+      const runs = (query.state.data as BacktestListItem[] | undefined) ?? [];
+      if (runs.some((run) => run.status === "queued" || run.status === "running")) {
+        return 5000;
+      }
+      return 10000;
+    },
+  });
+}
+
 export function useRunDataSync() {
   const queryClient = useQueryClient();
 
@@ -203,6 +260,50 @@ export function useStartPatternScan() {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.patternScans(20) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.research }),
+      ]);
+    },
+  });
+}
+
+export function useRunBacktest() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (payload: BacktestRunRequest) => runBacktest(payload),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["backtests"] }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.research }),
+      ]);
+    },
+  });
+}
+
+export function useStartStrategyPaperRun() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ strategyCode, payload }: { strategyCode: string; payload: StrategyPaperStartRequest }) =>
+      startStrategyPaperRun(strategyCode, payload),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.strategies }),
+        queryClient.invalidateQueries({ queryKey: ["strategy-runs"] }),
+      ]);
+    },
+  });
+}
+
+export function useStopStrategyPaperRun() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ strategyCode, payload }: { strategyCode: string; payload: StrategyPaperStopRequest }) =>
+      stopStrategyPaperRun(strategyCode, payload),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.strategies }),
+        queryClient.invalidateQueries({ queryKey: ["strategy-runs"] }),
       ]);
     },
   });

@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+
 import { SectionCard } from "@/components/section-card";
 import { DataTable } from "@/components/tables/data-table";
 import { ErrorState } from "@/components/ui/error-state";
@@ -7,48 +9,93 @@ import { LoadingState } from "@/components/ui/loading-state";
 import { MetricCard } from "@/components/ui/metric-card";
 import { PageHeader } from "@/components/ui/page-header";
 import { StatusBadge } from "@/components/ui/status-badge";
-import { usePatternScans } from "@/lib/query-hooks";
+import { useBacktests, usePatternScans, useRunBacktest, useStrategies } from "@/lib/query-hooks";
 import { aggregateApprovedStrategyCandidates } from "@/lib/strategy-layer";
-import { formatInteger, formatPercent, getErrorMessage } from "@/lib/utils";
+import { formatCurrency, formatDateTime, formatInteger, formatPercent, getErrorMessage } from "@/lib/utils";
 
 export default function BacktestsPage() {
   const runsQuery = usePatternScans(200, true);
+  const strategiesQuery = useStrategies(true);
+  const backtestsQuery = useBacktests({ limit: 100 }, true);
+  const runBacktestMutation = useRunBacktest();
+  const [activeStrategyCode, setActiveStrategyCode] = useState<string | null>(null);
 
-  if (runsQuery.isLoading && !runsQuery.data) {
+  const isLoading = (runsQuery.isLoading && !runsQuery.data) || (strategiesQuery.isLoading && !strategiesQuery.data) || (backtestsQuery.isLoading && !backtestsQuery.data);
+  const error = runsQuery.error ?? strategiesQuery.error ?? backtestsQuery.error;
+
+  if (isLoading) {
     return <LoadingState label="Loading backtest layer..." />;
   }
 
-  if (runsQuery.error) {
-    return <ErrorState message={getErrorMessage(runsQuery.error, "Unable to load backtest layer.")} />;
+  if (error) {
+    return <ErrorState message={getErrorMessage(error, "Unable to load backtest layer.")} />;
   }
 
   const runs = runsQuery.data ?? [];
+  const strategies = strategiesQuery.data ?? [];
+  const backtests = backtestsQuery.data ?? [];
   const completedRuns = runs.filter((run) => run.status === "completed" && run.report_summary);
   const candidates = aggregateApprovedStrategyCandidates(completedRuns);
-  const longestWindowCount = candidates.filter((row) => row.bestLookbackDays >= 720).length;
-  const longerExitCount = candidates.filter((row) => row.bestForwardBars >= 12).length;
+  const registeredCodes = new Set(strategies.map((row) => row.code));
+  const latestBacktestByStrategy = new Map<string, (typeof backtests)[number]>();
+
+  for (const row of backtests) {
+    if (!latestBacktestByStrategy.has(row.strategy_code)) {
+      latestBacktestByStrategy.set(row.strategy_code, row);
+    }
+  }
+
+  const executableCandidates = candidates.filter((row) => registeredCodes.has(row.strategyCode));
+  const liveBacktests = backtests.filter((row) => row.status === "queued" || row.status === "running").length;
+
+  async function handleRunBaseline(strategyCode: string, symbol: string, timeframe: string, lookbackDays: number) {
+    setActiveStrategyCode(strategyCode);
+    const endAt = new Date();
+    const startAt = new Date(endAt.getTime() - lookbackDays * 24 * 60 * 60 * 1000);
+    try {
+      await runBacktestMutation.mutateAsync({
+        strategy_code: strategyCode,
+        symbol,
+        timeframe,
+        start_at: startAt.toISOString(),
+        end_at: endAt.toISOString(),
+        exchange_code: "binance_us",
+        initial_capital: 10000,
+        fee: 0.001,
+        slippage: 0.0005,
+        position_size_pct: 0.1,
+        strategy_config_override: {},
+      });
+    } finally {
+      setActiveStrategyCode(null);
+    }
+  }
 
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
         eyebrow="Replay Layer"
         title="Backtests"
-        description="This layer turns the approved strategy pool into explicit replay specs. It gives us one operating surface for what we should replay first, with which window, and with which validated horizon before we wire these setups into executable strategy code."
+        description="We can now launch baseline replay runs directly from the approved pool. Each row maps a validated setup to a real backend strategy code and a first historical replay window."
       />
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard label="Approved setups" value={formatInteger(candidates.length)} hint="Current replay queue" tone={candidates.length ? "positive" : "warning"} />
-        <MetricCard label="720d-ready" value={formatInteger(longestWindowCount)} hint="Best validated hit came from the full long window" />
-        <MetricCard label="12/24-bar lean" value={formatInteger(longerExitCount)} hint="Setups whose strongest hit already prefers a longer hold" />
-        <MetricCard label="Engine status" value="Spec ready" hint="Replay specs are ready even though engine wiring is still the next step" tone="positive" />
+        <MetricCard label="Executable setups" value={formatInteger(executableCandidates.length)} hint="Approved candidates with registered backend strategies" tone={executableCandidates.length ? "positive" : "warning"} />
+        <MetricCard label="Backtests in flight" value={formatInteger(liveBacktests)} hint="Queued or running replay jobs" tone={liveBacktests ? "warning" : "default"} />
+        <MetricCard label="Finished backtests" value={formatInteger(backtests.filter((row) => row.status === "completed").length)} hint="Completed replay runs already stored" />
+        <MetricCard label="Baseline mode" value="One-click" hint="Each row can launch its first replay directly from this page" tone="positive" />
       </section>
 
-      <SectionCard title="Replay Queue" eyebrow="First backtest pass under the approved pool">
+      {runBacktestMutation.error ? (
+        <ErrorState message={getErrorMessage(runBacktestMutation.error, "Unable to start backtest.")} />
+      ) : null}
+
+      <SectionCard title="Replay Queue" eyebrow="Approved pool with live run control">
         <DataTable
-          rows={candidates}
+          rows={executableCandidates}
           rowKey={(row) => row.key}
-          emptyTitle="No replay candidates yet"
-          emptyDescription="Approved strategy candidates will appear here automatically."
+          emptyTitle="No executable backtest candidates yet"
+          emptyDescription="Executable approved setups will appear here once registered backend strategies are available."
           columns={[
             { key: "priority", title: "Priority", render: (row) => formatInteger(row.priority) },
             {
@@ -60,76 +107,118 @@ export default function BacktestsPage() {
                   <span className="text-xs text-slate-400">
                     {row.symbol} · {row.timeframe}
                   </span>
+                  <span className="text-[11px] text-slate-500">{row.strategyCode}</span>
                 </div>
               ),
             },
             {
-              key: "replay",
-              title: "First replay spec",
+              key: "baseline",
+              title: "Baseline replay",
               render: (row) => (
                 <div className="grid gap-1 text-sm text-slate-200">
                   <span>
                     {row.bestLookbackDays}d · +{row.bestForwardBars} bars
                   </span>
-                  <span className="text-xs text-slate-400">{formatInteger(row.bestMaxBarsPerSeries)} max bars per series</span>
+                  <span className="text-xs text-slate-400">{formatInteger(row.bestMaxBarsPerSeries)} max bars</span>
                 </div>
               ),
             },
             {
-              key: "evidence",
-              title: "Evidence",
-              render: (row) => (
-                <div className="grid gap-1">
-                  <span>{formatInteger(row.candidateHits)} candidate hits</span>
-                  <span className="text-xs text-slate-400">{formatInteger(Math.round(row.avgSampleSize))} avg sample</span>
-                </div>
-              ),
+              key: "latest",
+              title: "Latest run",
+              render: (row) => {
+                const latest = latestBacktestByStrategy.get(row.strategyCode);
+                if (!latest) {
+                  return <span className="text-sm text-slate-400">No run yet</span>;
+                }
+                return (
+                  <div className="grid gap-1">
+                    <StatusBadge status={latest.status} />
+                    <span className="text-xs text-slate-400">{formatDateTime(latest.started_at)}</span>
+                  </div>
+                );
+              },
             },
             {
-              key: "net",
-              title: "Avg / Best net",
-              render: (row) => (
-                <div className="grid gap-1">
-                  <span>{formatPercent(row.avgNetReturnPct)}</span>
-                  <span className="text-xs text-slate-400">best {formatPercent(row.bestNetReturnPct)}</span>
-                </div>
-              ),
+              key: "result",
+              title: "Latest result",
+              render: (row) => {
+                const latest = latestBacktestByStrategy.get(row.strategyCode);
+                if (!latest) {
+                  return <span className="text-sm text-slate-400">Pending first replay</span>;
+                }
+                return (
+                  <div className="grid gap-1">
+                    <span>{formatPercent(latest.total_return_pct)}</span>
+                    <span className="text-xs text-slate-400">{formatInteger(latest.total_trades)} trades</span>
+                  </div>
+                );
+              },
             },
             {
-              key: "status",
-              title: "Status",
-              render: () => <StatusBadge status="ready" />,
-            },
-            {
-              key: "focus",
-              title: "Replay goal",
-              render: (row) => <span className="text-sm text-slate-300">{row.backtestFocus}</span>,
+              key: "action",
+              title: "Action",
+              render: (row) => {
+                const isActive = activeStrategyCode === row.strategyCode && runBacktestMutation.isPending;
+                return (
+                  <button
+                    type="button"
+                    onClick={() => handleRunBaseline(row.strategyCode, row.symbol, row.timeframe, row.bestLookbackDays)}
+                    disabled={runBacktestMutation.isPending}
+                    className="rounded-xl border border-emerald-400/25 bg-emerald-400/10 px-3 py-2 text-xs font-medium uppercase tracking-[0.18em] text-emerald-100 transition hover:border-emerald-300/40 hover:bg-emerald-300/15 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {isActive ? "Starting..." : "Run baseline"}
+                  </button>
+                );
+              },
             },
           ]}
         />
       </SectionCard>
 
-      <SectionCard title="How To Use This Layer" eyebrow="What we do here next">
-        <div className="grid gap-4 xl:grid-cols-3">
-          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-            <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">1. Replay first</p>
-            <p className="mt-2 text-sm leading-6 text-slate-300">
-              Start with the recommended replay spec for each setup. That gives us one baseline per candidate instead of immediately exploding into parameter churn.
-            </p>
-          </div>
-          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-            <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">2. Compare exits</p>
-            <p className="mt-2 text-sm leading-6 text-slate-300">
-              Once the baseline replay is healthy, compare nearby exit horizons and check whether the edge survives with conservative assumptions.
-            </p>
-          </div>
-          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-            <p className="text-[11px] uppercase tracking-[0.2em] text-slate-400">3. Promote to engine</p>
-            <p className="mt-2 text-sm leading-6 text-slate-300">
-              Only after a candidate survives replay do we translate it into executable strategy logic for the real backtest and paper engine layer.
-            </p>
-          </div>
-        </div>
+      <SectionCard title="Recent Backtests" eyebrow="Stored replay history">
+        <DataTable
+          rows={backtests}
+          rowKey={(row) => row.id}
+          emptyTitle="No backtests yet"
+          emptyDescription="Once we start replay runs, they will show up here automatically."
+          columns={[
+            { key: "run", title: "Run", render: (row) => `#${row.id}` },
+            {
+              key: "strategy",
+              title: "Strategy",
+              render: (row) => (
+                <div className="grid gap-1">
+                  <span className="font-medium text-white">{row.strategy_name}</span>
+                  <span className="text-xs text-slate-400">{row.strategy_code}</span>
+                </div>
+              ),
+            },
+            { key: "market", title: "Market", render: (row) => `${row.symbol} · ${row.timeframe}` },
+            { key: "status", title: "Status", render: (row) => <StatusBadge status={row.status} /> },
+            { key: "started", title: "Started", render: (row) => formatDateTime(row.started_at) },
+            {
+              key: "return",
+              title: "Return / DD",
+              render: (row) => (
+                <div className="grid gap-1">
+                  <span>{formatPercent(row.total_return_pct)}</span>
+                  <span className="text-xs text-slate-400">DD {formatPercent(row.max_drawdown_pct)}</span>
+                </div>
+              ),
+            },
+            {
+              key: "equity",
+              title: "Final equity",
+              render: (row) => (
+                <div className="grid gap-1">
+                  <span>{formatCurrency(row.final_equity)}</span>
+                  <span className="text-xs text-slate-400">{formatInteger(row.total_trades)} trades</span>
+                </div>
+              ),
+            },
+          ]}
+        />
       </SectionCard>
     </div>
   );
