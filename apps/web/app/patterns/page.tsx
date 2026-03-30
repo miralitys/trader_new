@@ -21,6 +21,7 @@ export default function PatternsPage() {
   const [lookbackDays, setLookbackDays] = useState(720);
   const [forwardBars, setForwardBars] = useState(12);
   const [maxBarsPerSeries, setMaxBarsPerSeries] = useState(5000);
+  const [selectedTimeframes, setSelectedTimeframes] = useState<string[]>([...stablePatternTimeframes]);
   const [message, setMessage] = useState<string | null>(null);
 
   const runsQuery = usePatternScans(20, true);
@@ -46,10 +47,21 @@ export default function PatternsPage() {
   const candidateCount = report?.patterns.filter((item) => item.verdict === "candidate").length ?? 0;
   const readySeries = report?.coverage.filter((item) => item.ready_for_pattern_scan).length ?? 0;
 
+  function toggleTimeframe(timeframe: string) {
+    setSelectedTimeframes((current) => {
+      if (current.includes(timeframe)) {
+        return current.length === 1 ? current : current.filter((item) => item !== timeframe);
+      }
+      return [...current, timeframe].sort(
+        (left, right) => stablePatternTimeframes.indexOf(left as (typeof stablePatternTimeframes)[number]) - stablePatternTimeframes.indexOf(right as (typeof stablePatternTimeframes)[number]),
+      );
+    });
+  }
+
   async function handleStart() {
     setMessage(null);
     try {
-      for (const timeframe of stablePatternTimeframes) {
+      for (const timeframe of selectedTimeframes) {
         await startMutation.mutateAsync({
           exchange_code: "binance_us",
           symbols: [...presetSymbols],
@@ -62,7 +74,7 @@ export default function PatternsPage() {
         });
       }
       setMessage(
-        "Queued 3 pattern scans in order: 4h, then 1h, then 15m. We are intentionally leaving 5m and 1m out of this batch for stability.",
+        `Queued ${selectedTimeframes.length} pattern scan${selectedTimeframes.length === 1 ? "" : "s"} in order: ${selectedTimeframes.join(", ")}.`,
       );
     } catch (error) {
       setMessage(getErrorMessage(error, "Unable to queue pattern scan."));
@@ -135,6 +147,27 @@ export default function PatternsPage() {
               ))}
             </div>
 
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="mr-1 text-[11px] uppercase tracking-[0.2em] text-slate-500">Timeframes</span>
+              {stablePatternTimeframes.map((timeframe) => {
+                const active = selectedTimeframes.includes(timeframe);
+                return (
+                  <button
+                    key={timeframe}
+                    type="button"
+                    onClick={() => toggleTimeframe(timeframe)}
+                    className={`rounded-full border px-3.5 py-1.5 text-sm font-medium transition ${
+                      active
+                        ? "border-violet-300/45 bg-violet-400/15 text-violet-100"
+                        : "border-white/10 bg-slate-950/50 text-slate-200 hover:border-violet-300/30 hover:bg-violet-400/10 hover:text-white"
+                    }`}
+                  >
+                    {timeframe}
+                  </button>
+                );
+              })}
+            </div>
+
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="grid gap-2">
                 <span className="text-[11px] uppercase tracking-[0.2em] text-slate-400">Max bars per series</span>
@@ -148,11 +181,11 @@ export default function PatternsPage() {
                 />
               </label>
               <div className="rounded-2xl border border-white/8 bg-slate-950/45 px-4 py-3 text-sm text-slate-300">
-                Universe: {presetSymbols.length} symbols · {stablePatternTimeframes.length} default timeframes
+                Universe: {presetSymbols.length} symbols · {selectedTimeframes.length} selected timeframes
                 <br />
                 Series per phase: {presetSymbols.length}
                 <br />
-                Total series across the queued batch: {presetSymbols.length * stablePatternTimeframes.length}
+                Total series across the queued batch: {presetSymbols.length * selectedTimeframes.length}
               </div>
             </div>
 
@@ -160,14 +193,14 @@ export default function PatternsPage() {
               <button
                 type="button"
                 onClick={handleStart}
-                disabled={startMutation.isPending || Boolean(runningRun)}
+                disabled={startMutation.isPending || Boolean(runningRun) || selectedTimeframes.length === 0}
                 className="rounded-xl bg-emerald-300 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-emerald-200 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400"
               >
                 {startMutation.isPending
                   ? "Queueing scans..."
                   : runningRun
                     ? "Pattern scan already running"
-                    : "Start phased pattern scan"}
+                    : `Start scan${selectedTimeframes.length > 1 ? "s" : ""}`}
               </button>
             </div>
 
