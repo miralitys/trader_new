@@ -23,6 +23,8 @@ const links = [
   { href: "/pattern-registry", label: "Pattern Registry" },
   { href: "/pattern-validation", label: "Pattern Validation" },
   { href: "/strategy-candidates", label: "Strategy Candidates" },
+  { href: "/backtests", label: "Backtests" },
+  { href: "/paper-tests", label: "Paper Tests" },
   { href: "/logs", label: "Logs" },
 ];
 
