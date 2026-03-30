@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { SectionCard } from "@/components/section-card";
 import { DataTable } from "@/components/tables/data-table";
@@ -22,11 +22,27 @@ export default function PatternsPage() {
   const [forwardBars, setForwardBars] = useState(12);
   const [maxBarsPerSeries, setMaxBarsPerSeries] = useState(5000);
   const [selectedTimeframes, setSelectedTimeframes] = useState<string[]>([...stablePatternTimeframes]);
+  const [selectedCompletedRunId, setSelectedCompletedRunId] = useState<number | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
   const runsQuery = usePatternScans(20, true);
   const summaryQuery = useResearchSummary();
   const startMutation = useStartPatternScan();
+  const runs = useMemo(() => runsQuery.data ?? [], [runsQuery.data]);
+  const completedRuns = useMemo(
+    () => runs.filter((run) => run.status === "completed" && run.report),
+    [runs],
+  );
+
+  useEffect(() => {
+    if (!completedRuns.length) {
+      setSelectedCompletedRunId(null);
+      return;
+    }
+    setSelectedCompletedRunId((current) =>
+      current && completedRuns.some((run) => run.id === current) ? current : completedRuns[0].id,
+    );
+  }, [completedRuns]);
 
   if ((runsQuery.isLoading || summaryQuery.isLoading) && !runsQuery.data && !summaryQuery.data) {
     return <LoadingState label="Loading pattern workspace..." />;
@@ -37,11 +53,11 @@ export default function PatternsPage() {
     return <ErrorState message={getErrorMessage(error, "Unable to load pattern workspace.")} />;
   }
 
-  const runs = runsQuery.data ?? [];
   const latestRun = runs[0] ?? null;
   const runningRun = runs.find((run) => run.status === "queued" || run.status === "running") ?? null;
-  const latestCompletedRun = runs.find((run) => run.status === "completed" && run.report) ?? null;
-  const report: ResearchSummary | null = latestCompletedRun?.report ?? summaryQuery.data ?? null;
+  const selectedCompletedRun =
+    completedRuns.find((run) => run.id === selectedCompletedRunId) ?? completedRuns[0] ?? null;
+  const report: ResearchSummary | null = selectedCompletedRun?.report ?? summaryQuery.data ?? null;
   const runningEtaText = buildPatternEta(runningRun);
 
   const candidateCount = report?.patterns.filter((item) => item.verdict === "candidate").length ?? 0;
@@ -318,7 +334,32 @@ export default function PatternsPage() {
 
       {report ? (
         <>
-          <SectionCard title="Top pattern candidates" eyebrow="Latest completed report">
+          <SectionCard
+            title="Top pattern candidates"
+            eyebrow={selectedCompletedRun ? `Report #${selectedCompletedRun.id}` : "Selected completed report"}
+          >
+            {completedRuns.length ? (
+              <div className="mb-4 flex flex-wrap items-center gap-2">
+                <span className="mr-1 text-[11px] uppercase tracking-[0.2em] text-slate-500">Reports</span>
+                {completedRuns.map((run) => {
+                  const active = run.id === selectedCompletedRun?.id;
+                  return (
+                    <button
+                      key={run.id}
+                      type="button"
+                      onClick={() => setSelectedCompletedRunId(run.id)}
+                      className={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${
+                        active
+                          ? "border-emerald-300/45 bg-emerald-400/15 text-emerald-100"
+                          : "border-white/10 bg-slate-950/50 text-slate-300 hover:border-emerald-300/30 hover:bg-emerald-400/10 hover:text-white"
+                      }`}
+                    >
+                      #{run.id} · {run.lookback_days}d · +{run.forward_bars} · {run.timeframes.join(",")}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
             <DataTable
               rows={report.patterns.slice(0, 20)}
               rowKey={(row) => `${row.symbol}-${row.timeframe}-${row.pattern_code}`}
@@ -345,7 +386,10 @@ export default function PatternsPage() {
             />
           </SectionCard>
 
-          <SectionCard title="Coverage matrix" eyebrow="Latest completed pattern report">
+          <SectionCard
+            title="Coverage matrix"
+            eyebrow={selectedCompletedRun ? `Coverage for report #${selectedCompletedRun.id}` : "Selected completed pattern report"}
+          >
             <DataTable
               rows={report.coverage}
               rowKey={(row) => `${row.symbol}-${row.timeframe}`}
