@@ -62,14 +62,23 @@ async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
 
   if (!response.ok) {
     let payload: ApiErrorPayload | null = null;
+    let textPayload: string | null = null;
 
     try {
       payload = (await response.json()) as ApiErrorPayload;
     } catch {
+      try {
+        textPayload = await response.text();
+      } catch {
+        textPayload = null;
+      }
       payload = null;
     }
 
-    const message = formatApiErrorDetail(payload?.detail ?? payload) ?? `API request failed: ${response.status}`;
+    const message =
+      formatApiErrorDetail(payload?.detail ?? payload) ??
+      textPayload?.trim() ??
+      `API request failed: ${response.status}`;
     throw new Error(message);
   }
 

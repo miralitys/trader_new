@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Type
+from typing import Any, Mapping, Type
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -62,8 +62,17 @@ class BaseStrategy:
     def default_config(self) -> dict[str, Any]:
         return self.config_model().model_dump()
 
-    def parse_config(self, config: dict[str, Any] | None = None) -> BaseStrategyConfig:
-        return self.config_model(**(config or {}))
+    def parse_config(
+        self,
+        config: BaseStrategyConfig | Mapping[str, Any] | None = None,
+    ) -> BaseStrategyConfig:
+        if config is None:
+            return self.config_model()
+        if isinstance(config, self.config_model):
+            return config
+        if isinstance(config, BaseStrategyConfig):
+            return self.config_model(**config.model_dump())
+        return self.config_model(**dict(config))
 
     def required_preroll_days(
         self,
