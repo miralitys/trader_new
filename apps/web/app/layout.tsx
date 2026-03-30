@@ -21,6 +21,7 @@ const links = [
   { href: "/features", label: "Feature Layer" },
   { href: "/patterns", label: "Patterns" },
   { href: "/pattern-registry", label: "Pattern Registry" },
+  { href: "/pattern-validation", label: "Pattern Validation" },
   { href: "/logs", label: "Logs" },
 ];
 
