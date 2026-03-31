@@ -63,11 +63,12 @@ class PositionRepository(BaseRepository):
         stop_price: Decimal | None,
         take_profit_price: Decimal | None,
         opened_at: datetime,
+        side: Side = Side.LONG,
     ) -> Position:
         position = Position(
             strategy_run_id=strategy_run_id,
             symbol=symbol,
-            side=Side.LONG,
+            side=side,
             qty=qty,
             avg_entry_price=avg_entry_price,
             stop_price=stop_price,

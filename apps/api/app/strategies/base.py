@@ -45,6 +45,7 @@ class BaseStrategy:
     description = "Base strategy interface placeholder."
     spot_only = True
     long_only = True
+    primary_side = "long"
     status = "scaffold"
     debug_counter_keys: tuple[str, ...] = ()
     config_model: Type[BaseStrategyConfig] = BaseStrategyConfig
@@ -56,6 +57,7 @@ class BaseStrategy:
             description=self.description,
             spot_only=self.spot_only,
             long_only=self.long_only,
+            primary_side=self.primary_side,
             status=self.status,
         )
 

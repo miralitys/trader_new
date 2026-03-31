@@ -300,6 +300,7 @@ class QueryService:
                 strategy_run_id=trade.strategy_run_id,
                 strategy_code=self._resolve_strategy_code(trade.strategy_run_id, strategy_code_cache),
                 symbol=trade.symbol,
+                side=str(trade.metadata_json.get("side")) if trade.metadata_json.get("side") is not None else None,
                 entry_price=trade.entry_price,
                 exit_price=trade.exit_price,
                 qty=trade.qty,

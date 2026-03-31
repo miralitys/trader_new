@@ -15,12 +15,13 @@ class OrderRepository(BaseRepository):
         symbol: str,
         qty: Decimal,
         price: Decimal,
+        side: Side = Side.LONG,
         linked_signal_id: Optional[int] = None,
     ) -> Order:
         order = Order(
             strategy_run_id=strategy_run_id,
             symbol=symbol,
-            side=Side.LONG,
+            side=side,
             order_type=OrderType.SIMULATED,
             qty=qty,
             price=price,

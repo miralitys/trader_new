@@ -7,6 +7,7 @@ from typing import Any, Optional, Sequence
 
 from app.engines.base import EngineBase
 from app.engines.risk_engine import EntryPlan, ExitPlan, RiskEngine
+from app.models.enums import Side
 from app.schemas.backtest import BacktestCandle, BacktestTrade
 from app.strategies.base import BaseStrategy, StrategyContext
 
@@ -15,11 +16,13 @@ ZERO = Decimal("0")
 
 @dataclass(frozen=True)
 class PaperPositionState:
+    side: str
     entry_time: datetime
     entry_price: Decimal
     qty: Decimal
     entry_fee: Decimal
     entry_slippage: Decimal
+    notional_value: Decimal
     capital_committed: Decimal
     stop_price: Optional[Decimal]
     take_profit_price: Optional[Decimal]
@@ -42,6 +45,7 @@ class PaperSignalEvent:
 
 @dataclass(frozen=True)
 class PaperOrderEvent:
+    side: str
     qty: Decimal
     price: Decimal
     linked_to_signal: bool
@@ -49,6 +53,7 @@ class PaperOrderEvent:
 
 @dataclass(frozen=True)
 class PaperTradeEvent:
+    side: str
     entry_price: Decimal
     exit_price: Decimal
     qty: Decimal
@@ -94,9 +99,6 @@ class PaperEngine(EngineBase):
         strategy_config_override: dict[str, Any],
         runtime_metadata: Optional[dict[str, Any]] = None,
     ) -> PaperCandleResult:
-        if not strategy.long_only or not strategy.spot_only:
-            raise ValueError("PaperEngine currently supports LONG-only SPOT-only strategies only")
-
         config_payload = strategy.default_config()
         config_payload.update(strategy_config_override)
         strategy_config = strategy.parse_config(config_payload)
@@ -109,6 +111,7 @@ class PaperEngine(EngineBase):
         if current_state.position is not None:
             exit_plan = self.risk_engine.evaluate_intrabar_exit(
                 candle=candle,
+                side=current_state.position.side,
                 qty=current_state.position.qty,
                 stop_price=current_state.position.stop_price,
                 take_profit_price=current_state.position.take_profit_price,
@@ -124,6 +127,7 @@ class PaperEngine(EngineBase):
                 )
                 orders.append(
                     PaperOrderEvent(
+                        side=current_state.position.side,
                         qty=trade_event.qty,
                         price=trade_event.exit_price,
                         linked_to_signal=False,
@@ -169,7 +173,8 @@ class PaperEngine(EngineBase):
             )
 
         if current_state.position is None and signal.action == "enter":
-            validation = self.risk_engine.validate_order(strategy.key, symbol)
+            signal_side = signal.side if signal.side in {Side.LONG.value, Side.SHORT.value} else strategy.primary_side
+            validation = self.risk_engine.validate_order(strategy.key, symbol, side=signal_side)
             if validation.get("approved"):
                 stop_price = self._metadata_decimal(signal.metadata, "stop_price")
                 take_profit_price = self._metadata_decimal(signal.metadata, "take_profit_price")
@@ -179,6 +184,7 @@ class PaperEngine(EngineBase):
                     fee_rate=fee_rate,
                     slippage_rate=slippage_rate,
                     risk_plan=risk_plan,
+                    side=signal_side,
                     override_stop_price=stop_price,
                     override_take_profit_price=take_profit_price,
                 )
@@ -191,6 +197,7 @@ class PaperEngine(EngineBase):
                     )
                     orders.append(
                         PaperOrderEvent(
+                            side=entry_plan.side,
                             qty=entry_plan.qty,
                             price=entry_plan.fill_price,
                             linked_to_signal=True,
@@ -199,6 +206,7 @@ class PaperEngine(EngineBase):
         elif current_state.position is not None and signal.action == "exit":
             exit_plan = self.risk_engine.build_market_exit(
                 reference_price=Decimal(str(candle.close)),
+                side=current_state.position.side,
                 qty=current_state.position.qty,
                 fee_rate=fee_rate,
                 slippage_rate=slippage_rate,
@@ -212,6 +220,7 @@ class PaperEngine(EngineBase):
             )
             orders.append(
                 PaperOrderEvent(
+                    side=current_state.position.side,
                     qty=trade_event.qty,
                     price=trade_event.exit_price,
                     linked_to_signal=True,
@@ -268,11 +277,13 @@ class PaperEngine(EngineBase):
         return PaperRuntimeState(
             cash=state.cash - entry_plan.capital_committed,
             position=PaperPositionState(
+                side=entry_plan.side,
                 entry_time=candle_time,
                 entry_price=entry_plan.fill_price,
                 qty=entry_plan.qty,
                 entry_fee=entry_plan.fee_paid,
                 entry_slippage=entry_plan.slippage_paid,
+                notional_value=entry_plan.notional_value,
                 capital_committed=entry_plan.capital_committed,
                 stop_price=entry_plan.stop_price,
                 take_profit_price=entry_plan.take_profit_price,
@@ -287,17 +298,23 @@ class PaperEngine(EngineBase):
         exit_plan: ExitPlan,
         exit_time: datetime,
     ) -> tuple[PaperRuntimeState, PaperTradeEvent]:
-        proceeds = position.qty * exit_plan.fill_price
-        updated_cash = state.cash + proceeds - exit_plan.fee_paid
+        if position.side == Side.SHORT.value:
+            cover_cost = position.qty * exit_plan.fill_price
+            updated_cash = state.cash + position.notional_value - cover_cost - exit_plan.fee_paid
+            pnl = (position.entry_price - exit_plan.fill_price) * position.qty - position.entry_fee - exit_plan.fee_paid
+        else:
+            proceeds = position.qty * exit_plan.fill_price
+            updated_cash = state.cash + proceeds - exit_plan.fee_paid
+            pnl = proceeds - exit_plan.fee_paid - position.capital_committed
         total_fees = position.entry_fee + exit_plan.fee_paid
         total_slippage = position.entry_slippage + exit_plan.slippage_paid
-        pnl = proceeds - exit_plan.fee_paid - position.capital_committed
         pnl_pct = ZERO
         if position.capital_committed > ZERO:
             pnl_pct = (pnl / position.capital_committed) * Decimal("100")
 
         next_state = PaperRuntimeState(cash=updated_cash, position=None)
         trade_event = PaperTradeEvent(
+            side=position.side,
             entry_price=position.entry_price,
             exit_price=exit_plan.fill_price,
             qty=position.qty,
@@ -308,6 +325,7 @@ class PaperEngine(EngineBase):
             opened_at=position.entry_time,
             closed_at=exit_time,
             metadata_json={
+                "side": position.side,
                 "entry": position.entry_metadata,
                 "exit_reason": exit_plan.reason,
                 "exit_reason_label": self._normalized_exit_reason(exit_plan.reason),
@@ -322,6 +340,7 @@ class PaperEngine(EngineBase):
         if position is None:
             return None
         return {
+            "side": position.side,
             "entry_time": position.entry_time,
             "entry_price": position.entry_price,
             "qty": position.qty,

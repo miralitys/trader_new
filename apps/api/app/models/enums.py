@@ -35,6 +35,7 @@ class SignalType(str, Enum):
 
 class Side(str, Enum):
     LONG = "long"
+    SHORT = "short"
 
 
 class OrderType(str, Enum):

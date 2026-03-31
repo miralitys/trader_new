@@ -15,6 +15,7 @@ export type StrategySummary = {
   description: string;
   spot_only: boolean;
   long_only: boolean;
+  primary_side: string;
   has_saved_config: boolean;
   active_paper_run_id: number | null;
   active_paper_status: string | null;
@@ -439,6 +440,7 @@ export type Trade = {
   strategy_run_id: number;
   strategy_code: string | null;
   symbol: string;
+  side?: string | null;
   entry_price: NumericValue;
   exit_price: NumericValue;
   qty: NumericValue;

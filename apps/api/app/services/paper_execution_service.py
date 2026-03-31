@@ -8,7 +8,7 @@ from typing import Optional
 from app.core.logging import get_logger
 from app.db.session import SessionLocal
 from app.engines.paper_engine import PaperEngine, PaperPositionState, PaperRuntimeState
-from app.models.enums import SignalType
+from app.models.enums import Side, SignalType
 from app.repositories.candle_repository import CandleRepository
 from app.repositories.order_repository import OrderRepository
 from app.repositories.paper_account_repository import PaperAccountRepository
@@ -313,6 +313,7 @@ class PaperExecutionService:
                     order_repository.create_filled_order(
                         strategy_run_id=run.id,
                         symbol=symbol,
+                        side=Side(order_event.side),
                         qty=order_event.qty,
                         price=order_event.price,
                         linked_signal_id=signal_id if order_event.linked_to_signal else None,
@@ -325,6 +326,7 @@ class PaperExecutionService:
                     open_positions[symbol] = position_repository.open_position(
                         strategy_run_id=run.id,
                         symbol=symbol,
+                        side=Side(next_position.side),
                         qty=next_position.qty,
                         avg_entry_price=next_position.entry_price,
                         stop_price=next_position.stop_price,
@@ -338,6 +340,8 @@ class PaperExecutionService:
                             "entry_time": to_iso8601(next_position.entry_time),
                             "entry_fee": str(next_position.entry_fee),
                             "entry_slippage": str(next_position.entry_slippage),
+                            "side": next_position.side,
+                            "notional_value": str(next_position.notional_value),
                             "capital_committed": str(next_position.capital_committed),
                             "entry_metadata": next_position.entry_metadata,
                         },
@@ -348,6 +352,7 @@ class PaperExecutionService:
                             "run_id": run.id,
                             "strategy_code": strategy.key,
                             "symbol": symbol,
+                            "side": next_position.side,
                             "qty": str(next_position.qty),
                             "entry_price": str(next_position.entry_price),
                         },
@@ -370,7 +375,10 @@ class PaperExecutionService:
                         slippage=result.trade_event.slippage,
                         opened_at=result.trade_event.opened_at,
                         closed_at=result.trade_event.closed_at,
-                        metadata_json=result.trade_event.metadata_json,
+                        metadata_json={
+                            **result.trade_event.metadata_json,
+                            "side": result.trade_event.side,
+                        },
                     )
                     counters.trades_created += 1
                     logger.info(
@@ -464,10 +472,19 @@ class PaperExecutionService:
 
         return PaperPositionState(
             entry_time=entry_time_value,
+            side=str(runtime_payload.get("side", position_model.side.value)),
             entry_price=Decimal(str(position_model.avg_entry_price)),
             qty=Decimal(str(position_model.qty)),
             entry_fee=Decimal(str(runtime_payload.get("entry_fee", "0"))),
             entry_slippage=Decimal(str(runtime_payload.get("entry_slippage", "0"))),
+            notional_value=Decimal(
+                str(
+                    runtime_payload.get(
+                        "notional_value",
+                        Decimal(str(position_model.qty)) * Decimal(str(position_model.avg_entry_price)),
+                    )
+                )
+            ),
             capital_committed=Decimal(
                 str(
                     runtime_payload.get(

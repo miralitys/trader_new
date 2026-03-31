@@ -72,6 +72,7 @@ class StrategySummaryResponse(APIModel):
     description: str
     spot_only: bool = True
     long_only: bool = True
+    primary_side: str = "long"
     has_saved_config: bool = False
     active_paper_run_id: Optional[int] = None
     active_paper_status: Optional[str] = None
@@ -465,6 +466,7 @@ class TradeResponse(APIModel):
     strategy_run_id: int
     strategy_code: Optional[str] = None
     symbol: str
+    side: Optional[str] = None
     entry_price: Decimal
     exit_price: Decimal
     qty: Decimal

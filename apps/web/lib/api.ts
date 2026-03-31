@@ -23,6 +23,7 @@ import type {
   PatternScanRun,
   PaperRunResponse,
   ResearchSummary,
+  StrategyDetail,
   StrategyPaperStartRequest,
   StrategyPaperStopRequest,
   StrategyRunSummary,
@@ -215,6 +216,10 @@ export function getFeatureCoverage(filters: FeatureCoverageFilters = {}) {
 
 export function getStrategies() {
   return apiRequest<StrategySummary[]>("/api/strategies");
+}
+
+export function getStrategy(code: string) {
+  return apiRequest<StrategyDetail>(`/api/strategies/${code}`);
 }
 
 export function getStrategyRuns(filters: { strategyCode?: string; status?: string; mode?: string; limit?: number } = {}) {

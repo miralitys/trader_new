@@ -1,6 +1,7 @@
 """Legacy strategy package kept only for abstract types during the research-first pivot."""
 
 from app.strategies.base import BaseStrategy, BaseStrategyConfig, StrategyContext, StrategySignal
+from app.strategies.ondo_short_delta_fade import REGISTERED_ONDO_SHORT_STRATEGY
 from app.strategies.pattern_candidates import REGISTERED_PATTERN_CANDIDATES
 
 __all__ = [
@@ -8,5 +9,6 @@ __all__ = [
     "BaseStrategyConfig",
     "StrategyContext",
     "StrategySignal",
+    "REGISTERED_ONDO_SHORT_STRATEGY",
     "REGISTERED_PATTERN_CANDIDATES",
 ]

@@ -9,4 +9,5 @@ class StrategyDescriptor(BaseModel):
     description: str
     spot_only: bool = True
     long_only: bool = True
+    primary_side: str = "long"
     status: str = "scaffold"

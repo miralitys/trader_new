@@ -32,6 +32,7 @@ INTERFACE_VISIBLE_STRATEGY_CODES = frozenset(
         "gala_5m_flush_reclaim",
         "iota_5m_flush_reclaim",
         "iota_15m_flush_reclaim",
+        "ondo_short_delta_fade_v1",
     }
 )
 
@@ -66,6 +67,7 @@ class StrategyService:
                     description=strategy.description,
                     spot_only=strategy.spot_only,
                     long_only=strategy.long_only,
+                    primary_side=strategy.primary_side,
                     has_saved_config=has_saved_config,
                     active_paper_run_id=active_run.id if active_run is not None else None,
                     active_paper_status=active_run.status.value if active_run is not None else None,
@@ -92,6 +94,7 @@ class StrategyService:
             description=strategy.description,
             spot_only=strategy.spot_only,
             long_only=strategy.long_only,
+            primary_side=strategy.primary_side,
             has_saved_config=config_record is not None,
             active_paper_run_id=active_run.id if active_run is not None else None,
             active_paper_status=active_run.status.value if active_run is not None else None,

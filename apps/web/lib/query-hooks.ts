@@ -13,6 +13,7 @@ import {
   getLogs,
   getPatternScans,
   getResearchSummary,
+  getStrategy,
   getStrategies,
   getStrategyRuns,
   runDataValidation,
@@ -39,6 +40,7 @@ import type {
   PatternScanRun,
   StrategyPaperStartRequest,
   StrategyPaperStopRequest,
+  StrategyDetail,
   StrategyRunSummary,
   StrategySummary,
   SyncJobFilters,
@@ -56,6 +58,7 @@ export const queryKeys = {
   dataValidationRuns: (limit: number) => ["data-validation-runs", limit] as const,
   patternScans: (limit: number) => ["pattern-scans", limit] as const,
   strategies: ["strategies"] as const,
+  strategy: (code: string) => ["strategies", code] as const,
   strategyRuns: (filters: { strategyCode?: string; status?: string; mode?: string; limit?: number }) => ["strategy-runs", filters] as const,
   backtests: (filters: { strategyCode?: string; status?: string; limit?: number }) => ["backtests", filters] as const,
   logs: (filters: LogFilters) => ["logs", filters] as const,
@@ -167,6 +170,15 @@ export function useStrategies(enabled = true) {
     queryKey: queryKeys.strategies,
     queryFn: getStrategies,
     enabled,
+    refetchInterval: 10000,
+  });
+}
+
+export function useStrategy(code: string, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.strategy(code),
+    queryFn: () => getStrategy(code),
+    enabled: Boolean(code) && enabled,
     refetchInterval: 10000,
   });
 }

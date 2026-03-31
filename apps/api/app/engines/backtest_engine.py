@@ -9,6 +9,7 @@ from typing import Any, Callable, Iterator, Optional, Sequence
 from app.engines.base import EngineBase
 from app.engines.performance_engine import PerformanceEngine
 from app.engines.risk_engine import EntryPlan, ExitPlan, RiskEngine
+from app.models.enums import Side
 from app.schemas.backtest import (
     BacktestCandle,
     BacktestRequest,
@@ -31,12 +32,14 @@ class BacktestStopRequestedError(RuntimeError):
 
 @dataclass
 class OpenPosition:
+    side: str
     entry_time: datetime
     entry_bar_index: int
     entry_price: Decimal
     qty: Decimal
     entry_fee: Decimal
     entry_slippage: Decimal
+    notional_value: Decimal
     capital_committed: Decimal
     stop_price: Optional[Decimal]
     take_profit_price: Optional[Decimal]
@@ -105,9 +108,6 @@ class BacktestEngine(EngineBase):
         should_abort: Optional[Callable[[int, int, datetime], bool]] = None,
         preroll_days: int = 0,
     ) -> BacktestResponse:
-        if not strategy.long_only or not strategy.spot_only:
-            raise ValueError("BacktestEngine currently supports LONG-only SPOT-only strategies only")
-
         requested_start_at = ensure_utc(request.start_at)
         requested_end_at = ensure_utc(request.end_at)
         ordered_candles = sorted(
@@ -322,6 +322,7 @@ class BacktestEngine(EngineBase):
             if position is not None:
                 exit_plan = self.risk_engine.evaluate_intrabar_exit(
                     candle=candle,
+                    side=position.side,
                     qty=position.qty,
                     stop_price=position.stop_price,
                     take_profit_price=position.take_profit_price,
@@ -419,6 +420,7 @@ class BacktestEngine(EngineBase):
                 self._increment_pipeline_counter(diagnostics, "total_signals_generated")
                 exit_plan = self.risk_engine.build_market_exit(
                     reference_price=candle.close,
+                    side=position.side,
                     qty=position.qty,
                     fee_rate=fee_rate,
                     slippage_rate=slippage_rate,
@@ -439,12 +441,14 @@ class BacktestEngine(EngineBase):
                 self._increment_pipeline_counter(diagnostics, "total_orders_created")
                 stop_price = self._metadata_decimal(signal.metadata, "stop_price")
                 take_profit_price = self._metadata_decimal(signal.metadata, "take_profit_price")
+                signal_side = signal.side if signal.side in {Side.LONG.value, Side.SHORT.value} else strategy.primary_side
                 entry_decision = self.risk_engine.calculate_entry_decision(
                     available_cash=cash,
                     reference_price=candle.close,
                     fee_rate=fee_rate,
                     slippage_rate=slippage_rate,
                     risk_plan=risk_plan,
+                    side=signal_side,
                     override_stop_price=stop_price,
                     override_take_profit_price=take_profit_price,
                 )
@@ -506,6 +510,7 @@ class BacktestEngine(EngineBase):
             final_candle = ordered_candles[-1]
             exit_plan = self.risk_engine.build_market_exit(
                 reference_price=final_candle.close,
+                side=position.side,
                 qty=position.qty,
                 fee_rate=fee_rate,
                 slippage_rate=slippage_rate,
@@ -567,12 +572,14 @@ class BacktestEngine(EngineBase):
         entry_metadata: dict[str, object],
     ) -> tuple[OpenPosition, Decimal]:
         position = OpenPosition(
+            side=entry_plan.side,
             entry_time=candle_time,
             entry_bar_index=entry_bar_index,
             entry_price=entry_plan.fill_price,
             qty=entry_plan.qty,
             entry_fee=entry_plan.fee_paid,
             entry_slippage=entry_plan.slippage_paid,
+            notional_value=entry_plan.notional_value,
             capital_committed=entry_plan.capital_committed,
             stop_price=entry_plan.stop_price,
             take_profit_price=entry_plan.take_profit_price,
@@ -587,17 +594,24 @@ class BacktestEngine(EngineBase):
         cash: Decimal,
         exit_time: datetime,
     ) -> tuple[Decimal, BacktestTrade]:
-        proceeds = position.qty * exit_plan.fill_price
-        updated_cash = cash + proceeds - exit_plan.fee_paid
-        gross_pnl = (exit_plan.fill_price - position.entry_price) * position.qty
+        if position.side == Side.SHORT.value:
+            cover_cost = position.qty * exit_plan.fill_price
+            updated_cash = cash + position.notional_value - cover_cost - exit_plan.fee_paid
+            gross_pnl = (position.entry_price - exit_plan.fill_price) * position.qty
+            pnl = gross_pnl - position.entry_fee - exit_plan.fee_paid
+        else:
+            proceeds = position.qty * exit_plan.fill_price
+            updated_cash = cash + proceeds - exit_plan.fee_paid
+            gross_pnl = (exit_plan.fill_price - position.entry_price) * position.qty
+            pnl = proceeds - exit_plan.fee_paid - position.capital_committed
         total_fees = position.entry_fee + exit_plan.fee_paid
         total_slippage = position.entry_slippage + exit_plan.slippage_paid
-        pnl = proceeds - exit_plan.fee_paid - position.capital_committed
         pnl_pct = ZERO
         if position.capital_committed > ZERO:
             pnl_pct = (pnl / position.capital_committed) * Decimal("100")
 
         trade = BacktestTrade(
+            side=position.side,
             entry_time=position.entry_time,
             exit_time=exit_time,
             entry_price=position.entry_price,
@@ -624,6 +638,8 @@ class BacktestEngine(EngineBase):
     ) -> Decimal:
         if position is None:
             return cash
+        if position.side == Side.SHORT.value:
+            return cash + position.notional_value - (position.qty * close_price)
         return cash + (position.qty * close_price)
 
     def _position_snapshot(
@@ -633,6 +649,7 @@ class BacktestEngine(EngineBase):
         if position is None:
             return None
         return {
+            "side": position.side,
             "entry_time": position.entry_time,
             "entry_bar_index": position.entry_bar_index,
             "entry_price": position.entry_price,
