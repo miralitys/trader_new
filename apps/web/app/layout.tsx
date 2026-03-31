@@ -24,6 +24,7 @@ const links = [
   { href: "/pattern-validation", label: "Pattern Validation" },
   { href: "/strategy-candidates", label: "Strategy Candidates" },
   { href: "/ondo-short-delta", label: "ONDO Delta Fade" },
+  { href: "/short-fade-lab", label: "Short Fade Lab" },
   { href: "/backtests", label: "Backtests" },
   { href: "/paper-tests", label: "Paper Tests" },
   { href: "/logs", label: "Logs" },

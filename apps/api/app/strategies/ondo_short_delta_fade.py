@@ -46,15 +46,15 @@ class OndoShortDeltaFadeStrategy(BaseStrategy):
     status = "experimental"
     config_model = OndoShortDeltaFadeConfig
 
-    symbol = "ONDO-USDT"
-    timeframe = "1h"
+    default_symbols = ("ONDO-USDT",)
+    default_timeframes = ("1h",)
 
     def default_config(self) -> dict[str, Any]:
         payload = super().default_config()
         payload.update(
             {
-                "symbols": [self.symbol],
-                "timeframes": [self.timeframe],
+                "symbols": list(self.default_symbols),
+                "timeframes": list(self.default_timeframes),
                 "position_size_pct": 0.1,
                 "stop_loss_pct": 0.0035,
                 "take_profit_pct": 0.004,
@@ -79,7 +79,9 @@ class OndoShortDeltaFadeStrategy(BaseStrategy):
 
     def generate_signal(self, context: StrategyContext) -> StrategySignal:
         config = self.parse_config(context.metadata.get("config", {}))
-        if context.symbol != self.symbol or context.timeframe != self.timeframe:
+        allowed_symbols = tuple(config.symbols or list(self.default_symbols))
+        allowed_timeframes = tuple(config.timeframes or list(self.default_timeframes))
+        if context.symbol not in allowed_symbols or context.timeframe not in allowed_timeframes:
             return StrategySignal(
                 action="hold",
                 side="short",
@@ -87,6 +89,8 @@ class OndoShortDeltaFadeStrategy(BaseStrategy):
                 metadata={
                     "reason_skipped": "unsupported_stream",
                     "skip_reason_detail": f"{context.symbol}:{context.timeframe}",
+                    "allowed_symbols": list(allowed_symbols),
+                    "allowed_timeframes": list(allowed_timeframes),
                 },
             )
 
@@ -396,4 +400,23 @@ class OndoShortDeltaFadeStrategy(BaseStrategy):
         return mapping.get(timeframe, 0)
 
 
+class ShortFadeLabStrategy(OndoShortDeltaFadeStrategy):
+    key = "short_delta_fade_lab_v1"
+    name = "Short Fade Lab v1"
+    description = (
+        "Configurable multi-market short fade research layer using the ONDO rejection template across selected "
+        "symbols and both 1h / 15m timeframes."
+    )
+    default_symbols = (
+        "ONDO-USDT",
+        "GALA-USDT",
+        "IOTA-USDT",
+        "AXS-USDT",
+        "ALPINE-USDT",
+        "FIL-USDT",
+    )
+    default_timeframes = ("1h", "15m")
+
+
 REGISTERED_ONDO_SHORT_STRATEGY = register_strategy(OndoShortDeltaFadeStrategy())
+REGISTERED_SHORT_FADE_LAB_STRATEGY = register_strategy(ShortFadeLabStrategy())
