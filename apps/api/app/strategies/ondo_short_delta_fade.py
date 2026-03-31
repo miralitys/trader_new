@@ -505,9 +505,43 @@ class AlpineShortDeltaFadeV7Strategy(OndoShortDeltaFadeStrategy):
         return payload
 
 
+class AlpineShortDeltaFadeV8Strategy(OndoShortDeltaFadeStrategy):
+    key = "alpine_short_delta_fade_v8"
+    name = "ALPINE Short Delta Fade v8"
+    description = (
+        "Primary ALPINE short-fade branch after ONDO was frozen into secondary watch. This version is slightly "
+        "more permissive than v7 to probe whether ALPINE can add one more layer of signal density without "
+        "breaking its cleaner long-window profile."
+    )
+    default_symbols = ("ALPINE-USDT",)
+    default_timeframes = ("1h",)
+
+    def default_config(self) -> dict[str, Any]:
+        payload = super().default_config()
+        payload.update(
+            {
+                "symbols": list(self.default_symbols),
+                "timeframes": list(self.default_timeframes),
+                "impulse_min_return_pct": 0.015,
+                "breakout_proximity_pct": 0.005,
+                "stretch_above_ema_pct": 0.006,
+                "volume_spike_mult": 1.0,
+                "rejection_close_location_max": 0.62,
+                "upper_wick_min_range_ratio": 0.15,
+                "entry_breakdown_pct": 0.0001,
+                "entry_followthrough_close_location_max": 0.45,
+                "take_profit_pct": 0.005,
+                "time_exit_bars": 2,
+                "max_gap_up_pct": 0.0055,
+            }
+        )
+        return payload
+
+
 REGISTERED_ONDO_SHORT_STRATEGY = register_strategy(OndoShortDeltaFadeStrategy())
 REGISTERED_SHORT_FADE_LAB_STRATEGY = register_strategy(ShortFadeLabStrategy())
 REGISTERED_SHORT_FADE_LAB_V5_STRATEGY = register_strategy(ShortFadeLabV5Strategy())
 REGISTERED_SHORT_FADE_LAB_V6_STRATEGY = register_strategy(ShortFadeLabV6Strategy())
 REGISTERED_ONDO_SHORT_V7_STRATEGY = register_strategy(OndoShortDeltaFadeV7Strategy())
 REGISTERED_ALPINE_SHORT_V7_STRATEGY = register_strategy(AlpineShortDeltaFadeV7Strategy())
+REGISTERED_ALPINE_SHORT_V8_STRATEGY = register_strategy(AlpineShortDeltaFadeV8Strategy())

@@ -21,6 +21,16 @@ import { formatCurrency, formatDateTime, formatInteger, formatPercent, getErrorM
 
 const LOOKBACK_OPTIONS = [180, 365, 720] as const;
 const STRATEGY_TIMEFRAME = "1h";
+const ACTIVE_BRANCH = {
+  code: "alpine_short_delta_fade_v8",
+  symbol: "ALPINE-USDT",
+  shortLabel: "ALPINE",
+};
+const WATCH_BRANCH = {
+  code: "ondo_short_delta_fade_v7",
+  symbol: "ONDO-USDT",
+  shortLabel: "ONDO",
+};
 
 type ConfigRow = {
   key: string;
@@ -28,122 +38,112 @@ type ConfigRow = {
   value: string;
 };
 
-type ExperimentDefinition = {
-  code: string;
-  symbol: string;
-  shortLabel: string;
-  title: string;
-  eyebrow: string;
-  stance: string;
-  note: string;
-  whyItExists: string;
-  interpretation: string;
-  tone: "default" | "positive" | "warning";
-};
-
-const EXPERIMENTS: ExperimentDefinition[] = [
-  {
-    code: "ondo_short_delta_fade_v7",
-    symbol: "ONDO-USDT",
-    shortLabel: "ONDO",
-    title: "ONDO v7",
-    eyebrow: "Strict anchor branch",
-    stance: "Still the anchor thesis, but only if we keep it selective.",
-    note: "This branch stays strict on rejection quality and next-bar weakness because ONDO only showed a tiny edge when we avoided noisy entries.",
-    whyItExists: "We want to know whether ONDO still has a real short-fade edge once it is isolated from the weaker basket names.",
-    interpretation: "If ONDO cannot improve even as a symbol-specific branch, we should stop treating it as the anchor for this thesis.",
-    tone: "warning",
-  },
-  {
-    code: "alpine_short_delta_fade_v7",
-    symbol: "ALPINE-USDT",
-    shortLabel: "ALPINE",
-    title: "ALPINE v7",
-    eyebrow: "Looser survivor branch",
-    stance: "The cleanest non-ONDO survivor, but still too sparse.",
-    note: "This branch is slightly more permissive so we can test whether ALPINE's cleaner stability can survive a little more signal density.",
-    whyItExists: "ALPINE survived the narrowed basket without degrading, so it deserves its own symbol-specific pass rather than being bundled with ONDO.",
-    interpretation: "If ALPINE stays clean while adding a little density, it may become the more promising short watchlist than ONDO.",
-    tone: "positive",
-  },
-];
-
 export default function ShortFadeLabPage() {
+  const alpineStrategyQuery = useStrategy(ACTIVE_BRANCH.code, true);
+  const alpineBacktestsQuery = useBacktests({ strategyCode: ACTIVE_BRANCH.code, limit: 100 }, true);
+  const alpinePaperRunsQuery = useStrategyRuns({ strategyCode: ACTIVE_BRANCH.code, mode: "paper", limit: 100 }, true);
+
+  const ondoStrategyQuery = useStrategy(WATCH_BRANCH.code, true);
+  const ondoBacktestsQuery = useBacktests({ strategyCode: WATCH_BRANCH.code, limit: 100 }, true);
+  const ondoPaperRunsQuery = useStrategyRuns({ strategyCode: WATCH_BRANCH.code, mode: "paper", limit: 100 }, true);
+
+  const isLoading =
+    (alpineStrategyQuery.isLoading && !alpineStrategyQuery.data) ||
+    (alpineBacktestsQuery.isLoading && !alpineBacktestsQuery.data) ||
+    (alpinePaperRunsQuery.isLoading && !alpinePaperRunsQuery.data) ||
+    (ondoStrategyQuery.isLoading && !ondoStrategyQuery.data) ||
+    (ondoBacktestsQuery.isLoading && !ondoBacktestsQuery.data) ||
+    (ondoPaperRunsQuery.isLoading && !ondoPaperRunsQuery.data);
+
+  const error =
+    alpineStrategyQuery.error ??
+    alpineBacktestsQuery.error ??
+    alpinePaperRunsQuery.error ??
+    ondoStrategyQuery.error ??
+    ondoBacktestsQuery.error ??
+    ondoPaperRunsQuery.error;
+
+  if (isLoading) {
+    return <LoadingState label="Loading short fade lab..." />;
+  }
+
+  if (error || !alpineStrategyQuery.data || !ondoStrategyQuery.data) {
+    return <ErrorState message={getErrorMessage(error, "Unable to load the short fade lab.")} />;
+  }
+
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        eyebrow="Symbol-Specific v7"
+        eyebrow="ALPINE First"
         title="Short Fade Lab"
-        description="We split the old shared short-fade round into two independent branches: one strict `ONDO` experiment and one slightly more permissive `ALPINE` experiment. Each now has its own replay history and paper lane."
+        description="We made the call: `ALPINE` is now the only active short-fade branch in `v8`. `ONDO` stays visible as a secondary watch, but it is frozen until `ALPINE` proves it deserves more tuning effort."
       />
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard label="Active branches" value="2" hint="ONDO v7 and ALPINE v7" tone="positive" />
-        <MetricCard label="Timeframe" value="1h only" hint="No more mixed timeframe noise in this round" tone="default" />
-        <MetricCard label="Paper lanes" value="2" hint="One independent paper run per symbol-specific strategy" tone="warning" />
-        <MetricCard label="Research stance" value="Watchlist" hint="We are testing signal quality, not promoting these yet" tone="default" />
+        <MetricCard label="Primary branch" value="ALPINE v8" hint="Only active tuning branch" tone="positive" />
+        <MetricCard label="Secondary watch" value="ONDO v7" hint="Read-only reference branch" tone="warning" />
+        <MetricCard label="Timeframe" value="1h only" hint="No lower-timeframe detours in this round" tone="default" />
+        <MetricCard label="Research stance" value="Narrowed again" hint="One active branch, one frozen benchmark" tone="default" />
       </section>
 
-      <SectionCard title="Why We Split The Lab" eyebrow="This is the right kind of narrowing">
+      <SectionCard title="Why We Narrowed Again" eyebrow="This is the healthy kind of pruning">
         <div className="grid gap-4 md:grid-cols-3">
           <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-            <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">What changed</p>
+            <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">Decision</p>
             <p className="mt-3 text-sm leading-6 text-slate-200">
-              `v6` told us the broad thesis was gone. Only `ONDO` and `ALPINE` stayed alive, so `v7` stops pretending they should share one generic branch.
+              `ALPINE` becomes the only active branch because it improved the most after the symbol-specific split, while `ONDO` stayed sparse and nearly unchanged.
             </p>
           </div>
           <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-            <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">What we removed</p>
+            <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">What frozen means</p>
             <p className="mt-3 text-sm leading-6 text-slate-200">
-              `GALA`, `IOTA`, `AXS`, `FIL`, and `ONDO 15m` stay out. They already told us enough, and keeping them in the lab would only add noise.
+              `ONDO` is still visible so we do not lose the benchmark, but we stop spending tuning cycles on it unless `ALPINE` fails and forces us back.
             </p>
           </div>
           <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-            <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">What we are checking</p>
+            <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">What success looks like</p>
             <p className="mt-3 text-sm leading-6 text-slate-200">
-              We now care about one thing: whether either symbol-specific branch can produce a cleaner edge once its own rules are allowed to diverge.
+              `ALPINE v8` should either add a bit more density without degrading, or clearly prove this short-thesis is too small to keep pushing.
             </p>
           </div>
         </div>
       </SectionCard>
 
-      {EXPERIMENTS.map((experiment) => (
-        <ExperimentPanel key={experiment.code} experiment={experiment} />
-      ))}
+      <ActiveBranchPanel
+        strategyCode={ACTIVE_BRANCH.code}
+        symbol={ACTIVE_BRANCH.symbol}
+        shortLabel={ACTIVE_BRANCH.shortLabel}
+      />
+
+      <FrozenWatchPanel
+        strategyCode={WATCH_BRANCH.code}
+        symbol={WATCH_BRANCH.symbol}
+        shortLabel={WATCH_BRANCH.shortLabel}
+      />
     </div>
   );
 }
 
-function ExperimentPanel({ experiment }: { experiment: ExperimentDefinition }) {
-  const strategyQuery = useStrategy(experiment.code, true);
-  const backtestsQuery = useBacktests({ strategyCode: experiment.code, limit: 100 }, true);
-  const paperRunsQuery = useStrategyRuns({ strategyCode: experiment.code, mode: "paper", limit: 100 }, true);
+function ActiveBranchPanel({
+  strategyCode,
+  symbol,
+  shortLabel,
+}: {
+  strategyCode: string;
+  symbol: string;
+  shortLabel: string;
+}) {
+  const strategyQuery = useStrategy(strategyCode, true);
+  const backtestsQuery = useBacktests({ strategyCode, limit: 100 }, true);
+  const paperRunsQuery = useStrategyRuns({ strategyCode, mode: "paper", limit: 100 }, true);
   const runBacktestMutation = useRunBacktest();
   const startPaperMutation = useStartStrategyPaperRun();
   const stopPaperMutation = useStopStrategyPaperRun();
   const [activeLookback, setActiveLookback] = useState<number | null>(null);
   const [paperBusy, setPaperBusy] = useState(false);
 
-  const isLoading =
-    (strategyQuery.isLoading && !strategyQuery.data) ||
-    (backtestsQuery.isLoading && !backtestsQuery.data) ||
-    (paperRunsQuery.isLoading && !paperRunsQuery.data);
-  const error = strategyQuery.error ?? backtestsQuery.error ?? paperRunsQuery.error;
-
-  if (isLoading) {
-    return (
-      <SectionCard title={experiment.title} eyebrow={experiment.eyebrow}>
-        <LoadingState label={`Loading ${experiment.shortLabel} v7...`} />
-      </SectionCard>
-    );
-  }
-
-  if (error || !strategyQuery.data) {
-    return (
-      <SectionCard title={experiment.title} eyebrow={experiment.eyebrow}>
-        <ErrorState message={getErrorMessage(error, `Unable to load ${experiment.shortLabel} v7.`)} />
-      </SectionCard>
-    );
+  if (!strategyQuery.data) {
+    return null;
   }
 
   const strategy = strategyQuery.data;
@@ -159,8 +159,8 @@ function ExperimentPanel({ experiment }: { experiment: ExperimentDefinition }) {
     const startAt = new Date(endAt.getTime() - lookbackDays * 24 * 60 * 60 * 1000);
     try {
       await runBacktestMutation.mutateAsync({
-        strategy_code: experiment.code,
-        symbol: experiment.symbol,
+        strategy_code: strategyCode,
+        symbol,
         timeframe: STRATEGY_TIMEFRAME,
         start_at: startAt.toISOString(),
         end_at: endAt.toISOString(),
@@ -170,7 +170,7 @@ function ExperimentPanel({ experiment }: { experiment: ExperimentDefinition }) {
         slippage: 0.0005,
         position_size_pct: 0.1,
         strategy_config_override: {
-          symbols: [experiment.symbol],
+          symbols: [symbol],
           timeframes: [STRATEGY_TIMEFRAME],
         },
       });
@@ -183,9 +183,9 @@ function ExperimentPanel({ experiment }: { experiment: ExperimentDefinition }) {
     setPaperBusy(true);
     try {
       await startPaperMutation.mutateAsync({
-        strategyCode: experiment.code,
+        strategyCode,
         payload: {
-          symbols: [experiment.symbol],
+          symbols: [symbol],
           timeframes: [STRATEGY_TIMEFRAME],
           exchange_code: "binance_us",
           start_from_latest: true,
@@ -194,13 +194,13 @@ function ExperimentPanel({ experiment }: { experiment: ExperimentDefinition }) {
           fee: 0.001,
           slippage: 0.0005,
           strategy_config_override: {
-            symbols: [experiment.symbol],
+            symbols: [symbol],
             timeframes: [STRATEGY_TIMEFRAME],
           },
           metadata: {
-            launched_from: "short_fade_lab_v7_page",
-            strategy_code: experiment.code,
-            selected_symbol: experiment.symbol,
+            launched_from: "short_fade_lab_v8_page",
+            strategy_code: strategyCode,
+            selected_symbol: symbol,
             selected_timeframe: STRATEGY_TIMEFRAME,
           },
         },
@@ -214,9 +214,9 @@ function ExperimentPanel({ experiment }: { experiment: ExperimentDefinition }) {
     setPaperBusy(true);
     try {
       await stopPaperMutation.mutateAsync({
-        strategyCode: experiment.code,
+        strategyCode,
         payload: {
-          reason: "manual_stop_from_short_fade_lab_v7_page",
+          reason: "manual_stop_from_short_fade_lab_v8_page",
         },
       });
     } finally {
@@ -226,59 +226,68 @@ function ExperimentPanel({ experiment }: { experiment: ExperimentDefinition }) {
 
   return (
     <div className="flex flex-col gap-6">
-      <SectionCard title={experiment.title} eyebrow={experiment.eyebrow}>
+      <SectionCard title="ALPINE v8" eyebrow="Primary active branch">
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
           <div className="grid gap-4">
-            <p className="text-lg font-medium text-white">{experiment.stance}</p>
-            <p className="text-sm leading-6 text-slate-300">{experiment.note}</p>
+            <p className="text-lg font-medium text-white">
+              `ALPINE` is the only branch still earning active tuning. `v8` is our deliberate attempt to get a little more signal density without wrecking the cleaner long-window profile we saw in `v7`.
+            </p>
+            <p className="text-sm leading-6 text-slate-300">
+              This is the branch we should either promote into a real watch candidate or use as the final proof that the short-fade thesis stays too small to matter.
+            </p>
             <div className="grid gap-4 md:grid-cols-3">
               <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">Why it exists</p>
-                <p className="mt-3 text-sm leading-6 text-slate-200">{experiment.whyItExists}</p>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">Interpretation</p>
-                <p className="mt-3 text-sm leading-6 text-slate-200">{experiment.interpretation}</p>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">Current stream</p>
+                <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">Hypothesis</p>
                 <p className="mt-3 text-sm leading-6 text-slate-200">
-                  {experiment.symbol} · {STRATEGY_TIMEFRAME}
+                  A slightly looser `ALPINE` branch may produce one extra layer of short-fade density while staying cleaner than `ONDO`.
                 </p>
-                <p className="mt-3 text-xs leading-5 text-slate-400">{strategy.description}</p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">Symbol</p>
+                <p className="mt-3 text-sm leading-6 text-slate-200">
+                  {symbol} · {STRATEGY_TIMEFRAME}
+                </p>
+                <p className="mt-2 text-xs leading-5 text-slate-400">{strategy.description}</p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">Latest replay</p>
+                <p className="mt-3 text-sm leading-6 text-slate-200">
+                  {latestBacktest ? formatPercent(latestBacktest.total_return_pct) : "No run yet"}
+                </p>
+                <p className="mt-2 text-xs leading-5 text-slate-400">
+                  {latestBacktest
+                    ? `DD ${formatPercent(latestBacktest.max_drawdown_pct)} · ${formatInteger(latestBacktest.total_trades)} trades`
+                    : "Run 180d, 365d, and 720d to build the first v8 baseline."}
+                </p>
               </div>
             </div>
           </div>
 
           <div className="grid gap-4">
-            <MetricCard label="Strategy status" value={<StatusBadge status={strategy.active_paper_status ?? "experimental"} />} hint={strategy.name} tone={experiment.tone} />
-            <MetricCard
-              label="Latest replay"
-              value={latestBacktest ? formatPercent(latestBacktest.total_return_pct) : "No run yet"}
-              hint={
-                latestBacktest
-                  ? `DD ${formatPercent(latestBacktest.max_drawdown_pct)} · ${formatInteger(latestBacktest.total_trades)} trades`
-                  : `No ${experiment.shortLabel} v7 replay yet`
-              }
-              tone={latestBacktest && Number(latestBacktest.total_return_pct) > 0 ? "positive" : "default"}
-            />
+            <MetricCard label="Branch status" value={<StatusBadge status={strategy.active_paper_status ?? "experimental"} />} hint={strategy.name} tone="positive" />
             <MetricCard
               label="Active paper"
               value={activePaperRun ? `#${activePaperRun.id}` : "None"}
-              hint={activePaperRun ? formatDateTime(activePaperRun.started_at) : "Independent lane for this strategy only"}
+              hint={activePaperRun ? formatDateTime(activePaperRun.started_at) : "Independent ALPINE-only lane"}
               tone={activePaperRun ? "warning" : "default"}
+            />
+            <MetricCard
+              label="Stored replays"
+              value={formatInteger(backtests.length)}
+              hint="This branch no longer shares history with ONDO"
+              tone="default"
             />
           </div>
         </div>
       </SectionCard>
 
-      {runBacktestMutation.error ? <ErrorState message={getErrorMessage(runBacktestMutation.error, `Unable to start ${experiment.shortLabel} v7 backtest.`)} /> : null}
-      {startPaperMutation.error ? <ErrorState message={getErrorMessage(startPaperMutation.error, `Unable to start ${experiment.shortLabel} v7 paper run.`)} /> : null}
-      {stopPaperMutation.error ? <ErrorState message={getErrorMessage(stopPaperMutation.error, `Unable to stop ${experiment.shortLabel} v7 paper run.`)} /> : null}
+      {runBacktestMutation.error ? <ErrorState message={getErrorMessage(runBacktestMutation.error, "Unable to start ALPINE v8 backtest.")} /> : null}
+      {startPaperMutation.error ? <ErrorState message={getErrorMessage(startPaperMutation.error, "Unable to start ALPINE v8 paper run.")} /> : null}
+      {stopPaperMutation.error ? <ErrorState message={getErrorMessage(stopPaperMutation.error, "Unable to stop ALPINE v8 paper run.")} /> : null}
 
       <SectionCard
         title="Config Snapshot"
-        eyebrow={`${experiment.shortLabel} specific defaults`}
+        eyebrow="ALPINE v8 defaults"
         actions={
           <div className="flex flex-wrap gap-2">
             {LOOKBACK_OPTIONS.map((lookback) => (
@@ -309,7 +318,7 @@ function ExperimentPanel({ experiment }: { experiment: ExperimentDefinition }) {
 
       <SectionCard
         title="Paper Control"
-        eyebrow={`${experiment.shortLabel} forward lane`}
+        eyebrow="ALPINE v8 forward lane"
         actions={
           activePaperRun ? (
             <button
@@ -342,24 +351,19 @@ function ExperimentPanel({ experiment }: { experiment: ExperimentDefinition }) {
           <MetricCard
             label="Last processed"
             value={activePaperRun?.last_processed_candle_at ? formatDateTime(activePaperRun.last_processed_candle_at) : "N/A"}
-            hint="Paper starts latest-only on this single stream"
+            hint="Latest-only start on ALPINE 1h"
             tone="default"
           />
-          <MetricCard
-            label="Saved paper history"
-            value={formatInteger(paperRuns.length)}
-            hint="Only this symbol-specific branch"
-            tone="default"
-          />
+          <MetricCard label="Saved paper runs" value={formatInteger(paperRuns.length)} hint="Only ALPINE v8 history" tone="default" />
         </div>
       </SectionCard>
 
-      <SectionCard title="Recent Backtests" eyebrow={`Stored replay history for ${experiment.shortLabel} v7`}>
+      <SectionCard title="Recent Backtests" eyebrow="Stored replay history for ALPINE v8">
         <DataTable
           rows={backtests}
           rowKey={(row) => row.id}
-          emptyTitle={`No ${experiment.shortLabel} v7 backtests yet`}
-          emptyDescription="Run one of the windows above to start building the symbol-specific replay history."
+          emptyTitle="No ALPINE v8 backtests yet"
+          emptyDescription="Run one of the windows above to start building the ALPINE v8 baseline."
           columns={[
             { key: "run", title: "Run", render: (row) => `#${row.id}` },
             { key: "status", title: "Status", render: (row) => <StatusBadge status={row.status} /> },
@@ -379,29 +383,115 @@ function ExperimentPanel({ experiment }: { experiment: ExperimentDefinition }) {
           ]}
         />
       </SectionCard>
+    </div>
+  );
+}
 
-      <SectionCard title="Recent Paper Runs" eyebrow={`Stored forward history for ${experiment.shortLabel} v7`}>
+function FrozenWatchPanel({
+  strategyCode,
+  symbol,
+  shortLabel,
+}: {
+  strategyCode: string;
+  symbol: string;
+  shortLabel: string;
+}) {
+  const strategyQuery = useStrategy(strategyCode, true);
+  const backtestsQuery = useBacktests({ strategyCode, limit: 100 }, true);
+  const paperRunsQuery = useStrategyRuns({ strategyCode, mode: "paper", limit: 100 }, true);
+
+  if (!strategyQuery.data) {
+    return null;
+  }
+
+  const strategy = strategyQuery.data;
+  const backtests = backtestsQuery.data ?? [];
+  const paperRuns = paperRunsQuery.data ?? [];
+  const latestBacktest = backtests[0] ?? null;
+  const configRows = buildConfigRows(strategy.effective_config);
+
+  return (
+    <div className="flex flex-col gap-6">
+      <SectionCard title="ONDO v7" eyebrow="Frozen secondary watch">
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="grid gap-4">
+            <p className="text-lg font-medium text-white">
+              `ONDO` stays here as the benchmark branch we are deliberately not tuning anymore unless `ALPINE` collapses and forces us back.
+            </p>
+            <p className="text-sm leading-6 text-slate-300">
+              This is intentionally read-only now. We keep the history visible so we do not lose context, but we stop spending fresh tuning effort on a branch that stayed too sparse.
+            </p>
+            <div className="grid gap-4 md:grid-cols-3">
+              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">Reason frozen</p>
+                <p className="mt-3 text-sm leading-6 text-slate-200">
+                  `ONDO` never improved enough after the split. It stayed alive, but too sparse and too small to justify more active tuning.
+                </p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">Current stream</p>
+                <p className="mt-3 text-sm leading-6 text-slate-200">
+                  {symbol} · {STRATEGY_TIMEFRAME}
+                </p>
+                <p className="mt-2 text-xs leading-5 text-slate-400">{strategy.description}</p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">Latest replay</p>
+                <p className="mt-3 text-sm leading-6 text-slate-200">
+                  {latestBacktest ? formatPercent(latestBacktest.total_return_pct) : "No run yet"}
+                </p>
+                <p className="mt-2 text-xs leading-5 text-slate-400">
+                  {latestBacktest
+                    ? `DD ${formatPercent(latestBacktest.max_drawdown_pct)} · ${formatInteger(latestBacktest.total_trades)} trades`
+                    : "No ONDO v7 history found."}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-4">
+            <MetricCard label="Branch status" value="Frozen" hint={shortLabel + " stays as secondary watch"} tone="warning" />
+            <MetricCard label="Stored replays" value={formatInteger(backtests.length)} hint="Preserved benchmark history" tone="default" />
+            <MetricCard label="Paper runs" value={formatInteger(paperRuns.length)} hint="No new paper runs should be started from here" tone="default" />
+          </div>
+        </div>
+      </SectionCard>
+
+      <SectionCard title="Frozen Config Snapshot" eyebrow="Reference only">
         <DataTable
-          rows={paperRuns}
+          rows={configRows}
+          rowKey={(row) => row.key}
+          emptyTitle="No config found"
+          emptyDescription="The backend strategy detail did not return an effective configuration."
+          columns={[
+            { key: "label", title: "Parameter", render: (row) => <span className="font-medium text-white">{row.label}</span> },
+            { key: "value", title: "Value", render: (row) => <span className="text-slate-200">{row.value}</span> },
+          ]}
+        />
+      </SectionCard>
+
+      <SectionCard title="Recent Backtests" eyebrow="Stored replay history for ONDO v7">
+        <DataTable
+          rows={backtests}
           rowKey={(row) => row.id}
-          emptyTitle={`No ${experiment.shortLabel} v7 paper runs yet`}
-          emptyDescription="Start a paper run once the replay history looks promising enough to watch live."
+          emptyTitle="No ONDO v7 backtests yet"
+          emptyDescription="This frozen branch keeps history only as reference."
           columns={[
             { key: "run", title: "Run", render: (row) => `#${row.id}` },
             { key: "status", title: "Status", render: (row) => <StatusBadge status={row.status} /> },
-            { key: "market", title: "Market", render: (row) => `${row.symbols.join(", ")} · ${row.timeframes.join(", ")}` },
+            { key: "market", title: "Window", render: (row) => `${row.symbol} · ${row.timeframe}` },
             { key: "started", title: "Started", render: (row) => formatDateTime(row.started_at) },
             {
-              key: "balance",
-              title: "Balance / Processed",
+              key: "return",
+              title: "Return / DD",
               render: (row) => (
                 <div className="grid gap-1">
-                  <span>{formatCurrency(row.account_balance ?? 0, row.currency ?? "USD")}</span>
-                  <span className="text-xs text-slate-400">{row.last_processed_candle_at ? formatDateTime(row.last_processed_candle_at) : "No candles yet"}</span>
+                  <span>{formatPercent(row.total_return_pct)}</span>
+                  <span className="text-xs text-slate-400">DD {formatPercent(row.max_drawdown_pct)}</span>
                 </div>
               ),
             },
-            { key: "positions", title: "Open", render: (row) => formatInteger(row.open_positions_count) },
+            { key: "trades", title: "Trades", render: (row) => formatInteger(row.total_trades) },
           ]}
         />
       </SectionCard>
@@ -438,14 +528,7 @@ function buildConfigRows(config: Record<string, unknown>): ConfigRow[] {
     .filter(([key]) => key in config)
     .map(([key, label]) => {
       const raw = config[key];
-      let value = "";
-      if (Array.isArray(raw)) {
-        value = raw.join(", ");
-      } else if (typeof raw === "number") {
-        value = String(raw);
-      } else {
-        value = String(raw);
-      }
+      const value = Array.isArray(raw) ? raw.join(", ") : String(raw);
       return { key, label, value };
     });
 }
