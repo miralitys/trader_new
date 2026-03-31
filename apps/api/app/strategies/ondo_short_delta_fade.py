@@ -447,7 +447,67 @@ class ShortFadeLabV6Strategy(OndoShortDeltaFadeStrategy):
     default_timeframes = ("1h",)
 
 
+class OndoShortDeltaFadeV7Strategy(OndoShortDeltaFadeStrategy):
+    key = "ondo_short_delta_fade_v7"
+    name = "ONDO Short Delta Fade v7"
+    description = (
+        "Symbol-specific ONDO short-fade round. This branch keeps the stricter rejection and follow-through "
+        "filters because ONDO is noisy, sparse, and only showed a tiny edge when the setup stayed selective."
+    )
+    default_symbols = ("ONDO-USDT",)
+    default_timeframes = ("1h",)
+
+    def default_config(self) -> dict[str, Any]:
+        payload = super().default_config()
+        payload.update(
+            {
+                "symbols": list(self.default_symbols),
+                "timeframes": list(self.default_timeframes),
+                "breakout_proximity_pct": 0.0025,
+                "volume_spike_mult": 1.2,
+                "rejection_close_location_max": 0.5,
+                "entry_followthrough_close_location_max": 0.32,
+                "stop_buffer_pct": 0.0008,
+                "max_gap_up_pct": 0.0035,
+            }
+        )
+        return payload
+
+
+class AlpineShortDeltaFadeV7Strategy(OndoShortDeltaFadeStrategy):
+    key = "alpine_short_delta_fade_v7"
+    name = "ALPINE Short Delta Fade v7"
+    description = (
+        "Symbol-specific ALPINE short-fade round. This branch is slightly more permissive than ONDO because "
+        "ALPINE survived the narrowed basket with cleaner stability but too little sample."
+    )
+    default_symbols = ("ALPINE-USDT",)
+    default_timeframes = ("1h",)
+
+    def default_config(self) -> dict[str, Any]:
+        payload = super().default_config()
+        payload.update(
+            {
+                "symbols": list(self.default_symbols),
+                "timeframes": list(self.default_timeframes),
+                "impulse_min_return_pct": 0.018,
+                "breakout_proximity_pct": 0.004,
+                "stretch_above_ema_pct": 0.008,
+                "volume_spike_mult": 1.05,
+                "rejection_close_location_max": 0.58,
+                "upper_wick_min_range_ratio": 0.18,
+                "entry_breakdown_pct": 0.0003,
+                "entry_followthrough_close_location_max": 0.4,
+                "max_gap_up_pct": 0.005,
+                "take_profit_pct": 0.0045,
+            }
+        )
+        return payload
+
+
 REGISTERED_ONDO_SHORT_STRATEGY = register_strategy(OndoShortDeltaFadeStrategy())
 REGISTERED_SHORT_FADE_LAB_STRATEGY = register_strategy(ShortFadeLabStrategy())
 REGISTERED_SHORT_FADE_LAB_V5_STRATEGY = register_strategy(ShortFadeLabV5Strategy())
 REGISTERED_SHORT_FADE_LAB_V6_STRATEGY = register_strategy(ShortFadeLabV6Strategy())
+REGISTERED_ONDO_SHORT_V7_STRATEGY = register_strategy(OndoShortDeltaFadeV7Strategy())
+REGISTERED_ALPINE_SHORT_V7_STRATEGY = register_strategy(AlpineShortDeltaFadeV7Strategy())

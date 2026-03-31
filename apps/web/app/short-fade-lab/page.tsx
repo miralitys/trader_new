@@ -19,9 +19,7 @@ import {
 } from "@/lib/query-hooks";
 import { formatCurrency, formatDateTime, formatInteger, formatPercent, getErrorMessage } from "@/lib/utils";
 
-const STRATEGY_CODE = "short_delta_fade_lab_v6";
 const LOOKBACK_OPTIONS = [180, 365, 720] as const;
-const SYMBOL_OPTIONS = ["ONDO-USDT", "ALPINE-USDT"] as const;
 const STRATEGY_TIMEFRAME = "1h";
 
 type ConfigRow = {
@@ -30,14 +28,99 @@ type ConfigRow = {
   value: string;
 };
 
+type ExperimentDefinition = {
+  code: string;
+  symbol: string;
+  shortLabel: string;
+  title: string;
+  eyebrow: string;
+  stance: string;
+  note: string;
+  whyItExists: string;
+  interpretation: string;
+  tone: "default" | "positive" | "warning";
+};
+
+const EXPERIMENTS: ExperimentDefinition[] = [
+  {
+    code: "ondo_short_delta_fade_v7",
+    symbol: "ONDO-USDT",
+    shortLabel: "ONDO",
+    title: "ONDO v7",
+    eyebrow: "Strict anchor branch",
+    stance: "Still the anchor thesis, but only if we keep it selective.",
+    note: "This branch stays strict on rejection quality and next-bar weakness because ONDO only showed a tiny edge when we avoided noisy entries.",
+    whyItExists: "We want to know whether ONDO still has a real short-fade edge once it is isolated from the weaker basket names.",
+    interpretation: "If ONDO cannot improve even as a symbol-specific branch, we should stop treating it as the anchor for this thesis.",
+    tone: "warning",
+  },
+  {
+    code: "alpine_short_delta_fade_v7",
+    symbol: "ALPINE-USDT",
+    shortLabel: "ALPINE",
+    title: "ALPINE v7",
+    eyebrow: "Looser survivor branch",
+    stance: "The cleanest non-ONDO survivor, but still too sparse.",
+    note: "This branch is slightly more permissive so we can test whether ALPINE's cleaner stability can survive a little more signal density.",
+    whyItExists: "ALPINE survived the narrowed basket without degrading, so it deserves its own symbol-specific pass rather than being bundled with ONDO.",
+    interpretation: "If ALPINE stays clean while adding a little density, it may become the more promising short watchlist than ONDO.",
+    tone: "positive",
+  },
+];
+
 export default function ShortFadeLabPage() {
-  const strategyQuery = useStrategy(STRATEGY_CODE, true);
-  const backtestsQuery = useBacktests({ strategyCode: STRATEGY_CODE, limit: 100 }, true);
-  const paperRunsQuery = useStrategyRuns({ strategyCode: STRATEGY_CODE, mode: "paper", limit: 100 }, true);
+  return (
+    <div className="flex flex-col gap-6">
+      <PageHeader
+        eyebrow="Symbol-Specific v7"
+        title="Short Fade Lab"
+        description="We split the old shared short-fade round into two independent branches: one strict `ONDO` experiment and one slightly more permissive `ALPINE` experiment. Each now has its own replay history and paper lane."
+      />
+
+      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <MetricCard label="Active branches" value="2" hint="ONDO v7 and ALPINE v7" tone="positive" />
+        <MetricCard label="Timeframe" value="1h only" hint="No more mixed timeframe noise in this round" tone="default" />
+        <MetricCard label="Paper lanes" value="2" hint="One independent paper run per symbol-specific strategy" tone="warning" />
+        <MetricCard label="Research stance" value="Watchlist" hint="We are testing signal quality, not promoting these yet" tone="default" />
+      </section>
+
+      <SectionCard title="Why We Split The Lab" eyebrow="This is the right kind of narrowing">
+        <div className="grid gap-4 md:grid-cols-3">
+          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+            <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">What changed</p>
+            <p className="mt-3 text-sm leading-6 text-slate-200">
+              `v6` told us the broad thesis was gone. Only `ONDO` and `ALPINE` stayed alive, so `v7` stops pretending they should share one generic branch.
+            </p>
+          </div>
+          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+            <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">What we removed</p>
+            <p className="mt-3 text-sm leading-6 text-slate-200">
+              `GALA`, `IOTA`, `AXS`, `FIL`, and `ONDO 15m` stay out. They already told us enough, and keeping them in the lab would only add noise.
+            </p>
+          </div>
+          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+            <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">What we are checking</p>
+            <p className="mt-3 text-sm leading-6 text-slate-200">
+              We now care about one thing: whether either symbol-specific branch can produce a cleaner edge once its own rules are allowed to diverge.
+            </p>
+          </div>
+        </div>
+      </SectionCard>
+
+      {EXPERIMENTS.map((experiment) => (
+        <ExperimentPanel key={experiment.code} experiment={experiment} />
+      ))}
+    </div>
+  );
+}
+
+function ExperimentPanel({ experiment }: { experiment: ExperimentDefinition }) {
+  const strategyQuery = useStrategy(experiment.code, true);
+  const backtestsQuery = useBacktests({ strategyCode: experiment.code, limit: 100 }, true);
+  const paperRunsQuery = useStrategyRuns({ strategyCode: experiment.code, mode: "paper", limit: 100 }, true);
   const runBacktestMutation = useRunBacktest();
   const startPaperMutation = useStartStrategyPaperRun();
   const stopPaperMutation = useStopStrategyPaperRun();
-  const [selectedSymbol, setSelectedSymbol] = useState<string>("ONDO-USDT");
   const [activeLookback, setActiveLookback] = useState<number | null>(null);
   const [paperBusy, setPaperBusy] = useState(false);
 
@@ -48,21 +131,27 @@ export default function ShortFadeLabPage() {
   const error = strategyQuery.error ?? backtestsQuery.error ?? paperRunsQuery.error;
 
   if (isLoading) {
-    return <LoadingState label="Loading short fade lab..." />;
+    return (
+      <SectionCard title={experiment.title} eyebrow={experiment.eyebrow}>
+        <LoadingState label={`Loading ${experiment.shortLabel} v7...`} />
+      </SectionCard>
+    );
   }
 
   if (error || !strategyQuery.data) {
-    return <ErrorState message={getErrorMessage(error, "Unable to load the short fade lab.")} />;
+    return (
+      <SectionCard title={experiment.title} eyebrow={experiment.eyebrow}>
+        <ErrorState message={getErrorMessage(error, `Unable to load ${experiment.shortLabel} v7.`)} />
+      </SectionCard>
+    );
   }
 
   const strategy = strategyQuery.data;
   const backtests = backtestsQuery.data ?? [];
   const paperRuns = paperRunsQuery.data ?? [];
   const activePaperRun = paperRuns.find((row) => row.status === "running" || row.status === "created") ?? null;
+  const latestBacktest = backtests[0] ?? null;
   const configRows = buildConfigRows(strategy.effective_config);
-
-  const selectedBacktests = backtests.filter((row) => row.symbol === selectedSymbol && row.timeframe === STRATEGY_TIMEFRAME);
-  const latestSelectedBacktest = selectedBacktests[0] ?? null;
 
   async function handleRunBacktest(lookbackDays: number) {
     setActiveLookback(lookbackDays);
@@ -70,8 +159,8 @@ export default function ShortFadeLabPage() {
     const startAt = new Date(endAt.getTime() - lookbackDays * 24 * 60 * 60 * 1000);
     try {
       await runBacktestMutation.mutateAsync({
-        strategy_code: STRATEGY_CODE,
-        symbol: selectedSymbol,
+        strategy_code: experiment.code,
+        symbol: experiment.symbol,
         timeframe: STRATEGY_TIMEFRAME,
         start_at: startAt.toISOString(),
         end_at: endAt.toISOString(),
@@ -81,7 +170,7 @@ export default function ShortFadeLabPage() {
         slippage: 0.0005,
         position_size_pct: 0.1,
         strategy_config_override: {
-          symbols: [selectedSymbol],
+          symbols: [experiment.symbol],
           timeframes: [STRATEGY_TIMEFRAME],
         },
       });
@@ -94,9 +183,9 @@ export default function ShortFadeLabPage() {
     setPaperBusy(true);
     try {
       await startPaperMutation.mutateAsync({
-        strategyCode: STRATEGY_CODE,
+        strategyCode: experiment.code,
         payload: {
-          symbols: [selectedSymbol],
+          symbols: [experiment.symbol],
           timeframes: [STRATEGY_TIMEFRAME],
           exchange_code: "binance_us",
           start_from_latest: true,
@@ -105,12 +194,13 @@ export default function ShortFadeLabPage() {
           fee: 0.001,
           slippage: 0.0005,
           strategy_config_override: {
-            symbols: [selectedSymbol],
+            symbols: [experiment.symbol],
             timeframes: [STRATEGY_TIMEFRAME],
           },
           metadata: {
-            launched_from: "short_fade_lab_page",
-            selected_symbol: selectedSymbol,
+            launched_from: "short_fade_lab_v7_page",
+            strategy_code: experiment.code,
+            selected_symbol: experiment.symbol,
             selected_timeframe: STRATEGY_TIMEFRAME,
           },
         },
@@ -124,9 +214,9 @@ export default function ShortFadeLabPage() {
     setPaperBusy(true);
     try {
       await stopPaperMutation.mutateAsync({
-        strategyCode: STRATEGY_CODE,
+        strategyCode: experiment.code,
         payload: {
-          reason: "manual_stop_from_short_fade_lab_page",
+          reason: "manual_stop_from_short_fade_lab_v7_page",
         },
       });
     } finally {
@@ -136,102 +226,59 @@ export default function ShortFadeLabPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader
-        eyebrow="Focused Short Round"
-        title="Short Fade Lab"
-        description="Clean v6 round for the only two streams still worth our attention: `ONDO` and `ALPINE` on `1h`. `GALA` failed the long-window stability check, so this round is intentionally narrower."
-      />
-
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <MetricCard label="Lab status" value={<StatusBadge status={strategy.active_paper_status ?? "experimental"} />} hint={strategy.name} tone="warning" />
-        <MetricCard label="Selected market" value={`${selectedSymbol} · ${STRATEGY_TIMEFRAME}`} hint="Backtests and paper runs use this exact stream" tone="default" />
-        <MetricCard
-          label="Latest selected replay"
-          value={latestSelectedBacktest ? formatPercent(latestSelectedBacktest.total_return_pct) : "No run yet"}
-          hint={
-            latestSelectedBacktest
-              ? `DD ${formatPercent(latestSelectedBacktest.max_drawdown_pct)} · ${formatInteger(latestSelectedBacktest.total_trades)} trades`
-              : "Pick a symbol and timeframe, then launch a replay"
-          }
-          tone={latestSelectedBacktest && Number(latestSelectedBacktest.total_return_pct) > 0 ? "positive" : "default"}
-        />
-        <MetricCard label="Coverage plan" value="2 symbols · 1h only" hint="Fresh v6 round with clean history" tone="positive" />
-      </section>
-
-      {runBacktestMutation.error ? <ErrorState message={getErrorMessage(runBacktestMutation.error, "Unable to start short-fade backtest.")} /> : null}
-      {startPaperMutation.error ? <ErrorState message={getErrorMessage(startPaperMutation.error, "Unable to start short-fade paper run.")} /> : null}
-      {stopPaperMutation.error ? <ErrorState message={getErrorMessage(stopPaperMutation.error, "Unable to stop short-fade paper run.")} /> : null}
-
-      <SectionCard title="Why This Round Exists" eyebrow="Narrowed after the first basket test">
-        <div className="grid gap-4 md:grid-cols-3">
-          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-            <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">Kept Alive</p>
-            <p className="mt-3 text-sm leading-6 text-slate-200">
-              `ONDO` and `ALPINE` are the only names that still show a plausible, non-degrading short-fade profile after the wider basket tests.
-            </p>
-          </div>
-          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-            <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">Removed</p>
-            <p className="mt-3 text-sm leading-6 text-slate-200">
-              `GALA` had a nice mid-window look, but it broke down on the long window. `IOTA`, `AXS`, `FIL`, and `ONDO 15m` already failed earlier and stay out of the active round.
-            </p>
-          </div>
-          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-            <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">Interpretation</p>
-            <p className="mt-3 text-sm leading-6 text-slate-200">
-              This round is about signal quality, not breadth. If `ONDO` and `ALPINE` still fail to improve, we should stop tuning this thesis instead of widening it again.
-            </p>
-          </div>
-        </div>
-      </SectionCard>
-
-      <SectionCard title="Market Selector" eyebrow="Choose the exact stream for v5">
-        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,360px)]">
-          <div className="grid gap-5">
-            <div className="grid gap-2">
-              <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">Symbol</p>
-              <div className="flex flex-wrap gap-2">
-                {SYMBOL_OPTIONS.map((symbol) => {
-                  const active = symbol === selectedSymbol;
-                  return (
-                    <button
-                      key={symbol}
-                      type="button"
-                      onClick={() => setSelectedSymbol(symbol)}
-                      className={`rounded-xl border px-3 py-2 text-xs font-medium uppercase tracking-[0.18em] transition ${
-                        active
-                          ? "border-emerald-300/50 bg-emerald-400/15 text-emerald-100"
-                          : "border-white/10 bg-white/[0.03] text-slate-300 hover:border-white/20 hover:bg-white/[0.06]"
-                      }`}
-                    >
-                      {symbol.replace("-USDT", "")}
-                    </button>
-                  );
-                })}
+      <SectionCard title={experiment.title} eyebrow={experiment.eyebrow}>
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="grid gap-4">
+            <p className="text-lg font-medium text-white">{experiment.stance}</p>
+            <p className="text-sm leading-6 text-slate-300">{experiment.note}</p>
+            <div className="grid gap-4 md:grid-cols-3">
+              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">Why it exists</p>
+                <p className="mt-3 text-sm leading-6 text-slate-200">{experiment.whyItExists}</p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">Interpretation</p>
+                <p className="mt-3 text-sm leading-6 text-slate-200">{experiment.interpretation}</p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">Current stream</p>
+                <p className="mt-3 text-sm leading-6 text-slate-200">
+                  {experiment.symbol} · {STRATEGY_TIMEFRAME}
+                </p>
+                <p className="mt-3 text-xs leading-5 text-slate-400">{strategy.description}</p>
               </div>
             </div>
           </div>
 
-          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-            <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">Current selection</p>
-            <div className="mt-3 grid gap-3">
-              <div>
-                <p className="text-lg font-medium text-white">{selectedSymbol}</p>
-                <p className="text-sm text-slate-400">{STRATEGY_TIMEFRAME} short-fade stream</p>
-              </div>
-              <div className="text-sm leading-6 text-slate-300">
-                {selectedSymbol === "ONDO-USDT"
-                  ? "This is still the anchor stream. We are checking whether ONDO keeps its small but real edge when isolated from the failed broader round."
-                  : "ALPINE is the cleanest non-ONDO survivor so far: tiny sample, but at least not degrading as history expands."}
-              </div>
-            </div>
+          <div className="grid gap-4">
+            <MetricCard label="Strategy status" value={<StatusBadge status={strategy.active_paper_status ?? "experimental"} />} hint={strategy.name} tone={experiment.tone} />
+            <MetricCard
+              label="Latest replay"
+              value={latestBacktest ? formatPercent(latestBacktest.total_return_pct) : "No run yet"}
+              hint={
+                latestBacktest
+                  ? `DD ${formatPercent(latestBacktest.max_drawdown_pct)} · ${formatInteger(latestBacktest.total_trades)} trades`
+                  : `No ${experiment.shortLabel} v7 replay yet`
+              }
+              tone={latestBacktest && Number(latestBacktest.total_return_pct) > 0 ? "positive" : "default"}
+            />
+            <MetricCard
+              label="Active paper"
+              value={activePaperRun ? `#${activePaperRun.id}` : "None"}
+              hint={activePaperRun ? formatDateTime(activePaperRun.started_at) : "Independent lane for this strategy only"}
+              tone={activePaperRun ? "warning" : "default"}
+            />
           </div>
         </div>
       </SectionCard>
+
+      {runBacktestMutation.error ? <ErrorState message={getErrorMessage(runBacktestMutation.error, `Unable to start ${experiment.shortLabel} v7 backtest.`)} /> : null}
+      {startPaperMutation.error ? <ErrorState message={getErrorMessage(startPaperMutation.error, `Unable to start ${experiment.shortLabel} v7 paper run.`)} /> : null}
+      {stopPaperMutation.error ? <ErrorState message={getErrorMessage(stopPaperMutation.error, `Unable to stop ${experiment.shortLabel} v7 paper run.`)} /> : null}
 
       <SectionCard
         title="Config Snapshot"
-        eyebrow="Shared backend parameters"
+        eyebrow={`${experiment.shortLabel} specific defaults`}
         actions={
           <div className="flex flex-wrap gap-2">
             {LOOKBACK_OPTIONS.map((lookback) => (
@@ -262,7 +309,7 @@ export default function ShortFadeLabPage() {
 
       <SectionCard
         title="Paper Control"
-        eyebrow="One live stream at a time"
+        eyebrow={`${experiment.shortLabel} forward lane`}
         actions={
           activePaperRun ? (
             <button
@@ -280,18 +327,12 @@ export default function ShortFadeLabPage() {
               disabled={paperBusy || startPaperMutation.isPending || stopPaperMutation.isPending}
               className="rounded-xl border border-sky-400/25 bg-sky-400/10 px-3 py-2 text-xs font-medium uppercase tracking-[0.18em] text-sky-100 transition hover:border-sky-300/40 hover:bg-sky-300/15 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {paperBusy ? "Starting..." : "Start paper for selection"}
+              {paperBusy ? "Starting..." : "Start paper"}
             </button>
           )
         }
       >
         <div className="grid gap-4 md:grid-cols-3">
-          <MetricCard
-            label="Active paper run"
-            value={activePaperRun ? `#${activePaperRun.id}` : "None"}
-            hint={activePaperRun ? `${activePaperRun.symbols.join(", ")} · ${activePaperRun.timeframes.join(", ")}` : "No live forward run"}
-            tone={activePaperRun ? "warning" : "default"}
-          />
           <MetricCard
             label="Paper balance"
             value={activePaperRun ? formatCurrency(activePaperRun.account_balance ?? 0, activePaperRun.currency ?? "USD") : "$10,000.00"}
@@ -301,18 +342,24 @@ export default function ShortFadeLabPage() {
           <MetricCard
             label="Last processed"
             value={activePaperRun?.last_processed_candle_at ? formatDateTime(activePaperRun.last_processed_candle_at) : "N/A"}
-            hint="Paper starts latest-only on the selected stream"
+            hint="Paper starts latest-only on this single stream"
+            tone="default"
+          />
+          <MetricCard
+            label="Saved paper history"
+            value={formatInteger(paperRuns.length)}
+            hint="Only this symbol-specific branch"
             tone="default"
           />
         </div>
       </SectionCard>
 
-      <SectionCard title="Recent Backtests" eyebrow="Stored replay history for the lab">
+      <SectionCard title="Recent Backtests" eyebrow={`Stored replay history for ${experiment.shortLabel} v7`}>
         <DataTable
           rows={backtests}
           rowKey={(row) => row.id}
-          emptyTitle="No short-fade lab backtests yet"
-          emptyDescription="Run one of the windows above to start comparing the 1h basket and ONDO 15m."
+          emptyTitle={`No ${experiment.shortLabel} v7 backtests yet`}
+          emptyDescription="Run one of the windows above to start building the symbol-specific replay history."
           columns={[
             { key: "run", title: "Run", render: (row) => `#${row.id}` },
             { key: "status", title: "Status", render: (row) => <StatusBadge status={row.status} /> },
@@ -333,12 +380,12 @@ export default function ShortFadeLabPage() {
         />
       </SectionCard>
 
-      <SectionCard title="Recent Paper Runs" eyebrow="Stored forward-paper history for the lab">
+      <SectionCard title="Recent Paper Runs" eyebrow={`Stored forward history for ${experiment.shortLabel} v7`}>
         <DataTable
           rows={paperRuns}
           rowKey={(row) => row.id}
-          emptyTitle="No short-fade paper runs yet"
-          emptyDescription="Start a paper run for any selected symbol/timeframe once a replay looks interesting."
+          emptyTitle={`No ${experiment.shortLabel} v7 paper runs yet`}
+          emptyDescription="Start a paper run once the replay history looks promising enough to watch live."
           columns={[
             { key: "run", title: "Run", render: (row) => `#${row.id}` },
             { key: "status", title: "Status", render: (row) => <StatusBadge status={row.status} /> },

@@ -2,7 +2,9 @@
 
 from app.strategies.base import BaseStrategy, BaseStrategyConfig, StrategyContext, StrategySignal
 from app.strategies.ondo_short_delta_fade import (
+    REGISTERED_ALPINE_SHORT_V7_STRATEGY,
     REGISTERED_ONDO_SHORT_STRATEGY,
+    REGISTERED_ONDO_SHORT_V7_STRATEGY,
     REGISTERED_SHORT_FADE_LAB_STRATEGY,
     REGISTERED_SHORT_FADE_LAB_V5_STRATEGY,
     REGISTERED_SHORT_FADE_LAB_V6_STRATEGY,
@@ -14,7 +16,9 @@ __all__ = [
     "BaseStrategyConfig",
     "StrategyContext",
     "StrategySignal",
+    "REGISTERED_ALPINE_SHORT_V7_STRATEGY",
     "REGISTERED_ONDO_SHORT_STRATEGY",
+    "REGISTERED_ONDO_SHORT_V7_STRATEGY",
     "REGISTERED_SHORT_FADE_LAB_STRATEGY",
     "REGISTERED_SHORT_FADE_LAB_V5_STRATEGY",
     "REGISTERED_SHORT_FADE_LAB_V6_STRATEGY",
