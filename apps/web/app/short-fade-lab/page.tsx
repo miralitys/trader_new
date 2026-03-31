@@ -19,10 +19,10 @@ import {
 } from "@/lib/query-hooks";
 import { formatCurrency, formatDateTime, formatInteger, formatPercent, getErrorMessage } from "@/lib/utils";
 
-const STRATEGY_CODE = "short_delta_fade_lab_v1";
+const STRATEGY_CODE = "short_delta_fade_lab_v5";
 const LOOKBACK_OPTIONS = [180, 365, 720] as const;
-const SYMBOL_OPTIONS = ["ONDO-USDT", "GALA-USDT", "IOTA-USDT", "AXS-USDT", "ALPINE-USDT", "FIL-USDT"] as const;
-const TIMEFRAME_OPTIONS = ["1h", "15m"] as const;
+const SYMBOL_OPTIONS = ["ONDO-USDT", "ALPINE-USDT", "GALA-USDT"] as const;
+const STRATEGY_TIMEFRAME = "1h";
 
 type ConfigRow = {
   key: string;
@@ -38,7 +38,6 @@ export default function ShortFadeLabPage() {
   const startPaperMutation = useStartStrategyPaperRun();
   const stopPaperMutation = useStopStrategyPaperRun();
   const [selectedSymbol, setSelectedSymbol] = useState<string>("ONDO-USDT");
-  const [selectedTimeframe, setSelectedTimeframe] = useState<string>("1h");
   const [activeLookback, setActiveLookback] = useState<number | null>(null);
   const [paperBusy, setPaperBusy] = useState(false);
 
@@ -61,9 +60,8 @@ export default function ShortFadeLabPage() {
   const paperRuns = paperRunsQuery.data ?? [];
   const activePaperRun = paperRuns.find((row) => row.status === "running" || row.status === "created") ?? null;
   const configRows = buildConfigRows(strategy.effective_config);
-  const availableTimeframes = selectedSymbol === "ONDO-USDT" ? TIMEFRAME_OPTIONS : (["1h"] as const);
 
-  const selectedBacktests = backtests.filter((row) => row.symbol === selectedSymbol && row.timeframe === selectedTimeframe);
+  const selectedBacktests = backtests.filter((row) => row.symbol === selectedSymbol && row.timeframe === STRATEGY_TIMEFRAME);
   const latestSelectedBacktest = selectedBacktests[0] ?? null;
 
   async function handleRunBacktest(lookbackDays: number) {
@@ -74,7 +72,7 @@ export default function ShortFadeLabPage() {
       await runBacktestMutation.mutateAsync({
         strategy_code: STRATEGY_CODE,
         symbol: selectedSymbol,
-        timeframe: selectedTimeframe,
+        timeframe: STRATEGY_TIMEFRAME,
         start_at: startAt.toISOString(),
         end_at: endAt.toISOString(),
         exchange_code: "binance_us",
@@ -84,7 +82,7 @@ export default function ShortFadeLabPage() {
         position_size_pct: 0.1,
         strategy_config_override: {
           symbols: [selectedSymbol],
-          timeframes: [selectedTimeframe],
+          timeframes: [STRATEGY_TIMEFRAME],
         },
       });
     } finally {
@@ -99,7 +97,7 @@ export default function ShortFadeLabPage() {
         strategyCode: STRATEGY_CODE,
         payload: {
           symbols: [selectedSymbol],
-          timeframes: [selectedTimeframe],
+          timeframes: [STRATEGY_TIMEFRAME],
           exchange_code: "binance_us",
           start_from_latest: true,
           initial_balance: 10000,
@@ -108,12 +106,12 @@ export default function ShortFadeLabPage() {
           slippage: 0.0005,
           strategy_config_override: {
             symbols: [selectedSymbol],
-            timeframes: [selectedTimeframe],
+            timeframes: [STRATEGY_TIMEFRAME],
           },
           metadata: {
             launched_from: "short_fade_lab_page",
             selected_symbol: selectedSymbol,
-            selected_timeframe: selectedTimeframe,
+            selected_timeframe: STRATEGY_TIMEFRAME,
           },
         },
       });
@@ -139,14 +137,14 @@ export default function ShortFadeLabPage() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        eyebrow="Short Research Expansion"
+        eyebrow="Focused Short Round"
         title="Short Fade Lab"
-        description="One shared research layer for two next tests: the same short-fade logic across similar higher-volatility symbols on 1h, and ONDO pushed down to 15m so we can see whether the mechanism produces enough signal density to matter."
+        description="Clean v5 round for the only streams still worth our time: `ONDO`, `ALPINE`, and `GALA` on `1h`. The broader basket underperformed, and `ONDO 15m` stayed dead, so this page now tracks just the survivors."
       />
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <MetricCard label="Lab status" value={<StatusBadge status={strategy.active_paper_status ?? "experimental"} />} hint={strategy.name} tone="warning" />
-        <MetricCard label="Selected market" value={`${selectedSymbol} · ${selectedTimeframe}`} hint="Backtests and paper runs use this exact stream" tone="default" />
+        <MetricCard label="Selected market" value={`${selectedSymbol} · ${STRATEGY_TIMEFRAME}`} hint="Backtests and paper runs use this exact stream" tone="default" />
         <MetricCard
           label="Latest selected replay"
           value={latestSelectedBacktest ? formatPercent(latestSelectedBacktest.total_return_pct) : "No run yet"}
@@ -157,38 +155,38 @@ export default function ShortFadeLabPage() {
           }
           tone={latestSelectedBacktest && Number(latestSelectedBacktest.total_return_pct) > 0 ? "positive" : "default"}
         />
-        <MetricCard label="Coverage plan" value="1h basket + ONDO 15m" hint="Cross-symbol check plus density test" tone="positive" />
+        <MetricCard label="Coverage plan" value="3 symbols · 1h only" hint="Fresh v5 round with clean history" tone="positive" />
       </section>
 
       {runBacktestMutation.error ? <ErrorState message={getErrorMessage(runBacktestMutation.error, "Unable to start short-fade backtest.")} /> : null}
       {startPaperMutation.error ? <ErrorState message={getErrorMessage(startPaperMutation.error, "Unable to start short-fade paper run.")} /> : null}
       {stopPaperMutation.error ? <ErrorState message={getErrorMessage(stopPaperMutation.error, "Unable to stop short-fade paper run.")} /> : null}
 
-      <SectionCard title="Research Plan" eyebrow="Two paths in one place">
+      <SectionCard title="Why This Round Exists" eyebrow="Narrowed after the first basket test">
         <div className="grid gap-4 md:grid-cols-3">
           <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-            <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">1h Basket</p>
+            <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">Kept Alive</p>
             <p className="mt-3 text-sm leading-6 text-slate-200">
-              Use the same short-fade logic on `GALA`, `IOTA`, `AXS`, `ALPINE`, `FIL`, and `ONDO` to see whether the edge is real or just a single ONDO artifact.
+              `ONDO`, `ALPINE`, and `GALA` were the only names that showed even a faint positive pulse or at least a plausible next step for this short-fade idea.
             </p>
           </div>
           <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-            <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">ONDO 15m</p>
+            <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">Removed</p>
             <p className="mt-3 text-sm leading-6 text-slate-200">
-              Drop the same mechanic to `15m` on `ONDO` to find out whether lower timeframe density gives us a usable trade count instead of one-off events.
+              `IOTA`, `AXS`, and `FIL` looked structurally weak. `ONDO 15m` stayed at zero trades, so it does not belong in the active round anymore.
             </p>
           </div>
           <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
             <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">Interpretation</p>
             <p className="mt-3 text-sm leading-6 text-slate-200">
-              If several `1h` symbols start behaving similarly, the idea has broader life. If `ONDO 15m` wakes up without collapsing under costs, the mechanic itself may be valid.
+              This round is about cleaner signal reading, not more breadth. If these three do not improve, we should probably stop tuning this thesis instead of widening it again.
             </p>
           </div>
         </div>
       </SectionCard>
 
-      <SectionCard title="Market Selector" eyebrow="Choose the exact stream to test">
-        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(280px,340px)]">
+      <SectionCard title="Market Selector" eyebrow="Choose the exact stream for v5">
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(320px,360px)]">
           <div className="grid gap-5">
             <div className="grid gap-2">
               <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">Symbol</p>
@@ -199,12 +197,7 @@ export default function ShortFadeLabPage() {
                     <button
                       key={symbol}
                       type="button"
-                      onClick={() => {
-                        setSelectedSymbol(symbol);
-                        if (symbol !== "ONDO-USDT") {
-                          setSelectedTimeframe("1h");
-                        }
-                      }}
+                      onClick={() => setSelectedSymbol(symbol)}
                       className={`rounded-xl border px-3 py-2 text-xs font-medium uppercase tracking-[0.18em] transition ${
                         active
                           ? "border-emerald-300/50 bg-emerald-400/15 text-emerald-100"
@@ -217,28 +210,6 @@ export default function ShortFadeLabPage() {
                 })}
               </div>
             </div>
-            <div className="grid gap-2">
-              <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">Timeframe</p>
-              <div className="flex flex-wrap gap-2">
-                {availableTimeframes.map((timeframe) => {
-                  const active = timeframe === selectedTimeframe;
-                  return (
-                    <button
-                      key={timeframe}
-                      type="button"
-                      onClick={() => setSelectedTimeframe(timeframe)}
-                      className={`rounded-xl border px-3 py-2 text-xs font-medium uppercase tracking-[0.18em] transition ${
-                        active
-                          ? "border-sky-300/50 bg-sky-400/15 text-sky-100"
-                          : "border-white/10 bg-white/[0.03] text-slate-300 hover:border-white/20 hover:bg-white/[0.06]"
-                      }`}
-                    >
-                      {timeframe}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
           </div>
 
           <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
@@ -246,14 +217,14 @@ export default function ShortFadeLabPage() {
             <div className="mt-3 grid gap-3">
               <div>
                 <p className="text-lg font-medium text-white">{selectedSymbol}</p>
-                <p className="text-sm text-slate-400">{selectedTimeframe} short-fade stream</p>
+                <p className="text-sm text-slate-400">{STRATEGY_TIMEFRAME} short-fade stream</p>
               </div>
               <div className="text-sm leading-6 text-slate-300">
-                {selectedSymbol === "ONDO-USDT" && selectedTimeframe === "15m"
-                  ? "This is the density test. We want more signals without letting friction destroy the setup."
-                  : selectedTimeframe === "1h"
-                    ? "This is the cross-symbol test. We want to learn whether the short-fade idea generalizes beyond ONDO."
-                    : "This is a lower-timeframe exploratory stream. Treat it as signal-density research, not a final strategy verdict."}
+                {selectedSymbol === "ONDO-USDT"
+                  ? "This is still the anchor stream. We are checking whether ONDO keeps its small but real edge when isolated from the failed broader round."
+                  : selectedSymbol === "ALPINE-USDT"
+                    ? "ALPINE is the cleanest non-ONDO survivor so far: tiny sample, but at least not degrading as history expands."
+                    : "GALA is the most unstable survivor. It can still earn on the mid window, but it needs this focused round to prove it does not break on longer history."}
               </div>
             </div>
           </div>

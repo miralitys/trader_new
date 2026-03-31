@@ -4,6 +4,7 @@ from app.strategies.base import BaseStrategy, BaseStrategyConfig, StrategyContex
 from app.strategies.ondo_short_delta_fade import (
     REGISTERED_ONDO_SHORT_STRATEGY,
     REGISTERED_SHORT_FADE_LAB_STRATEGY,
+    REGISTERED_SHORT_FADE_LAB_V5_STRATEGY,
 )
 from app.strategies.pattern_candidates import REGISTERED_PATTERN_CANDIDATES
 
@@ -14,5 +15,6 @@ __all__ = [
     "StrategySignal",
     "REGISTERED_ONDO_SHORT_STRATEGY",
     "REGISTERED_SHORT_FADE_LAB_STRATEGY",
+    "REGISTERED_SHORT_FADE_LAB_V5_STRATEGY",
     "REGISTERED_PATTERN_CANDIDATES",
 ]

@@ -33,7 +33,7 @@ INTERFACE_VISIBLE_STRATEGY_CODES = frozenset(
         "iota_5m_flush_reclaim",
         "iota_15m_flush_reclaim",
         "ondo_short_delta_fade_v1",
-        "short_delta_fade_lab_v1",
+        "short_delta_fade_lab_v5",
     }
 )
 

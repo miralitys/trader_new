@@ -418,5 +418,21 @@ class ShortFadeLabStrategy(OndoShortDeltaFadeStrategy):
     default_timeframes = ("1h", "15m")
 
 
+class ShortFadeLabV5Strategy(OndoShortDeltaFadeStrategy):
+    key = "short_delta_fade_lab_v5"
+    name = "Short Fade Lab v5"
+    description = (
+        "Focused short-fade round restricted to ONDO, ALPINE, and GALA on 1h only. This is the clean follow-up "
+        "after the broader basket rejected IOTA / AXS / FIL and the ONDO 15m density test failed to wake up."
+    )
+    default_symbols = (
+        "ONDO-USDT",
+        "ALPINE-USDT",
+        "GALA-USDT",
+    )
+    default_timeframes = ("1h",)
+
+
 REGISTERED_ONDO_SHORT_STRATEGY = register_strategy(OndoShortDeltaFadeStrategy())
 REGISTERED_SHORT_FADE_LAB_STRATEGY = register_strategy(ShortFadeLabStrategy())
+REGISTERED_SHORT_FADE_LAB_V5_STRATEGY = register_strategy(ShortFadeLabV5Strategy())
