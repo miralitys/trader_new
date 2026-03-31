@@ -595,10 +595,9 @@ class BacktestEngine(EngineBase):
         exit_time: datetime,
     ) -> tuple[Decimal, BacktestTrade]:
         if position.side == Side.SHORT.value:
-            cover_cost = position.qty * exit_plan.fill_price
-            updated_cash = cash + position.notional_value - cover_cost - exit_plan.fee_paid
             gross_pnl = (position.entry_price - exit_plan.fill_price) * position.qty
             pnl = gross_pnl - position.entry_fee - exit_plan.fee_paid
+            updated_cash = cash + position.capital_committed + pnl
         else:
             proceeds = position.qty * exit_plan.fill_price
             updated_cash = cash + proceeds - exit_plan.fee_paid
@@ -639,7 +638,8 @@ class BacktestEngine(EngineBase):
         if position is None:
             return cash
         if position.side == Side.SHORT.value:
-            return cash + position.notional_value - (position.qty * close_price)
+            unrealized_pnl = (position.entry_price - close_price) * position.qty
+            return cash + position.capital_committed + unrealized_pnl
         return cash + (position.qty * close_price)
 
     def _position_snapshot(

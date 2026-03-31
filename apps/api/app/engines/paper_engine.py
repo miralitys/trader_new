@@ -299,9 +299,8 @@ class PaperEngine(EngineBase):
         exit_time: datetime,
     ) -> tuple[PaperRuntimeState, PaperTradeEvent]:
         if position.side == Side.SHORT.value:
-            cover_cost = position.qty * exit_plan.fill_price
-            updated_cash = state.cash + position.notional_value - cover_cost - exit_plan.fee_paid
             pnl = (position.entry_price - exit_plan.fill_price) * position.qty - position.entry_fee - exit_plan.fee_paid
+            updated_cash = state.cash + position.capital_committed + pnl
         else:
             proceeds = position.qty * exit_plan.fill_price
             updated_cash = state.cash + proceeds - exit_plan.fee_paid

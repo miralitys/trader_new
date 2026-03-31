@@ -128,7 +128,7 @@ export default function OndoShortDeltaPage() {
       <PageHeader
         eyebrow="Experimental Short Strategy"
         title="ONDO Delta Fade"
-        description="A dedicated research section for the ONDO short-only fade proxy we reconstructed from the external screenshots: upside overextension, rejection, and a fast mean-reversion exit package."
+        description="A dedicated research section for the tuned ONDO short-only fade proxy we reconstructed from the external screenshots: upside overextension, near-breakout rejection, and a fast mean-reversion exit package."
       />
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -156,7 +156,7 @@ export default function OndoShortDeltaPage() {
           <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
             <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">Setup</p>
             <p className="mt-3 text-sm leading-6 text-slate-200">
-              Detect a fast upside overextension, then require a failed breakout and a rejection candle before fading the move with a short.
+              Detect a fast upside overextension, then allow a near-breakout rejection candle before fading the move with a short. This version is intentionally less brittle than the original v1 gate.
             </p>
           </div>
           <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
@@ -168,7 +168,7 @@ export default function OndoShortDeltaPage() {
           <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
             <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">Intent</p>
             <p className="mt-3 text-sm leading-6 text-slate-200">
-              This is a candle-based proxy for the external `Delta-1` profile, not a literal order-flow clone. We are testing whether the behavior survives without proprietary delta data.
+              This is a candle-based proxy for the external `Delta-1` profile, not a literal order-flow clone. We are testing whether the behavior survives without proprietary delta data and with more realistic entry frequency.
             </p>
           </div>
         </div>
@@ -320,6 +320,7 @@ function buildConfigRows(config: Record<string, unknown>): ConfigRow[] {
     ["impulse_bars", "Impulse Bars"],
     ["impulse_min_return_pct", "Min 3-Bar Return"],
     ["breakout_lookback_bars", "Breakout Lookback"],
+    ["breakout_proximity_pct", "Breakout Proximity"],
     ["ema_period", "EMA Period"],
     ["stretch_above_ema_pct", "Stretch Above EMA"],
     ["volume_sma_period", "Volume SMA"],

@@ -16,24 +16,25 @@ TWO = Decimal("2")
 
 class OndoShortDeltaFadeConfig(BaseStrategyConfig):
     impulse_bars: int = Field(default=3, ge=2, le=8)
-    impulse_min_return_pct: float = Field(default=0.04, gt=0)
-    breakout_lookback_bars: int = Field(default=12, ge=4, le=48)
+    impulse_min_return_pct: float = Field(default=0.02, gt=0)
+    breakout_lookback_bars: int = Field(default=8, ge=4, le=48)
+    breakout_proximity_pct: float = Field(default=0.003, ge=0, le=0.02)
     ema_period: int = Field(default=20, ge=5, le=80)
-    stretch_above_ema_pct: float = Field(default=0.02, gt=0)
+    stretch_above_ema_pct: float = Field(default=0.01, gt=0)
     volume_sma_period: int = Field(default=20, ge=5, le=80)
-    volume_spike_mult: float = Field(default=1.5, gt=0)
-    rejection_close_location_max: float = Field(default=0.45, gt=0, le=1)
-    upper_wick_min_range_ratio: float = Field(default=0.35, gt=0, le=1)
-    max_gap_up_pct: float = Field(default=0.0025, ge=0)
+    volume_spike_mult: float = Field(default=1.15, gt=0)
+    rejection_close_location_max: float = Field(default=0.55, gt=0, le=1)
+    upper_wick_min_range_ratio: float = Field(default=0.20, gt=0, le=1)
+    max_gap_up_pct: float = Field(default=0.004, ge=0)
     time_exit_bars: int = Field(default=2, ge=1, le=12)
 
 
 class OndoShortDeltaFadeStrategy(BaseStrategy):
     key = "ondo_short_delta_fade_v1"
-    name = "ONDO Short Delta Fade v1"
+    name = "ONDO Short Delta Fade v2"
     description = (
-        "Candle-based proxy for a fast ONDO rejection short: upside overextension, failed breakout, "
-        "and quick mean reversion with tight TP / SL."
+        "Tuned candle-based proxy for a fast ONDO rejection short: upside overextension, near-breakout "
+        "rejection, and quick mean reversion with tight TP / SL."
     )
     spot_only = False
     long_only = False
@@ -215,11 +216,13 @@ class OndoShortDeltaFadeStrategy(BaseStrategy):
         impulse_return = (signal_close / impulse_anchor) - ONE
 
         breakout_high = max(Decimal(str(candle.high)) for candle in prior_history[-config.breakout_lookback_bars :])
-        if signal_high <= breakout_high:
-            return self._no_match("failed_breakout_missing", f"signal_high={signal_high}", {"breakout_high": breakout_high})
-
-        if signal_close >= signal_open:
-            return self._no_match("signal_bar_not_red", f"signal_close={signal_close}", {"signal_open": signal_open})
+        breakout_threshold = breakout_high * (ONE - Decimal(str(config.breakout_proximity_pct)))
+        if signal_high < breakout_threshold:
+            return self._no_match(
+                "failed_breakout_missing",
+                f"signal_high={signal_high}",
+                {"breakout_high": breakout_high, "breakout_threshold": breakout_threshold},
+            )
 
         candle_range = signal_high - signal_low
         if candle_range <= ZERO:
@@ -228,6 +231,7 @@ class OndoShortDeltaFadeStrategy(BaseStrategy):
         close_location = (signal_close - signal_low) / candle_range
         upper_wick = signal_high - max(signal_open, signal_close)
         upper_wick_ratio = upper_wick / candle_range
+        real_body_ratio = abs(signal_close - signal_open) / candle_range
 
         volume_window = prior_history[-config.volume_sma_period :]
         volume_sma = sum((Decimal(str(candle.volume)) for candle in volume_window), ZERO) / Decimal(len(volume_window))
@@ -235,13 +239,16 @@ class OndoShortDeltaFadeStrategy(BaseStrategy):
         ema_source = [Decimal(str(candle.close)) for candle in prior_history[-config.ema_period :]] + [signal_close]
         ema_value = self._ema(ema_source, config.ema_period)
         stretch_above_ema = (signal_close / ema_value) - ONE if ema_value > ZERO else ZERO
+        impulse_return = (signal_high / impulse_anchor) - ONE
 
         context = {
             "impulse_return_pct": round(float(impulse_return), 6),
             "breakout_high": float(breakout_high),
+            "breakout_threshold": float(breakout_threshold),
             "signal_range": float(candle_range),
             "close_location": round(float(close_location), 6),
             "upper_wick_ratio": round(float(upper_wick_ratio), 6),
+            "real_body_ratio": round(float(real_body_ratio), 6),
             "volume_sma": float(volume_sma),
             "volume_spike_ratio": round(float(signal_volume / volume_sma), 6) if volume_sma > ZERO else 0,
             "stretch_above_ema_pct": round(float(stretch_above_ema), 6),
@@ -253,6 +260,10 @@ class OndoShortDeltaFadeStrategy(BaseStrategy):
             return self._no_match("rejection_close_too_high", f"close_location={close_location}", context)
         if upper_wick_ratio < Decimal(str(config.upper_wick_min_range_ratio)):
             return self._no_match("upper_wick_too_small", f"upper_wick_ratio={upper_wick_ratio}", context)
+        if signal_close >= signal_open and close_location > Decimal("0.35"):
+            return self._no_match("signal_bar_not_weak_enough", f"signal_close={signal_close}", context)
+        if real_body_ratio > Decimal("0.65") and signal_close >= signal_open:
+            return self._no_match("signal_body_too_strong", f"real_body_ratio={real_body_ratio}", context)
         if volume_sma <= ZERO or signal_volume < volume_sma * Decimal(str(config.volume_spike_mult)):
             return self._no_match("volume_spike_missing", f"signal_volume={signal_volume}", context)
         if stretch_above_ema < Decimal(str(config.stretch_above_ema_pct)):
