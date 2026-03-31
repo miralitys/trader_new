@@ -35,10 +35,10 @@ class OndoShortDeltaFadeConfig(BaseStrategyConfig):
 
 class OndoShortDeltaFadeStrategy(BaseStrategy):
     key = "ondo_short_delta_fade_v1"
-    name = "ONDO Short Delta Fade v3"
+    name = "ONDO Short Delta Fade v4"
     description = (
-        "Stricter candle-based proxy for a fast ONDO rejection short: upside overextension, near-breakout "
-        "rejection, confirmed next-bar breakdown, capped stop geometry, and a very short mean-reversion exit package."
+        "Short-only ONDO rejection proxy with confirmed next-bar breakdown, capped stop geometry, and a one-bar "
+        "time exit that is allowed to outrun an overly tight scalp target."
     )
     spot_only = False
     long_only = False
@@ -57,7 +57,7 @@ class OndoShortDeltaFadeStrategy(BaseStrategy):
                 "timeframes": [self.timeframe],
                 "position_size_pct": 0.1,
                 "stop_loss_pct": 0.0035,
-                "take_profit_pct": 0.003,
+                "take_profit_pct": 0.004,
                 "time_exit_bars": 1,
             }
         )

@@ -128,7 +128,7 @@ export default function OndoShortDeltaPage() {
       <PageHeader
         eyebrow="Experimental Short Strategy"
         title="ONDO Delta Fade"
-        description="A dedicated research section for the ONDO short-only fade proxy we reconstructed from the external screenshots: upside overextension, near-breakout rejection, confirmed breakdown on the next bar, and a very fast mean-reversion exit package."
+        description="A dedicated research section for the ONDO short-only fade proxy we reconstructed from the external screenshots: upside overextension, near-breakout rejection, confirmed breakdown on the next bar, and a one-bar exit package that lets a real flush pay a bit more."
       />
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -162,7 +162,7 @@ export default function OndoShortDeltaPage() {
           <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
             <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">Risk Package</p>
             <p className="mt-3 text-sm leading-6 text-slate-200">
-              Capped stop geometry, smaller take-profit, and a forced time exit after a single bar if the reversal does not pay quickly.
+              Capped stop geometry, a less cramped take-profit, and a forced time exit after a single bar if the reversal does not pay quickly.
             </p>
           </div>
           <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
