@@ -19,9 +19,9 @@ import {
 } from "@/lib/query-hooks";
 import { formatCurrency, formatDateTime, formatInteger, formatPercent, getErrorMessage } from "@/lib/utils";
 
-const STRATEGY_CODE = "short_delta_fade_lab_v5";
+const STRATEGY_CODE = "short_delta_fade_lab_v6";
 const LOOKBACK_OPTIONS = [180, 365, 720] as const;
-const SYMBOL_OPTIONS = ["ONDO-USDT", "ALPINE-USDT", "GALA-USDT"] as const;
+const SYMBOL_OPTIONS = ["ONDO-USDT", "ALPINE-USDT"] as const;
 const STRATEGY_TIMEFRAME = "1h";
 
 type ConfigRow = {
@@ -139,7 +139,7 @@ export default function ShortFadeLabPage() {
       <PageHeader
         eyebrow="Focused Short Round"
         title="Short Fade Lab"
-        description="Clean v5 round for the only streams still worth our time: `ONDO`, `ALPINE`, and `GALA` on `1h`. The broader basket underperformed, and `ONDO 15m` stayed dead, so this page now tracks just the survivors."
+        description="Clean v6 round for the only two streams still worth our attention: `ONDO` and `ALPINE` on `1h`. `GALA` failed the long-window stability check, so this round is intentionally narrower."
       />
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -155,7 +155,7 @@ export default function ShortFadeLabPage() {
           }
           tone={latestSelectedBacktest && Number(latestSelectedBacktest.total_return_pct) > 0 ? "positive" : "default"}
         />
-        <MetricCard label="Coverage plan" value="3 symbols · 1h only" hint="Fresh v5 round with clean history" tone="positive" />
+        <MetricCard label="Coverage plan" value="2 symbols · 1h only" hint="Fresh v6 round with clean history" tone="positive" />
       </section>
 
       {runBacktestMutation.error ? <ErrorState message={getErrorMessage(runBacktestMutation.error, "Unable to start short-fade backtest.")} /> : null}
@@ -167,19 +167,19 @@ export default function ShortFadeLabPage() {
           <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
             <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">Kept Alive</p>
             <p className="mt-3 text-sm leading-6 text-slate-200">
-              `ONDO`, `ALPINE`, and `GALA` were the only names that showed even a faint positive pulse or at least a plausible next step for this short-fade idea.
+              `ONDO` and `ALPINE` are the only names that still show a plausible, non-degrading short-fade profile after the wider basket tests.
             </p>
           </div>
           <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
             <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">Removed</p>
             <p className="mt-3 text-sm leading-6 text-slate-200">
-              `IOTA`, `AXS`, and `FIL` looked structurally weak. `ONDO 15m` stayed at zero trades, so it does not belong in the active round anymore.
+              `GALA` had a nice mid-window look, but it broke down on the long window. `IOTA`, `AXS`, `FIL`, and `ONDO 15m` already failed earlier and stay out of the active round.
             </p>
           </div>
           <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
             <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">Interpretation</p>
             <p className="mt-3 text-sm leading-6 text-slate-200">
-              This round is about cleaner signal reading, not more breadth. If these three do not improve, we should probably stop tuning this thesis instead of widening it again.
+              This round is about signal quality, not breadth. If `ONDO` and `ALPINE` still fail to improve, we should stop tuning this thesis instead of widening it again.
             </p>
           </div>
         </div>
@@ -222,9 +222,7 @@ export default function ShortFadeLabPage() {
               <div className="text-sm leading-6 text-slate-300">
                 {selectedSymbol === "ONDO-USDT"
                   ? "This is still the anchor stream. We are checking whether ONDO keeps its small but real edge when isolated from the failed broader round."
-                  : selectedSymbol === "ALPINE-USDT"
-                    ? "ALPINE is the cleanest non-ONDO survivor so far: tiny sample, but at least not degrading as history expands."
-                    : "GALA is the most unstable survivor. It can still earn on the mid window, but it needs this focused round to prove it does not break on longer history."}
+                  : "ALPINE is the cleanest non-ONDO survivor so far: tiny sample, but at least not degrading as history expands."}
               </div>
             </div>
           </div>

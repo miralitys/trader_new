@@ -433,6 +433,21 @@ class ShortFadeLabV5Strategy(OndoShortDeltaFadeStrategy):
     default_timeframes = ("1h",)
 
 
+class ShortFadeLabV6Strategy(OndoShortDeltaFadeStrategy):
+    key = "short_delta_fade_lab_v6"
+    name = "Short Fade Lab v6"
+    description = (
+        "Narrowed short-fade round focused only on ONDO and ALPINE on 1h. This is the clean follow-up after "
+        "GALA failed the long-window stability check."
+    )
+    default_symbols = (
+        "ONDO-USDT",
+        "ALPINE-USDT",
+    )
+    default_timeframes = ("1h",)
+
+
 REGISTERED_ONDO_SHORT_STRATEGY = register_strategy(OndoShortDeltaFadeStrategy())
 REGISTERED_SHORT_FADE_LAB_STRATEGY = register_strategy(ShortFadeLabStrategy())
 REGISTERED_SHORT_FADE_LAB_V5_STRATEGY = register_strategy(ShortFadeLabV5Strategy())
+REGISTERED_SHORT_FADE_LAB_V6_STRATEGY = register_strategy(ShortFadeLabV6Strategy())
