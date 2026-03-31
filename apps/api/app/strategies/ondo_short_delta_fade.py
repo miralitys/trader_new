@@ -25,16 +25,20 @@ class OndoShortDeltaFadeConfig(BaseStrategyConfig):
     volume_spike_mult: float = Field(default=1.15, gt=0)
     rejection_close_location_max: float = Field(default=0.55, gt=0, le=1)
     upper_wick_min_range_ratio: float = Field(default=0.20, gt=0, le=1)
+    entry_breakdown_pct: float = Field(default=0.0005, ge=0, le=0.02)
+    entry_followthrough_close_location_max: float = Field(default=0.35, gt=0, le=1)
+    stop_buffer_pct: float = Field(default=0.001, ge=0, le=0.02)
+    max_stop_distance_pct: float = Field(default=0.012, gt=0, le=0.05)
     max_gap_up_pct: float = Field(default=0.004, ge=0)
-    time_exit_bars: int = Field(default=2, ge=1, le=12)
+    time_exit_bars: int = Field(default=1, ge=1, le=12)
 
 
 class OndoShortDeltaFadeStrategy(BaseStrategy):
     key = "ondo_short_delta_fade_v1"
-    name = "ONDO Short Delta Fade v2"
+    name = "ONDO Short Delta Fade v3"
     description = (
-        "Tuned candle-based proxy for a fast ONDO rejection short: upside overextension, near-breakout "
-        "rejection, and quick mean reversion with tight TP / SL."
+        "Stricter candle-based proxy for a fast ONDO rejection short: upside overextension, near-breakout "
+        "rejection, confirmed next-bar breakdown, capped stop geometry, and a very short mean-reversion exit package."
     )
     spot_only = False
     long_only = False
@@ -53,8 +57,8 @@ class OndoShortDeltaFadeStrategy(BaseStrategy):
                 "timeframes": [self.timeframe],
                 "position_size_pct": 0.1,
                 "stop_loss_pct": 0.0035,
-                "take_profit_pct": 0.004,
-                "time_exit_bars": 2,
+                "take_profit_pct": 0.003,
+                "time_exit_bars": 1,
             }
         )
         return payload
@@ -142,6 +146,9 @@ class OndoShortDeltaFadeStrategy(BaseStrategy):
             )
 
         signal_close = Decimal(str(signal_candle.close))
+        signal_open = Decimal(str(signal_candle.open))
+        signal_high = Decimal(str(signal_candle.high))
+        signal_low = Decimal(str(signal_candle.low))
         current_open = Decimal(str(current_candle.open))
         max_gap_open = signal_close * (ONE + Decimal(str(config.max_gap_up_pct)))
         if current_open > max_gap_open:
@@ -157,19 +164,79 @@ class OndoShortDeltaFadeStrategy(BaseStrategy):
             )
 
         current_close = Decimal(str(current_candle.close))
-        if current_close >= signal_close:
+        current_open = Decimal(str(current_candle.open))
+        current_high = Decimal(str(current_candle.high))
+        signal_range = signal_high - signal_low
+        if signal_range <= ZERO:
             return StrategySignal(
                 action="hold",
                 side="short",
-                reason="entry_bar_not_weak_enough",
+                reason="invalid_signal_geometry",
                 metadata={
-                    "reason_skipped": "entry_bar_not_weak_enough",
+                    "reason_skipped": "invalid_signal_geometry",
+                    "skip_reason_detail": f"signal_range={signal_range}",
+                    "match_context": setup["context"],
+                },
+            )
+
+        if current_close >= current_open:
+            return StrategySignal(
+                action="hold",
+                side="short",
+                reason="entry_bar_not_red",
+                metadata={
+                    "reason_skipped": "entry_bar_not_red",
                     "skip_reason_detail": f"current_close={current_close}",
                     "match_context": setup["context"],
                 },
             )
 
-        stop_price = max(Decimal(str(signal_candle.high)), current_open)
+        breakdown_threshold = signal_close * (ONE - Decimal(str(config.entry_breakdown_pct)))
+        if current_close > breakdown_threshold:
+            return StrategySignal(
+                action="hold",
+                side="short",
+                reason="entry_breakdown_missing",
+                metadata={
+                    "reason_skipped": "entry_breakdown_missing",
+                    "skip_reason_detail": f"current_close={current_close}",
+                    "match_context": setup["context"],
+                },
+            )
+
+        current_close_location = (current_close - signal_low) / signal_range
+        if current_close_location > Decimal(str(config.entry_followthrough_close_location_max)):
+            return StrategySignal(
+                action="hold",
+                side="short",
+                reason="entry_followthrough_too_shallow",
+                metadata={
+                    "reason_skipped": "entry_followthrough_too_shallow",
+                    "skip_reason_detail": f"current_close_location={current_close_location}",
+                    "match_context": setup["context"],
+                },
+            )
+
+        stop_anchor = max(current_high, signal_open)
+        stop_price = stop_anchor * (ONE + Decimal(str(config.stop_buffer_pct)))
+        stop_distance_pct = (stop_price / current_close) - ONE
+        if stop_distance_pct > Decimal(str(config.max_stop_distance_pct)):
+            return StrategySignal(
+                action="hold",
+                side="short",
+                reason="stop_too_wide_for_v3",
+                metadata={
+                    "reason_skipped": "stop_too_wide_for_v3",
+                    "skip_reason_detail": f"stop_distance_pct={stop_distance_pct}",
+                    "match_context": {
+                        **setup["context"],
+                        "stop_anchor": float(stop_anchor),
+                        "stop_distance_pct": round(float(stop_distance_pct), 6),
+                        "entry_close_location": round(float(current_close_location), 6),
+                    },
+                },
+            )
+
         take_profit_price = current_close * (ONE - Decimal(str(config.take_profit_pct)))
         if take_profit_price <= ZERO or stop_price <= current_close:
             return StrategySignal(
@@ -194,7 +261,12 @@ class OndoShortDeltaFadeStrategy(BaseStrategy):
                 "stop_price": stop_price,
                 "take_profit_price": take_profit_price,
                 "entry_bar_index": context.metadata.get("bar_index"),
-                "match_context": setup["context"],
+                "match_context": {
+                    **setup["context"],
+                    "entry_close_location": round(float(current_close_location), 6),
+                    "stop_anchor": float(stop_anchor),
+                    "stop_distance_pct": round(float(stop_distance_pct), 6),
+                },
             },
         )
 

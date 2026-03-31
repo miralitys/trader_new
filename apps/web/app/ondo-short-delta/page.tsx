@@ -128,7 +128,7 @@ export default function OndoShortDeltaPage() {
       <PageHeader
         eyebrow="Experimental Short Strategy"
         title="ONDO Delta Fade"
-        description="A dedicated research section for the tuned ONDO short-only fade proxy we reconstructed from the external screenshots: upside overextension, near-breakout rejection, and a fast mean-reversion exit package."
+        description="A dedicated research section for the ONDO short-only fade proxy we reconstructed from the external screenshots: upside overextension, near-breakout rejection, confirmed breakdown on the next bar, and a very fast mean-reversion exit package."
       />
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -156,13 +156,13 @@ export default function OndoShortDeltaPage() {
           <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
             <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">Setup</p>
             <p className="mt-3 text-sm leading-6 text-slate-200">
-              Detect a fast upside overextension, then allow a near-breakout rejection candle before fading the move with a short. This version is intentionally less brittle than the original v1 gate.
+              Detect a fast upside overextension, then allow a near-breakout rejection candle and require a real follow-through breakdown on the next bar before fading the move with a short.
             </p>
           </div>
           <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
             <p className="text-[11px] uppercase tracking-[0.22em] text-slate-500">Risk Package</p>
             <p className="mt-3 text-sm leading-6 text-slate-200">
-              Tight stop above the rejection bar, small take-profit, and a forced time exit after a very short holding window.
+              Capped stop geometry, smaller take-profit, and a forced time exit after a single bar if the reversal does not pay quickly.
             </p>
           </div>
           <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
@@ -327,6 +327,10 @@ function buildConfigRows(config: Record<string, unknown>): ConfigRow[] {
     ["volume_spike_mult", "Volume Spike Multiplier"],
     ["rejection_close_location_max", "Rejection Close Location Max"],
     ["upper_wick_min_range_ratio", "Upper Wick Min Ratio"],
+    ["entry_breakdown_pct", "Entry Breakdown Min"],
+    ["entry_followthrough_close_location_max", "Entry Close Location Max"],
+    ["stop_buffer_pct", "Stop Buffer"],
+    ["max_stop_distance_pct", "Max Stop Distance"],
     ["take_profit_pct", "Take Profit"],
     ["stop_loss_pct", "Stop Loss"],
     ["time_exit_bars", "Time Exit Bars"],
